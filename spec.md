@@ -121,58 +121,112 @@ match /families/{familyId}/{document=**} {
 
 ---
 
-## Lộ trình theo Phase
+## Lộ trình chi tiết theo mô hình thác nước
 
-### Phase 0 — Khởi tạo & Nền tảng
-**Mục tiêu:** Có project chạy được, kiến trúc sẵn sàng, chưa cần tính năng.
-**Công việc:** Khởi tạo Flutter project, cấu hình Firebase (Auth, Firestore, App Check), dựng khung 3 lớp `presentation/domain/data`, cấu hình lint + CI cơ bản (GitHub Actions chạy `flutter analyze` + `flutter test` mỗi lần push), thiết kế schema Firestore và viết Security Rules kèm test rule bằng Firebase emulator.
-**Tiêu chí hoàn thành:** App build chạy trên thiết bị thật, đăng nhập Google thành công, ghi/đọc thử 1 document Firestore đúng rule.
-**Thời gian ước tính:** 3–5 ngày.
+Mỗi phase dưới đây là **một đơn vị việc làm trọn vẹn theo đúng quy trình thác nước**: viết code xong → chạy thử thật (trên máy/thiết bị/emulator) → kiểm thử đạt tiêu chí → mới chuyển sang phase kế tiếp. Không phase nào bắt đầu khi phase trước chưa qua được bước Test. Phase đã có dấu ✅ là đã hoàn thành trong phiên làm việc dựng nền tảng ban đầu.
 
-### Phase 1 — MVP: Ghi chép & Đồng bộ realtime
-**Mục tiêu:** Thay thế được sheet hiện tại cho việc ghi chép hàng ngày.
-**Công việc:** Tạo/tham gia Sổ chung qua mã mời; CRUD giao dịch đầy đủ hạng mục/`kind`, số tiền, ghi chú, người chi (Vợ/Chồng), ngày, trạng thái (cho `cho_di`/`dang_hien`); danh mục mặc định lấy **đúng theo sheet thật** (Thu nhập, Sinh hoạt, Đầu tư, Tự thưởng, Cho đi, Tiết kiệm, Dâng hiến, Chồng đưa vợ, Vợ đưa chồng) và cho thêm danh mục tuỳ chỉnh; màn hình Trang chủ hiển thị **Số dư + Tiết kiệm riêng cho từng người** (không gộp chung); màn hình **Quỹ tiền ăn** riêng (nạp tiền vào quỹ, ghi từng khoản đã mua + số tiền, xem số dư quỹ còn lại) theo kiểu phong bì ngân sách; danh sách giao dịch theo tháng nhóm theo ngày, dữ liệu Firestore chia theo `months/{yearMonth}` để mở nhanh dù sổ đã dùng nhiều năm; đồng bộ realtime hai chiều giữa các thành viên; hoạt động offline nhờ Firestore local cache, tự đồng bộ khi có mạng lại.
-**Tiêu chí hoàn thành:** Vợ thêm giao dịch trên điện thoại → chồng thấy ngay trên máy của mình mà không cần refresh; tắt mạng vẫn nhập được, bật mạng lại tự đồng bộ không mất dữ liệu; số dư/tiết kiệm của Vợ và Chồng hiển thị đúng, tách biệt.
-**Thời gian ước tính:** 2–3 tuần.
+### Giai đoạn A — Nền tảng kỹ thuật & Firebase thật (14 phase)
 
-### Phase 2 — Ngân sách & Báo cáo tài chính
-**Mục tiêu:** Từ "ghi chép" tiến lên "quản lý" — đúng tinh thần tài chính cá nhân thực sự.
-**Công việc:** Đặt ngân sách theo hạng mục/tháng và cảnh báo khi đạt 80%/100% ngân sách; màn hình Tổng hợp với biểu đồ tròn theo hạng mục và biểu đồ đường theo tháng; các chỉ số tài chính chủ chốt tính tự động — tỷ lệ tiết kiệm (Thu − Chi)/Thu, tỷ lệ Dâng hiến/Cho đi trên tổng thu, hạng mục chi nhiều nhất; khối theo dõi Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi cho Dâng hiến & Cho đi (đúng khối K-L trong sheet Tổng hợp thật); tách **tiết kiệm hiện tại** và **tiết kiệm đã gửi ngân hàng** trong mục Tiết kiệm của mỗi người; nhắc nhở nhập chi tiêu hàng ngày qua thông báo đẩy.
-**Tiêu chí hoàn thành:** Xem được một tháng bất kỳ và biết ngay: thu bao nhiêu, chi bao nhiêu, tiết kiệm được bao nhiêu %, hạng mục nào đang vượt ngân sách.
-**Thời gian ước tính:** 1.5–2 tuần.
+1. ✅ **Khởi tạo Flutter project + kiến trúc 3 lớp** — Code: `flutter create`, dựng `presentation/domain/data/core`. Chạy: `flutter run` trên điện thoại thật. Test: app mở được, không crash.
+2. ✅ **Cấu hình lint chuẩn** — Code: bật `flutter_lints` trong `analysis_options.yaml`. Chạy: `dart analyze`. Test: 0 lỗi/cảnh báo.
+3. **CI cơ bản trên GitHub Actions** — Code: workflow chạy `flutter analyze` + `flutter test` mỗi lần push. Chạy: push thử 1 commit. Test: Action chạy xanh.
+4. ✅ **Đẩy code lên GitHub** — Code: `git init`, `git remote add`, push. Chạy: mở repo trên github.com. Test: đủ file, không lộ secret/API key.
+5. **Tạo Firebase project thật** — Firebase Console, đặt tên, chọn khu vực gần VN. Chạy: mở lại project trên console. Test: project tồn tại, đúng cấu hình.
+6. **Đăng ký app Android vào Firebase, tải `google-services.json`** — Code: đặt file vào `android/app/`, khai đúng `applicationId`. Chạy: `flutter build apk --debug`. Test: build qua, không lỗi thiếu config.
+7. **`flutterfire configure` + `Firebase.initializeApp()`** — Code: sinh `firebase_options.dart`, gọi init trong `main.dart`. Chạy: `flutter run` trên máy thật. Test: log xác nhận Firebase khởi tạo, app không crash.
+8. **Bật Cloud Firestore (Native mode)** — thao tác Console. Chạy: mở tab Firestore. Test: database trống đã tồn tại, đúng khu vực.
+9. **Bật Firebase Authentication (Google Sign-In)** — Code: cấu hình OAuth client ID Android (SHA-1). Chạy: xem trạng thái trên Console. Test: phương thức Google hiện "Đã bật".
+10. **Viết Security Rules bản đầu** (`families/{familyId}` chỉ `memberIds` đọc/ghi) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
+11. **Test rule bằng Firebase Emulator Suite** — Code: test rule (`@firebase/rules-unit-testing`). Chạy: `firebase emulators:exec`. Test: tài khoản ngoài family bị chặn đọc/ghi — đây là rủi ro nghiêm trọng nhất của app (xem mục Rủi ro), không được bỏ qua.
+12. **Màn hình Đăng nhập Google** — Code: `presentation/features/auth/`. Chạy: bấm đăng nhập trên máy thật. Test: đăng nhập thành công, `FirebaseAuth.instance.currentUser` đúng.
+13. **Luồng tạo "Sổ chung"** (tạo `families/{id}` + `memberIds=[uid]`) — Code: `CreateFamily` use case. Chạy: tạo thử 1 sổ. Test: document đúng trên Firestore Console.
+14. **Luồng tham gia Sổ chung qua mã mời** — Code: sinh mã mời + `JoinFamily` use case. Chạy: dùng tài khoản thứ 2 tham gia. Test: `memberIds` có đủ 2 uid, cả hai đọc được cùng dữ liệu.
 
-### Phase 3 — Hoàn thiện, di chuyển dữ liệu cũ & bảo mật
-**Mục tiêu:** Sẵn sàng để người thật ngoài bạn dùng thử.
-**Công việc:** Công cụ nhập CSV xuất từ Google Sheet hiện tại vào đúng schema Firestore (giữ lịch sử 8 tháng đã ghi); khoá app bằng mã PIN/sinh trắc học; hoàn thiện icon, onboarding, empty state; kiểm thử trên nhiều kích thước máy Android; viết trang Chính sách quyền riêng tư (bắt buộc để nộp Play Console vì app thu thập dữ liệu tài chính).
-**Tiêu chí hoàn thành:** Cài app mới hoàn toàn, nhập dữ liệu cũ, dùng xuyên suốt 1 tuần không phát sinh lỗi mất dữ liệu hay đồng bộ sai người.
-**Thời gian ước tính:** 1–1.5 tuần.
+### Giai đoạn B — Ghi chép giao dịch nối Firestore thật (12 phase)
 
-### Phase 4 — Kiểm thử & Phát hành CH Play
-**Mục tiêu:** App lên Google Play, có người dùng thật đầu tiên.
-**Công việc:** Đăng ký Google Play Console (25 USD, một lần); build `.aab`; đưa lên kênh Internal testing rồi Closed testing (mời vài người dùng thử tối thiểu vài ngày — Google yêu cầu điều này với tài khoản developer mới trước khi mở Production); khai báo mục Data Safety trung thực về dữ liệu tài chính thu thập; chuẩn bị mô tả, ảnh chụp màn hình, banner; sau khi ổn định, phát hành Production.
-**Tiêu chí hoàn thành:** App có trên CH Play, cài đặt và đăng nhập được từ tài khoản Google bất kỳ, không bị Google gắn cờ vi phạm chính sách Financial Services/Data Safety.
-**Thời gian ước tính:** 1–2 tuần (phần lớn là thời gian chờ xét duyệt/testing bắt buộc của Google, không phải thời gian code).
+15. ✅ **Domain entities & mock repository** — đã code/chạy/test qua `MockTransactionRepository` để dựng UI trước.
+16. **`FirestoreTransactionRepository`** — Code: implement interface, ghi vào `families/{id}/months/{yearMonth}/transactions`. Chạy: gọi thử `addTransaction()`. Test: document đúng path trên Console.
+17. **Đổi provider sang Firestore thật** — Code: `transactionRepositoryProvider` trỏ Firestore, inject `familyId` hiện tại. Chạy: `flutter run`. Test: Trang chủ đọc được dữ liệu thật (ban đầu rỗng, không lỗi).
+18. **Test rule cho `months/transactions`** — Code: rule con cho subcollection. Chạy: `firebase emulators:exec`. Test: user ngoài family bị chặn ghi vào bất kỳ tháng nào.
+19. **Nối sheet Thêm giao dịch ghi thật** — Code: gọi repository thật thay mock. Chạy: thêm 1 giao dịch trên máy thật. Test: xuất hiện đúng trên Firestore + UI cập nhật ngay không cần refresh.
+20. **Danh sách giao dịch theo ngày đọc dữ liệu thật** — Code: `StreamProvider` lắng nghe `months/{currentYearMonth}/transactions`. Chạy: thêm vài giao dịch khác ngày. Test: nhóm đúng theo ngày, mới nhất trên đầu.
+21. **Chuyển xem tháng khác** — Code: UI chọn tháng, đổi listener sang `months/{yearMonth}` khác + huỷ listener cũ. Chạy: chuyển qua lại 3 tháng. Test: dữ liệu đúng tháng đang xem, không rò rỉ listener tháng cũ.
+22. **Sửa giao dịch** — Code: `EditTransaction` use case + UI. Chạy: sửa thử 1 giao dịch. Test: Firestore cập nhật đúng document, UI phản ánh ngay.
+23. **Xoá giao dịch** — Code: `DeleteTransaction` + xác nhận trước khi xoá. Chạy: xoá thử. Test: document biến mất, giao dịch khác không bị ảnh hưởng.
+24. **Validate input khi ghi thật** — Code: số tiền > 0, bắt buộc chọn hạng mục + người ghi. Chạy: thử bấm Lưu khi thiếu dữ liệu. Test: nút Lưu khoá đúng như đã kiểm chứng ở bản mock.
+25. **Test offline** — Chạy: bật Airplane mode, thêm giao dịch, tắt Airplane mode. Test: giao dịch tự đồng bộ lên Firestore khi có mạng lại, không mất, không trùng.
+26. **Test đồng bộ realtime 2 máy** — Chạy: máy A (tài khoản Chồng) thêm giao dịch. Test: máy B (tài khoản Vợ) thấy ngay không cần refresh.
 
-### Phase 5 — Premium & Mở rộng
-**Mục tiêu:** Kiếm tiền từ app và giữ chân người dùng lâu dài.
-**Công việc:** Tích hợp `in_app_purchase` cho gói Premium (mở khoá: nhiều sổ chung, backup không giới hạn, báo cáo xu hướng nhiều tháng, xuất PDF/Excel không giới hạn); widget màn hình chính; nhắc lịch hoá đơn định kỳ (tiền nhà, điện, nước); đa ngôn ngữ Việt/Anh; xem xét thêm Cloud Functions để tính báo cáo phía server khi dữ liệu lớn dần, giảm tải cho máy người dùng.
-**Tiêu chí hoàn thành:** Có ít nhất một luồng mua Premium hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
-**Thời gian ước tính:** liên tục, không có điểm kết thúc cố định — đây là giai đoạn duy trì và tăng trưởng.
+### Giai đoạn C — Tài khoản riêng Vợ/Chồng & Quỹ tiền ăn (9 phase)
+
+27. **Cloud Function cập nhật `memberBalances`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()`. Chạy: `firebase deploy --only functions`, thêm giao dịch thử. Test: `memberBalances/{uid}` đúng sau nhiều loại giao dịch (thu/chi/tiết kiệm/chuyển khoản).
+28. **Nối 2 thẻ Vợ/Chồng đọc `memberBalances` thật** — Code: đổi nguồn dữ liệu Trang chủ. Chạy: `flutter run`. Test: số hiển thị khớp Cloud Function tính.
+29. **Unit test Cloud Function xử lý chuyển khoản 2 chiều** — Code: test bằng `firebase-functions-test`. Chạy: `npm test`. Test: cả Chồng đưa vợ và Vợ đưa chồng đổi đúng dấu ở cả 2 phía.
+30. **Nối tách tiết kiệm hiện tại/ngân hàng với dữ liệu thật** — Code: đã có UI, đổi nguồn `savingsOnHand`/`savingsInBank`. Chạy: thêm giao dịch Tiết kiệm chọn "Đã gửi ngân hàng". Test: đúng cột tăng, cột còn lại không đổi.
+31. **`FirestoreFundRepository`** — Code: implement, ghi vào `families/{id}/funds/{fundId}/entries`. Chạy: gọi thử `addEntry()`. Test: document đúng path.
+32. **Màn hình Quỹ tiền ăn** — Code: `presentation/features/fund/`, hiển thị số dư + danh sách khoản. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng mua, khớp `computeFundBalance` đã unit test.
+33. **Form nạp tiền vào quỹ** — Code: UI + `addEntry(kind: topUp)`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, entry hiện trong danh sách.
+34. **Form ghi khoản đã mua từ quỹ** — Code: UI + `addEntry(kind: purchase)`. Chạy: ghi thử "đi chợ 150.000đ". Test: số dư giảm đúng; xác nhận **không** tạo thêm dòng Sinh hoạt ở sổ chính (tránh đếm trùng).
+35. **Cloud Function cache `balance` lên `funds/{fundId}`** — Code: `onWrite` entries → increment. Chạy: deploy + test qua vài entry. Test: field `balance` khớp tổng tính tay.
+
+### Giai đoạn D — Trạng thái & Tổng hợp tháng (8 phase)
+
+36. **Nối chọn trạng thái ghi thật** — Code: đã có UI generic theo `category.statuses`, đổi sang Firestore thật. Chạy: thêm giao dịch Cho đi chọn "Đã chuẩn bị". Test: field `status` đúng trong document.
+37. **Cloud Function tính rollup `months/{yearMonth}`** — Code: `onWrite` transactions → increment `categoryTotals`/`memberTotals`/`statusTotals`. Chạy: deploy, thêm giao dịch đa dạng hạng mục/trạng thái. Test: rollup doc khớp phép tính tay.
+38. **Nối màn hình Tổng hợp đọc rollup doc** — Code: đổi provider từ stream toàn bộ transactions sang đọc 1 document. Chạy: mở màn hình Tổng hợp. Test: số liệu khớp trước/sau khi đổi nguồn — đây là điểm mấu chốt giúp app nhanh dù dùng nhiều năm.
+39. **Biểu đồ tròn theo hạng mục với dữ liệu thật** — Code: đổi nguồn data cho `fl_chart` đã dựng. Chạy: xem với >5 hạng mục có giao dịch. Test: % cộng lại đúng 100%.
+40. **Card trạng thái tự sinh theo `category.statuses` với dữ liệu thật** — Code: đổi nguồn data, UI generic đã có sẵn không cần sửa. Chạy: xem Cho đi + Dâng hiến có dữ liệu thật. Test: tổng từng bước khớp rollup doc.
+41. **Tỷ lệ tiết kiệm (Thu−Chi)/Thu ở Trang chủ với dữ liệu thật** — Code: đổi nguồn từ rollup. Chạy: xem sau vài giao dịch. Test: khớp domain logic đã unit test từ trước.
+42. **Xem Tổng hợp theo năm** — Code: use case cộng 12 document `months/{yearMonth}`. Chạy: xem 1 năm có dữ liệu. Test: tổng năm = tổng 12 tháng cộng tay.
+43. **Test hiệu năng đọc Firestore** — Chạy: đo số lượt đọc bằng Firebase Performance Monitoring khi mở Tổng hợp. Test: số lượt đọc không tăng theo số năm đã dùng (chỉ đọc rollup + tháng hiện tại, không quét lịch sử).
+
+### Giai đoạn E — Ngân sách & nhắc nhở (5 phase)
+
+44. **Domain entity `Budget` + `budgets/{yearMonth}`** — Code: entity + repository interface thuần domain. Chạy: unit test logic. Test: test pass, không phụ thuộc Firebase.
+45. **Màn hình đặt ngân sách theo hạng mục** — Code: `presentation/features/budget/`. Chạy: đặt thử ngân sách Sinh hoạt = 3.000.000đ. Test: lưu đúng vào Firestore.
+46. **Cảnh báo 80%/100% ngân sách** — Code: so `categoryTotals` (rollup) với `budgets`. Chạy: chi vượt 80% thử. Test: cảnh báo hiện đúng ngưỡng.
+47. **Cảnh báo theo tốc độ tiêu** (gợi ý chuyên gia — so % ngày đã qua trong tháng với % ngân sách đã dùng, cảnh báo sớm hơn ngưỡng cố định) — Code: `computeBudgetPace` use case, có unit test riêng. Chạy: giả lập ngày 15/30 đã tiêu 80%. Test: cảnh báo "tiêu nhanh hơn dự kiến" đúng lúc.
+48. **Push notification nhắc ghi chi tiêu hàng ngày** — Code: Cloud Messaging + lịch gửi. Chạy: chờ tới giờ hẹn trên máy thật. Test: thông báo xuất hiện đúng giờ.
+
+### Giai đoạn F — Bảo mật, di chuyển dữ liệu, hoàn thiện (5 phase)
+
+49. **Khoá PIN/vân tay** — Code: `local_auth`, `presentation/features/lock/`. Chạy: bật khoá, thoát app mở lại. Test: yêu cầu xác thực trước khi vào app.
+50. **Công cụ import CSV từ Google Sheet cũ** — Code: script import vào đúng `months/{yearMonth}`, map đúng 9 hạng mục thật. Chạy: import thử 8 tháng dữ liệu thật đã có (~1700 dòng). Test: tổng số giao dịch import khớp số dòng gốc, không trùng lặp, số dư cuối tháng 8 khớp sheet cũ.
+51. **Icon app + onboarding + empty state** — Code: `assets/icon`, `presentation/features/onboarding/`. Chạy: cài app mới hoàn toàn. Test: icon đúng, onboarding hiện đúng 1 lần, empty state rõ ràng khi chưa có giao dịch.
+52. **Kiểm thử nhiều kích thước máy Android** — Chạy: chạy trên ≥3 kích thước màn hình/phiên bản OS. Test: UI không vỡ layout ở màn hình nhỏ nhất.
+53. **Trang Chính sách quyền riêng tư** — Code: trang tĩnh khai đúng dữ liệu tài chính thu thập. Chạy: mở link. Test: nội dung đủ theo yêu cầu Play Console Data Safety.
+
+### Giai đoạn G — Phát hành CH Play (5 phase)
+
+54. **Đăng ký Google Play Console + build & ký `.aab`** — Chạy: `flutter build appbundle --release`. Test: file `.aab` sinh ra không lỗi, mở được bằng `bundletool`.
+55. **Khai báo Data Safety** — Test: khai đúng mục đích Personal Finance/Tools, không phải Lending/Payments (tránh bị yêu cầu giấy phép không cần thiết).
+56. **Internal testing** — Chạy: upload `.aab`. Test: cài được qua link testing trên máy thật.
+57. **Closed testing** — Test: đủ số ngày/người dùng tối thiểu Google yêu cầu với tài khoản developer mới.
+58. **Phát hành Production** — Test: app xuất hiện công khai trên CH Play, cài + đăng nhập được từ tài khoản Google bất kỳ, không bị gắn cờ vi phạm chính sách.
+
+### Giai đoạn H — Premium & Mở rộng, liên tục sau khi có người dùng thật (4 phase)
+
+59. **Mở khoá tự tạo/sửa hạng mục cho gia đình khác** — đây là lúc hiện thực hoá nguyên tắc "hạng mục là dữ liệu" đã thiết kế từ Phase 1: UI cho gia đình mới tự định nghĩa `kind`/`statuses`/`transferFrom-To` thay vì dùng 9 hạng mục seed cứng của vợ chồng chủ dự án. Test: 1 gia đình test tạo bộ hạng mục hoàn toàn khác vẫn chạy đúng mà không cần sửa code.
+60. **Đa ngôn ngữ Việt/Anh** — Code: `flutter_localizations` + `.arb`, tên hiển thị đổi theo locale (Ví Nhà Mình/HomeWallet). Test: đổi ngôn ngữ máy, toàn bộ UI đổi theo, không sót chuỗi hardcode.
+61. **In-app purchase gói Premium** — Test: luồng mua hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
+62. **Widget màn hình chính, nhắc lịch hoá đơn định kỳ, xuất PDF/Excel** — Test: từng tính năng hoạt động độc lập, không phá vỡ luồng core đã ổn định.
 
 ---
 
 ## Bảng tổng hợp thời gian
 
-| Phase | Nội dung | Ước tính |
+| Giai đoạn | Số phase | Ước tính |
 |---|---|---|
-| 0 | Khởi tạo & nền tảng | 3–5 ngày |
-| 1 | MVP ghi chép & đồng bộ | 2–3 tuần |
-| 2 | Ngân sách & báo cáo | 1.5–2 tuần |
-| 3 | Hoàn thiện & di chuyển dữ liệu | 1–1.5 tuần |
-| 4 | Kiểm thử & phát hành CH Play | 1–2 tuần |
-| 5 | Premium & mở rộng | Liên tục |
+| A — Nền tảng & Firebase | 14 (4 đã xong) | 5–7 ngày |
+| B — Ghi chép nối Firestore | 12 | 1.5–2 tuần |
+| C — Tài khoản riêng & Quỹ | 9 | 1–1.5 tuần |
+| D — Trạng thái & Tổng hợp | 8 | 1–1.5 tuần |
+| E — Ngân sách & nhắc nhở | 5 | 4–6 ngày |
+| F — Bảo mật & hoàn thiện | 5 | 1–1.5 tuần |
+| G — Phát hành CH Play | 5 | 1–2 tuần (chủ yếu chờ Google) |
+| H — Premium & mở rộng | 4 | Liên tục |
 
-**Tổng thời gian tới khi có app trên CH Play (hết Phase 4):** khoảng 6–9 tuần làm việc bán thời gian đều đặn (nhanh hơn nếu làm toàn thời gian), tương ứng với năng lực bạn đã có sẵn từ việc từng xây web, app Android và app PC cùng Claude.
+**Tổng thời gian tới khi có app trên CH Play (hết Giai đoạn G):** khoảng 6–9 tuần làm việc bán thời gian đều đặn — mỗi phase nhỏ, làm xong test qua trong ngày là chuyển tiếp được, không dồn việc lớn đến cuối mới kiểm thử.
 
 ## Chi phí
 
