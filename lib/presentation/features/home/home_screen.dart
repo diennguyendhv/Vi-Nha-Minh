@@ -9,6 +9,7 @@ import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
 import '../../providers/transaction_providers.dart';
+import '../add_transaction/add_transaction_sheet.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -33,9 +34,11 @@ class _HomeContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final voFinancials = computeMemberFinancials(FamilyMember.vo, transactions);
-    final chongFinancials = computeMemberFinancials(FamilyMember.chong, transactions);
-    final sorted = [...transactions]
-      ..sort((a, b) => b.date.compareTo(a.date));
+    final chongFinancials = computeMemberFinancials(
+      FamilyMember.chong,
+      transactions,
+    );
+    final sorted = [...transactions]..sort((a, b) => b.date.compareTo(a.date));
     final monthLabel = 'Tháng ${DateTime.now().month}';
 
     return ListView(
@@ -44,28 +47,33 @@ class _HomeContent extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Xin chào,',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                    fontWeight: FontWeight.w500,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Xin chào,',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Ví Nhà Mình · $monthLabel',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
+                  const SizedBox(height: 2),
+                  Text(
+                    'Ví Nhà Mình · $monthLabel',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.2,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
+            const SizedBox(width: 12),
             const _AvatarBadge(),
           ],
         ),
@@ -158,7 +166,9 @@ class _MemberCard extends StatelessWidget {
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w800,
-              color: isNegative ? AppColors.expenseAmount : AppColors.textPrimary,
+              color: isNegative
+                  ? AppColors.expenseAmount
+                  : AppColors.textPrimary,
             ),
           ),
           const SizedBox(height: 10),
@@ -173,20 +183,32 @@ class _MemberCard extends StatelessWidget {
               children: [
                 const Text(
                   'Tiết kiệm',
-                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 Text(
                   Formatters.amount(financials.savingsTotal),
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Hiện tại ${Formatters.amount(financials.savingsOnHand)}',
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                  ),
                 ),
                 Text(
                   'Ngân hàng ${Formatters.amount(financials.savingsInBank)}',
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -244,56 +266,68 @@ class _TransactionRow extends StatelessWidget {
     final sign = transaction.amount < 0 ? '' : (isIncome ? '+ ' : '- ');
     final amountText = '$sign${Formatters.amount(transaction.amount)}';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: category.color, shape: BoxShape.circle),
-            child: Text(
-              category.initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
+    return InkWell(
+      onTap: () => showEditTransactionSheet(context, transaction),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.divider)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: category.color,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                category.initial,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  category.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
-                ),
-                Text(
-                  transaction.note.isEmpty
-                      ? transaction.spender.label
-                      : '${transaction.note} · ${transaction.spender.label}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    category.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
+                  Text(
+                    transaction.note.isEmpty
+                        ? transaction.spender.label
+                        : '${transaction.note} · ${transaction.spender.label}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            amountText,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13.5,
-              color: amountColor,
+            Text(
+              amountText,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+                color: amountColor,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

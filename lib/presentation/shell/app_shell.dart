@@ -108,7 +108,11 @@ class _BarItem extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: color),
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),

@@ -59,7 +59,9 @@ class SummaryScreen extends ConsumerWidget {
             // quen riêng của gia đình, nhưng UI không hardcode theo 2 hạng
             // mục đó; gia đình khác bật hasStatus cho hạng mục nào thì hạng
             // mục đó tự xuất hiện ở đây.
-            for (final category in DefaultCategories.all.where((c) => c.hasStatus)) ...[
+            for (final category in DefaultCategories.all.where(
+              (c) => c.hasStatus,
+            )) ...[
               const SizedBox(height: 16),
               _StatusCard(
                 category: category,
@@ -127,7 +129,10 @@ class _Donut extends StatelessWidget {
                 ),
                 Text(
                   Formatters.amount(totalExpense),
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
@@ -167,17 +172,26 @@ class _StatusCard extends StatelessWidget {
               Container(
                 width: 10,
                 height: 10,
-                decoration: BoxDecoration(color: category.color, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: category.color,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
                 category.name,
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const Spacer(),
               Text(
                 Formatters.amount(breakdown.total),
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
@@ -205,7 +219,10 @@ class _StatusRow extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
           Text(
@@ -237,13 +254,19 @@ class _LegendRow extends StatelessWidget {
           Container(
             width: 10,
             height: 10,
-            decoration: BoxDecoration(color: category.color, shape: BoxShape.circle),
+            decoration: BoxDecoration(
+              color: category.color,
+              shape: BoxShape.circle,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               category.name,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           SizedBox(
@@ -259,7 +282,10 @@ class _LegendRow extends StatelessWidget {
             child: Text(
               Formatters.amount(item.total),
               textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

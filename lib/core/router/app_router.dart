@@ -4,10 +4,5 @@ import '../../presentation/shell/app_shell.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/',
-  routes: [
-    GoRoute(
-      path: '/',
-      builder: (context, state) => const AppShell(),
-    ),
-  ],
+  routes: [GoRoute(path: '/', builder: (context, state) => const AppShell())],
 );

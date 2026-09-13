@@ -90,19 +90,34 @@ void main() {
   });
 
   group('computeMemberFinancials', () {
-    test('số dư chỉ tính giao dịch của đúng người, chuyển khoản đổi cả hai bên', () {
-      final transactions = [
-        _tx(categoryId: 'thu_nhap', amount: 10000000, spender: FamilyMember.chong),
-        _tx(categoryId: 'sinh_hoat', amount: 1000000, spender: FamilyMember.vo),
-        _tx(categoryId: 'chong_dua_vo', amount: 500000, spender: FamilyMember.chong),
-      ];
+    test(
+      'số dư chỉ tính giao dịch của đúng người, chuyển khoản đổi cả hai bên',
+      () {
+        final transactions = [
+          _tx(
+            categoryId: 'thu_nhap',
+            amount: 10000000,
+            spender: FamilyMember.chong,
+          ),
+          _tx(
+            categoryId: 'sinh_hoat',
+            amount: 1000000,
+            spender: FamilyMember.vo,
+          ),
+          _tx(
+            categoryId: 'chong_dua_vo',
+            amount: 500000,
+            spender: FamilyMember.chong,
+          ),
+        ];
 
-      final vo = computeMemberFinancials(FamilyMember.vo, transactions);
-      final chong = computeMemberFinancials(FamilyMember.chong, transactions);
+        final vo = computeMemberFinancials(FamilyMember.vo, transactions);
+        final chong = computeMemberFinancials(FamilyMember.chong, transactions);
 
-      expect(vo.balance, -1000000 + 500000);
-      expect(chong.balance, 10000000 - 500000);
-    });
+        expect(vo.balance, -1000000 + 500000);
+        expect(chong.balance, 10000000 - 500000);
+      },
+    );
 
     test('tiết kiệm trừ số dư và cộng đúng quỹ hiện tại/ngân hàng', () {
       final transactions = [
@@ -128,22 +143,28 @@ void main() {
   });
 
   group('computeStatusBreakdown', () {
-    test('gộp theo trạng thái, giao dịch chưa có status tính vào bước đầu tiên', () {
-      final transactions = [
-        _tx(categoryId: 'cho_di', amount: 100000, status: 'Chưa chuẩn bị'),
-        _tx(categoryId: 'cho_di', amount: 50000),
-        _tx(categoryId: 'cho_di', amount: 200000, status: 'Đã chuẩn bị'),
-        _tx(categoryId: 'cho_di', amount: 300000, status: 'Đã gửi'),
-        _tx(categoryId: 'dang_hien', amount: 999999, status: 'Đã dâng'),
-      ];
+    test(
+      'gộp theo trạng thái, giao dịch chưa có status tính vào bước đầu tiên',
+      () {
+        final transactions = [
+          _tx(categoryId: 'cho_di', amount: 100000, status: 'Chưa chuẩn bị'),
+          _tx(categoryId: 'cho_di', amount: 50000),
+          _tx(categoryId: 'cho_di', amount: 200000, status: 'Đã chuẩn bị'),
+          _tx(categoryId: 'cho_di', amount: 300000, status: 'Đã gửi'),
+          _tx(categoryId: 'dang_hien', amount: 999999, status: 'Đã dâng'),
+        ];
 
-      final breakdown = computeStatusBreakdown(transactions, DefaultCategories.choDi);
+        final breakdown = computeStatusBreakdown(
+          transactions,
+          DefaultCategories.choDi,
+        );
 
-      expect(breakdown.totals['Chưa chuẩn bị'], 150000);
-      expect(breakdown.totals['Đã chuẩn bị'], 200000);
-      expect(breakdown.totals['Đã gửi'], 300000);
-      expect(breakdown.total, 650000);
-    });
+        expect(breakdown.totals['Chưa chuẩn bị'], 150000);
+        expect(breakdown.totals['Đã chuẩn bị'], 200000);
+        expect(breakdown.totals['Đã gửi'], 300000);
+        expect(breakdown.total, 650000);
+      },
+    );
 
     test('hạng mục không có statuses trả về breakdown rỗng', () {
       final breakdown = computeStatusBreakdown([], DefaultCategories.sinhHoat);

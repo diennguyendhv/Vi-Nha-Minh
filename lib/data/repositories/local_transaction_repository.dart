@@ -44,9 +44,10 @@ class LocalTransactionRepository implements TransactionRepository {
 
   @override
   Stream<List<domain.Transaction>> watchTransactions() {
-    return _db.select(_db.transactionRows).watch().map(
-      (rows) => rows.map(_toDomain).toList(),
-    );
+    return _db
+        .select(_db.transactionRows)
+        .watch()
+        .map((rows) => rows.map(_toDomain).toList());
   }
 
   @override

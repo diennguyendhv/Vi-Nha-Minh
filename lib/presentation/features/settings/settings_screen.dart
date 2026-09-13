@@ -17,7 +17,11 @@ class SettingsScreen extends ConsumerWidget {
       children: [
         const Text(
           'Cài đặt',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.2),
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
         ),
         const SizedBox(height: 18),
         Container(
@@ -45,7 +49,10 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 child: const Text(
                   'GĐ',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -55,11 +62,17 @@ class SettingsScreen extends ConsumerWidget {
                   children: [
                     Text(
                       'Sổ chung: Gia đình',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14.5,
+                      ),
                     ),
                     Text(
                       'Vợ · Chồng đang đồng bộ',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -92,7 +105,11 @@ class SettingsScreen extends ConsumerWidget {
               SizedBox(height: 4),
               Text(
                 'Mở khoá nhiều sổ, báo cáo xu hướng nhiều tháng và sao lưu không giới hạn.',
-                style: TextStyle(color: Colors.white70, fontSize: 12.5, height: 1.5),
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12.5,
+                  height: 1.5,
+                ),
               ),
             ],
           ),
@@ -151,8 +168,18 @@ class _SettingsRow extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: AppColors.textMuted,
+            ),
           ],
         ),
       ),
@@ -177,7 +204,10 @@ class _BiometricRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Khoá vân tay', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+                Text(
+                  'Khoá vân tay',
+                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                ),
                 Text(
                   'Yêu cầu xác thực khi mở app',
                   style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),

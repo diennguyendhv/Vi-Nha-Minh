@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/category_kind.dart';
 import '../../../domain/entities/family_member.dart';
@@ -20,11 +21,28 @@ Future<void> showAddTransactionSheet(BuildContext context) {
   );
 }
 
+/// Mở lại sheet ở chế độ sửa, điền sẵn dữ liệu của [transaction] — Lưu sẽ
+/// gọi `updateTransaction` thay vì tạo mới, và có thêm nút Xoá.
+Future<void> showEditTransactionSheet(
+  BuildContext context,
+  Transaction transaction,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => AddTransactionSheet(existing: transaction),
+  );
+}
+
 class AddTransactionSheet extends ConsumerStatefulWidget {
-  const AddTransactionSheet({super.key});
+  const AddTransactionSheet({super.key, this.existing});
+
+  final Transaction? existing;
 
   @override
-  ConsumerState<AddTransactionSheet> createState() => _AddTransactionSheetState();
+  ConsumerState<AddTransactionSheet> createState() =>
+      _AddTransactionSheetState();
 }
 
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
@@ -35,10 +53,28 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   String _amountDigits = '';
   String _note = '';
 
-  int get _amount => int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
+  bool get _isEditing => widget.existing != null;
 
-  Category? get _selectedCategory =>
-      _selectedCategoryId == null ? null : DefaultCategories.byId(_selectedCategoryId!);
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    if (existing != null) {
+      _selectedCategoryId = existing.categoryId;
+      _spender = existing.spender;
+      _status = existing.status;
+      _savingsDestination = existing.savingsDestination;
+      _amountDigits = existing.amount.toString();
+      _note = existing.note;
+    }
+  }
+
+  int get _amount =>
+      int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
+
+  Category? get _selectedCategory => _selectedCategoryId == null
+      ? null
+      : DefaultCategories.byId(_selectedCategoryId!);
 
   void _pressKey(String key) {
     setState(() {
@@ -58,25 +94,38 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     setState(() {
       _selectedCategoryId = category.id;
       _status = category.hasStatus ? category.statuses.first : null;
-      _savingsDestination =
-          category.kind == CategoryKind.savings ? SavingsDestination.onHand : null;
+      _savingsDestination = category.kind == CategoryKind.savings
+          ? SavingsDestination.onHand
+          : null;
     });
   }
 
   void _save() {
     final category = _selectedCategory;
     if (category == null || _amount <= 0) return;
+    final existing = widget.existing;
     final transaction = Transaction(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      id: existing?.id ?? IdGenerator.generate(),
       categoryId: category.id,
       amount: _amount,
-      date: DateTime.now(),
+      date: existing?.date ?? DateTime.now(),
       spender: _spender,
       note: _note,
       status: _status,
       savingsDestination: _savingsDestination,
     );
-    ref.read(transactionRepositoryProvider).addTransaction(transaction);
+    if (existing != null) {
+      ref.read(transactionRepositoryProvider).updateTransaction(transaction);
+    } else {
+      ref.read(transactionRepositoryProvider).addTransaction(transaction);
+    }
+    Navigator.of(context).pop();
+  }
+
+  void _delete() {
+    final existing = widget.existing;
+    if (existing == null) return;
+    ref.read(transactionRepositoryProvider).deleteTransaction(existing.id);
     Navigator.of(context).pop();
   }
 
@@ -115,9 +164,12 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Thêm giao dịch',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    Text(
+                      _isEditing ? 'Sửa giao dịch' : 'Thêm giao dịch',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
@@ -188,7 +240,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             .toList(),
                       ),
                     ],
-                    if (category != null && category.kind == CategoryKind.savings) ...[
+                    if (category != null &&
+                        category.kind == CategoryKind.savings) ...[
                       const SizedBox(height: 16),
                       const _SectionLabel('Loại tiết kiệm'),
                       const SizedBox(height: 8),
@@ -201,7 +254,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                                 label: d.label,
                                 selected: d == _savingsDestination,
                                 accent: category.color,
-                                onTap: () => setState(() => _savingsDestination = d),
+                                onTap: () =>
+                                    setState(() => _savingsDestination = d),
                               ),
                             )
                             .toList(),
@@ -218,7 +272,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             (n) => _NoteChip(
                               label: n,
                               selected: n == _note,
-                              onTap: () => setState(() => _note = n == _note ? '' : n),
+                              onTap: () =>
+                                  setState(() => _note = n == _note ? '' : n),
                             ),
                           )
                           .toList(),
@@ -239,12 +294,41 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             borderRadius: BorderRadius.circular(15),
                           ),
                         ),
-                        child: const Text(
-                          'Lưu giao dịch',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        child: Text(
+                          _isEditing ? 'Lưu thay đổi' : 'Lưu giao dịch',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
+                    if (_isEditing) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: _delete,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.expenseAmount,
+                            side: const BorderSide(
+                              color: AppColors.expenseAmount,
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                          ),
+                          child: const Text(
+                            'Xoá giao dịch',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -320,7 +404,11 @@ class _MemberToggle extends StatelessWidget {
 }
 
 class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({required this.category, required this.selected, required this.onTap});
+  const _CategoryChip({
+    required this.category,
+    required this.selected,
+    required this.onTap,
+  });
 
   final Category category;
   final bool selected;
@@ -333,9 +421,14 @@ class _CategoryChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? category.color.withValues(alpha: 0.14) : AppColors.chipBackground,
+          color: selected
+              ? category.color.withValues(alpha: 0.14)
+              : AppColors.chipBackground,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? category.color : Colors.transparent, width: 1.5),
+          border: Border.all(
+            color: selected ? category.color : Colors.transparent,
+            width: 1.5,
+          ),
         ),
         child: Text(
           category.name,
@@ -370,7 +463,9 @@ class _ChoiceChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? accent.withValues(alpha: 0.14) : AppColors.chipBackground,
+          color: selected
+              ? accent.withValues(alpha: 0.14)
+              : AppColors.chipBackground,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: selected ? accent : Colors.transparent),
         ),
@@ -388,7 +483,11 @@ class _ChoiceChip extends StatelessWidget {
 }
 
 class _NoteChip extends StatelessWidget {
-  const _NoteChip({required this.label, required this.selected, required this.onTap});
+  const _NoteChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final bool selected;
@@ -401,9 +500,13 @@ class _NoteChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? AppColors.accent.withValues(alpha: 0.14) : AppColors.chipBackground,
+          color: selected
+              ? AppColors.accent.withValues(alpha: 0.14)
+              : AppColors.chipBackground,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? AppColors.accent : Colors.transparent),
+          border: Border.all(
+            color: selected ? AppColors.accent : Colors.transparent,
+          ),
         ),
         child: Text(
           label,
@@ -423,7 +526,20 @@ class _Keypad extends StatelessWidget {
 
   final ValueChanged<String> onKey;
 
-  static const _keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '000', '0', '⌫'];
+  static const _keys = [
+    '1',
+    '2',
+    '3',
+    '4',
+    '5',
+    '6',
+    '7',
+    '8',
+    '9',
+    '000',
+    '0',
+    '⌫',
+  ];
 
   @override
   Widget build(BuildContext context) {

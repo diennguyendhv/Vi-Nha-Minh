@@ -22,9 +22,10 @@ List<CategoryTotal> computeExpenseBreakdown(List<Transaction> transactions) {
     }
     totals.update(t.categoryId, (v) => v + t.amount, ifAbsent: () => t.amount);
   }
-  final result = totals.entries
-      .map((e) => CategoryTotal(categoryId: e.key, total: e.value))
-      .toList()
-    ..sort((a, b) => b.total.compareTo(a.total));
+  final result =
+      totals.entries
+          .map((e) => CategoryTotal(categoryId: e.key, total: e.value))
+          .toList()
+        ..sort((a, b) => b.total.compareTo(a.total));
   return result;
 }

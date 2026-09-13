@@ -22,7 +22,9 @@ StatusBreakdown computeStatusBreakdown(
   final totals = {for (final s in category.statuses) s: 0};
   final firstStep = category.statuses.first;
   for (final t in transactions.where((t) => t.categoryId == category.id)) {
-    final key = t.status != null && totals.containsKey(t.status) ? t.status! : firstStep;
+    final key = t.status != null && totals.containsKey(t.status)
+        ? t.status!
+        : firstStep;
     totals[key] = totals[key]! + t.amount;
   }
   return StatusBreakdown(totals);

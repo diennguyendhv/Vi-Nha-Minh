@@ -3,7 +3,10 @@ import '../entities/category_kind.dart';
 import '../entities/transaction.dart';
 
 class FinancialSummary {
-  const FinancialSummary({required this.totalIncome, required this.totalExpense});
+  const FinancialSummary({
+    required this.totalIncome,
+    required this.totalExpense,
+  });
 
   final int totalIncome;
   final int totalExpense;

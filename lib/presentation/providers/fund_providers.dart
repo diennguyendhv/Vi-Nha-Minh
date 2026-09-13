@@ -14,6 +14,6 @@ final fundRepositoryProvider = Provider<FundRepository>((ref) {
 
 final fundEntriesStreamProvider =
     StreamProvider.family<List<FundEntry>, String>((ref, fundId) {
-  final repository = ref.watch(fundRepositoryProvider);
-  return repository.watchEntries(fundId);
-});
+      final repository = ref.watch(fundRepositoryProvider);
+      return repository.watchEntries(fundId);
+    });

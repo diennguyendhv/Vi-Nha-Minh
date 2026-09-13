@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/default_funds.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/fund_entry.dart';
 import '../../../domain/usecases/compute_fund_balance.dart';
@@ -140,7 +141,9 @@ class _BalanceCard extends StatelessWidget {
               fontSize: 30,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
-              color: balance < 0 ? AppColors.expenseAmount : AppColors.textPrimary,
+              color: balance < 0
+                  ? AppColors.expenseAmount
+                  : AppColors.textPrimary,
             ),
           ),
         ],
@@ -178,7 +181,10 @@ class _ActionButton extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 label,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -214,12 +220,20 @@ class _EntryRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  entry.note.isEmpty ? (isTopUp ? 'Nạp quỹ' : 'Mua') : entry.note,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                  entry.note.isEmpty
+                      ? (isTopUp ? 'Nạp quỹ' : 'Mua')
+                      : entry.note,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                  ),
                 ),
                 Text(
                   Formatters.dayMonth(entry.date),
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -292,7 +306,7 @@ class _AddEntryDialogState extends ConsumerState<_AddEntryDialog> {
             final amount = int.tryParse(_amountController.text.trim()) ?? 0;
             if (amount <= 0) return;
             final entry = FundEntry(
-              id: DateTime.now().microsecondsSinceEpoch.toString(),
+              id: IdGenerator.generate(),
               fundId: widget.fundId,
               kind: widget.kind,
               amount: amount,

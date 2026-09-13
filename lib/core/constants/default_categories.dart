@@ -84,7 +84,13 @@ class DefaultCategories {
 
   static const expense = <Category>[sinhHoat, dauTu, tuThuong, choDi, dangHien];
 
-  static const quickNotes = <String>['Chợ', 'Xăng xe', 'Cà phê', 'Hoá đơn', 'Khác'];
+  static const quickNotes = <String>[
+    'Chợ',
+    'Xăng xe',
+    'Cà phê',
+    'Hoá đơn',
+    'Khác',
+  ];
 
   static Category byId(String id) {
     return all.firstWhere(
