@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../providers/app_state_providers.dart';
+import '../fund/fund_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -111,6 +112,13 @@ class SettingsScreen extends ConsumerWidget {
           ),
           child: Column(
             children: [
+              _SettingsRow(
+                label: 'Quỹ tiền ăn',
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const FundScreen()),
+                ),
+              ),
+              const Divider(height: 1, color: AppColors.divider),
               const _SettingsRow(label: 'Quản lý danh mục'),
               const Divider(height: 1, color: AppColors.divider),
               const _SettingsRow(label: 'Ngân sách theo tháng'),
@@ -129,20 +137,24 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({required this.label});
+  const _SettingsRow({required this.label, this.onTap});
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
-          const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
-        ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: AppColors.textMuted),
+          ],
+        ),
       ),
     );
   }

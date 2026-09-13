@@ -126,4 +126,18 @@ class MockTransactionRepository implements TransactionRepository {
     _transactions.add(transaction);
     _controller.add(List.unmodifiable(_transactions));
   }
+
+  @override
+  Future<void> updateTransaction(Transaction transaction) async {
+    final index = _transactions.indexWhere((t) => t.id == transaction.id);
+    if (index == -1) return;
+    _transactions[index] = transaction;
+    _controller.add(List.unmodifiable(_transactions));
+  }
+
+  @override
+  Future<void> deleteTransaction(String id) async {
+    _transactions.removeWhere((t) => t.id == id);
+    _controller.add(List.unmodifiable(_transactions));
+  }
 }

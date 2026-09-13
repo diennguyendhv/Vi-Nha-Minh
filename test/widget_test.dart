@@ -1,6 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:vi_nha_minh/data/repositories/mock_fund_repository.dart';
+import 'package:vi_nha_minh/data/repositories/mock_transaction_repository.dart';
+import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 import 'package:vi_nha_minh/main.dart';
 
@@ -9,8 +13,25 @@ void main() {
   // khiến pumpAndSettle chờ vô thời hạn không bao giờ ổn định khung hình.
   GoogleFonts.config.allowRuntimeFetching = false;
 
+  // Widget test không nên phụ thuộc SQLite thật (path_provider không có
+  // plugin thật trong môi trường flutter test) — override sang repository
+  // giả lập trong bộ nhớ, giống cách đã dựng UI trước khi có Firebase/SQLite.
+  ProviderContainer buildOverrides() => ProviderContainer(
+    overrides: [
+      transactionRepositoryProvider.overrideWithValue(
+        MockTransactionRepository(),
+      ),
+      fundRepositoryProvider.overrideWithValue(MockFundRepository()),
+    ],
+  );
+
   testWidgets('Home screen shows the app title and bottom nav', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: ViNhaMinhApp()));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: buildOverrides(),
+        child: const ViNhaMinhApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Ví Nhà Mình'), findsOneWidget);
