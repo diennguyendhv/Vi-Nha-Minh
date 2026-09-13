@@ -5,8 +5,10 @@ import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/entities/category_kind.dart';
+import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/savings_destination.dart';
 import '../../../domain/entities/transaction.dart';
-import '../../../domain/entities/transaction_type.dart';
 import '../../providers/transaction_providers.dart';
 
 Future<void> showAddTransactionSheet(BuildContext context) {
@@ -26,12 +28,17 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
 }
 
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
-  TransactionType _type = TransactionType.expense;
   String? _selectedCategoryId;
+  FamilyMember _spender = FamilyMember.vo;
+  String? _status;
+  SavingsDestination? _savingsDestination;
   String _amountDigits = '';
   String _note = '';
 
   int get _amount => int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
+
+  Category? get _selectedCategory =>
+      _selectedCategoryId == null ? null : DefaultCategories.byId(_selectedCategoryId!);
 
   void _pressKey(String key) {
     setState(() {
@@ -47,16 +54,27 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     });
   }
 
+  void _pickCategory(Category category) {
+    setState(() {
+      _selectedCategoryId = category.id;
+      _status = category.hasStatus ? category.statuses.first : null;
+      _savingsDestination =
+          category.kind == CategoryKind.savings ? SavingsDestination.onHand : null;
+    });
+  }
+
   void _save() {
-    if (_selectedCategoryId == null || _amount <= 0) return;
+    final category = _selectedCategory;
+    if (category == null || _amount <= 0) return;
     final transaction = Transaction(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
-      type: _type,
-      categoryId: _selectedCategoryId!,
+      categoryId: category.id,
       amount: _amount,
       date: DateTime.now(),
-      note: _note.isEmpty ? 'Không ghi chú' : _note,
-      spenderName: 'Bạn',
+      spender: _spender,
+      note: _note,
+      status: _status,
+      savingsDestination: _savingsDestination,
     );
     ref.read(transactionRepositoryProvider).addTransaction(transaction);
     Navigator.of(context).pop();
@@ -64,15 +82,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final categories =
-        _type == TransactionType.expense ? DefaultCategories.expense : DefaultCategories.income;
-    final canSave = _selectedCategoryId != null && _amount > 0;
-    final amountColor = _type == TransactionType.income
+    final category = _selectedCategory;
+    final canSave = category != null && _amount > 0;
+    final amountColor = category?.kind == CategoryKind.income
         ? AppColors.accent
         : AppColors.textPrimary;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.82,
+      initialChildSize: 0.86,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       expand: false,
@@ -118,12 +135,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
                   children: [
-                    _TypeToggle(
-                      type: _type,
-                      onChanged: (t) => setState(() {
-                        _type = t;
-                        _selectedCategoryId = null;
-                      }),
+                    const _SectionLabel('Người ghi'),
+                    const SizedBox(height: 8),
+                    _MemberToggle(
+                      spender: _spender,
+                      onChanged: (m) => setState(() => _spender = m),
                     ),
                     const SizedBox(height: 16),
                     Center(
@@ -143,17 +159,55 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: categories
+                      children: DefaultCategories.all
                           .map(
                             (c) => _CategoryChip(
                               category: c,
                               selected: c.id == _selectedCategoryId,
-                              onTap: () => setState(() => _selectedCategoryId = c.id),
+                              onTap: () => _pickCategory(c),
                             ),
                           )
                           .toList(),
                     ),
-                    const SizedBox(height: 18),
+                    if (category != null && category.hasStatus) ...[
+                      const SizedBox(height: 16),
+                      const _SectionLabel('Trạng thái'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: category.statuses
+                            .map(
+                              (s) => _ChoiceChip(
+                                label: s,
+                                selected: s == _status,
+                                accent: category.color,
+                                onTap: () => setState(() => _status = s),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    if (category != null && category.kind == CategoryKind.savings) ...[
+                      const SizedBox(height: 16),
+                      const _SectionLabel('Loại tiết kiệm'),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: SavingsDestination.values
+                            .map(
+                              (d) => _ChoiceChip(
+                                label: d.label,
+                                selected: d == _savingsDestination,
+                                accent: category.color,
+                                onTap: () => setState(() => _savingsDestination = d),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
                     const _SectionLabel('Ghi chú nhanh'),
                     const SizedBox(height: 8),
                     Wrap(
@@ -221,11 +275,11 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-class _TypeToggle extends StatelessWidget {
-  const _TypeToggle({required this.type, required this.onChanged});
+class _MemberToggle extends StatelessWidget {
+  const _MemberToggle({required this.spender, required this.onChanged});
 
-  final TransactionType type;
-  final ValueChanged<TransactionType> onChanged;
+  final FamilyMember spender;
+  final ValueChanged<FamilyMember> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -236,61 +290,30 @@ class _TypeToggle extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
-        children: [
-          Expanded(
-            child: _ToggleButton(
-              label: 'Chi tiêu',
-              selected: type == TransactionType.expense,
-              selectedBg: AppColors.textPrimary,
-              onTap: () => onChanged(TransactionType.expense),
+        children: FamilyMember.values.map((m) {
+          final selected = m == spender;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onChanged(m),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  m.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : AppColors.textSecondary,
+                  ),
+                ),
+              ),
             ),
-          ),
-          Expanded(
-            child: _ToggleButton(
-              label: 'Thu nhập',
-              selected: type == TransactionType.income,
-              selectedBg: AppColors.accent,
-              onTap: () => onChanged(TransactionType.income),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ToggleButton extends StatelessWidget {
-  const _ToggleButton({
-    required this.label,
-    required this.selected,
-    required this.selectedBg,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final Color selectedBg;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? selectedBg : Colors.transparent,
-          borderRadius: BorderRadius.circular(11),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: selected ? Colors.white : AppColors.textSecondary,
-          ),
-        ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -320,6 +343,43 @@ class _CategoryChip extends StatelessWidget {
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
             color: selected ? category.color : const Color(0xFF4B4F49),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChoiceChip extends StatelessWidget {
+  const _ChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.accent,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color accent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? accent.withValues(alpha: 0.14) : AppColors.chipBackground,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: selected ? accent : Colors.transparent),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? accent : const Color(0xFF4B4F49),
           ),
         ),
       ),

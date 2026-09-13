@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../domain/entities/category.dart';
 import '../../../domain/usecases/compute_expense_breakdown.dart';
+import '../../../domain/usecases/compute_status_breakdown.dart';
 import '../../providers/transaction_providers.dart';
 
 class SummaryScreen extends ConsumerWidget {
@@ -52,6 +54,18 @@ class SummaryScreen extends ConsumerWidget {
               ...breakdown.map(
                 (item) => _LegendRow(item: item, totalExpense: totalExpense),
               ),
+            // Tự động hiện 1 thẻ trạng thái cho MỌI hạng mục có hasStatus =
+            // true — hiện tại chỉ Cho đi/Dâng hiến bật cờ này vì đó là thói
+            // quen riêng của gia đình, nhưng UI không hardcode theo 2 hạng
+            // mục đó; gia đình khác bật hasStatus cho hạng mục nào thì hạng
+            // mục đó tự xuất hiện ở đây.
+            for (final category in DefaultCategories.all.where((c) => c.hasStatus)) ...[
+              const SizedBox(height: 16),
+              _StatusCard(
+                category: category,
+                breakdown: computeStatusBreakdown(transactions, category),
+              ),
+            ],
           ],
         );
       },
@@ -119,6 +133,86 @@ class _Donut extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({required this.category, required this.breakdown});
+
+  final Category category;
+  final StatusBreakdown breakdown;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: category.color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                category.name,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+              const Spacer(),
+              Text(
+                Formatters.amount(breakdown.total),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          for (final step in category.statuses)
+            _StatusRow(label: step, amount: breakdown.totals[step] ?? 0),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({required this.label, required this.amount});
+
+  final String label;
+  final int amount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            ),
+          ),
+          Text(
+            Formatters.amount(amount),
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+          ),
+        ],
       ),
     );
   }

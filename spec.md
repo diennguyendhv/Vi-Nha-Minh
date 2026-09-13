@@ -25,27 +25,91 @@ Ba điểm này được đưa vào làm một phần bắt buộc trong thiết
 
 **Backend:** Firebase Authentication, Cloud Firestore, Cloud Functions, Cloud Messaging, Firebase Storage.
 
-**Mô hình dữ liệu Firestore:**
+**Mô hình dữ liệu Firestore (đối chiếu trực tiếp với sheet "Quản lý tài chính 2026" thật — trang Ghi chép + Tổng hợp):**
+
+Danh sách hạng mục (`categories`) lấy đúng theo dropdown thật trong sheet, **không phải** danh sách Ăn uống/Di chuyển đã đoán ở bản nháp đầu tiên:
+
+| id | Tên hiển thị | Loại (`kind`) | Có theo dõi trạng thái? |
+|---|---|---|---|
+| `thu_nhap` | Thu nhập | income | không |
+| `sinh_hoat` | Sinh hoạt | expense | không |
+| `dau_tu` | Đầu tư | expense | không |
+| `tu_thuong` | Tự thưởng | expense | không |
+| `cho_di` | Cho đi | expense | **có** |
+| `tiet_kiem` | Tiết kiệm | savings | không (nhưng số tiền có thể âm = rút ra) |
+| `dang_hien` | Dâng hiến | expense | **có** |
+| `chong_dua_vo` | Chồng đưa vợ | transfer | không |
+| `vo_dua_chong` | Vợ đưa chồng | transfer | không |
+
+`kind` quyết định cách một giao dịch ảnh hưởng đến số dư: `income` cộng vào số dư người ghi; `expense`/`savings` trừ khỏi số dư người ghi (riêng `savings` còn cộng/trừ vào quỹ tiết kiệm riêng của người đó — số âm nghĩa là rút tiết kiệm); `transfer` trừ số dư người chuyển và cộng số dư người nhận (`chong_dua_vo`: Chồng −, Vợ +; `vo_dua_chong`: Vợ −, Chồng +).
+
+Với `cho_di` và `dang_hien`, mỗi giao dịch còn có trường `status` theo đúng quy trình thật trong sheet: `chua_chuan_bi` → `da_chuan_bi` → `da_xong` (hiển thị là "Đã gửi" cho Cho đi, "Đã dâng" cho Dâng hiến). Màn hình Tổng hợp phải tổng hợp được số tiền theo từng trạng thái cho 2 hạng mục này (đúng như khối "Kế hoạch / Chưa chuẩn bị / Đã chuẩn bị / Đã dâng / Đã gửi" trong sheet Tổng hợp thật).
+
+**Tài khoản theo từng thành viên (Vợ/Chồng riêng biệt)** — đây là điểm khác biệt lớn nhất so với mô hình "một quỹ chung" ban đầu: sheet thật tính **Số dư** và **Tiết kiệm** riêng cho Vợ và cho Chồng (cột `K`/`N` "Tổng hợp"), dựa vào cột "Người tiêu" của từng giao dịch. App phải giữ đúng cơ chế này — không gộp chung thành một quỹ gia đình duy nhất.
+
+**Tiết kiệm chia 2 loại con (yêu cầu mới, sheet hiện chưa có — cần bổ sung khi lên app):** mỗi tài khoản tiết kiệm (của Vợ, của Chồng) tách thành **tiết kiệm hiện tại** (tiền mặt/chưa gửi) và **tiết kiệm đã gửi ngân hàng**, để biết chính xác bao nhiêu đang nằm ở đâu.
 
 ```
 families/{familyId}
   name, createdAt, memberIds: [uid1, uid2]
 
 families/{familyId}/members/{uid}
-  displayName, roleLabel ("Vợ"/"Chồng"/tuỳ chỉnh), joinedAt
+  displayName, roleLabel ("Vợ" | "Chồng" | tuỳ chỉnh), joinedAt
 
 families/{familyId}/categories/{categoryId}
-  name, icon, color, type ("income" | "expense"), isDefault
+  name, color, kind ("income" | "expense" | "savings" | "transfer"),
+  hasStatus (bool), isDefault
 
 families/{familyId}/transactions/{txId}
-  type ("income" | "expense"), categoryId, amount, note,
-  spenderUid, date, status ("prepared" | "sent" | null), createdBy, createdAt
+  categoryId, amount, note, spenderUid, date,
+  status ("chua_chuan_bi" | "da_chuan_bi" | "da_xong" | null),
+  createdBy, createdAt
+
+families/{familyId}/memberBalances/{uid}
+  balance,               // Số dư hiện tại của người này
+  savingsOnHand,         // Tiết kiệm hiện tại (chưa gửi ngân hàng)
+  savingsInBank          // Tiết kiệm đã gửi ngân hàng
 
 families/{familyId}/budgets/{yearMonth}
   categoryLimits: { categoryId: amount }
 ```
 
-Trường `type` ở `categories` và `transactions` chính là phần bổ sung "thu nhập" nói ở trên — về sau mọi tính năng tỷ lệ tiết kiệm/báo cáo dòng tiền đều dựa vào trường này.
+`memberBalances` là số liệu dẫn xuất (derived) — tính lại từ toàn bộ `transactions` của người đó; có thể cache bằng Cloud Function cập nhật mỗi khi có giao dịch mới để tránh phải cộng dồn hàng nghìn dòng ở client mỗi lần mở app (tham khảo số dòng thật trong sheet: hơn 1700 dòng chỉ riêng 8 tháng đầu năm).
+
+**Chia dữ liệu theo tháng + bảng tổng hợp tính sẵn — quyết định kiến trúc quan trọng cho việc mở rộng nhiều người dùng, nhiều năm:**
+
+Một collection `transactions` phẳng, cộng dồn mãi mãi, có hai vấn đề khi scale: (1) mỗi lần mở app phải nghe realtime toàn bộ lịch sử để tính lại số dư/báo cáo — càng dùng lâu càng chậm và càng tốn phí đọc; (2) không có ranh giới tự nhiên để phân trang theo tháng/năm như cách người dùng thực sự xem dữ liệu (sheet thật cũng tự chia theo "Tháng 1"…"Tháng 9"). Giải pháp:
+
+```
+families/{familyId}/months/{yearMonth}              // yearMonth dạng "2026-09"
+  totalIncome, totalExpense,
+  categoryTotals: { categoryId: amount },
+  memberTotals: { uid: { income, expense, savingsOnHand, savingsInBank } },
+  statusTotals: { cho_di: { chuaChuanBi, daChuanBi, daXong }, dang_hien: {...} }
+
+families/{familyId}/months/{yearMonth}/transactions/{txId}
+  categoryId, amount, note, spenderUid, date, status, savingsDestination,
+  createdBy, createdAt
+```
+
+- **Realtime listener chỉ mở cho tháng đang xem** (`months/{currentYearMonth}/transactions`) — dữ liệu luôn nhỏ và nhanh dù sổ đã dùng 5 năm, vì tháng cũ không còn bị "nghe" nữa.
+- **`months/{yearMonth}` là document tổng hợp tính sẵn** (giống hệt các con số trong sheet Tổng hợp — Thu nhập, Sinh hoạt, Đầu tư... theo %, và khối Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi), cập nhật bằng Cloud Function `onWrite` trên `transactions` dùng `FieldValue.increment()`. Mở màn hình Tổng hợp chỉ cần đọc **1 document** thay vì cộng hàng trăm/nghìn giao dịch ở client.
+- **Xem theo năm** = cộng 12 document `months/{yearMonth}` (12 lần đọc, rẻ) thay vì đọc lại toàn bộ giao dịch trong năm.
+- `memberBalances/{uid}` (số dư/tiết kiệm trọn đời) cũng được Cloud Function này cập nhật cùng lúc, cùng cơ chế increment.
+- Cấu trúc này scale tốt cho nhiều gia đình cùng lúc vì `familyId` đã là ranh giới tenant tự nhiên — chi phí/tốc độ của gia đình A không phụ thuộc gia đình B dùng bao lâu hay bao nhiêu dữ liệu.
+
+**Quỹ tiền ăn riêng (Quỹ) — góc nhìn tài chính cá nhân: kỹ thuật "phong bì ngân sách" (envelope budgeting).** Thay vì chỉ ghi từng khoản Sinh hoạt rời rạc, quỹ cho phép **nạp một khoản cố định** rồi tiêu dần trong khoản đó, biết ngay còn lại bao nhiêu — đúng tâm lý "tiêu trong giới hạn đã định" thay vì tiêu xong mới biết đã vượt. Thiết kế tổng quát (`Quỹ`) để sau này mở rộng thêm quỹ khác (quỹ du lịch, quỹ hiếu hỉ...) mà không đổi kiến trúc:
+
+```
+families/{familyId}/funds/{fundId}
+  name ("Quỹ tiền ăn"), color, createdAt
+
+families/{familyId}/funds/{fundId}/entries/{entryId}
+  kind ("topUp" | "purchase"),   // nạp tiền vào quỹ | mua gì đó từ quỹ
+  amount, note ("đi chợ", "thịt bò"...), date, createdBy
+```
+
+Số dư quỹ = tổng `topUp` − tổng `purchase` (derived, có thể cache vào field `balance` trên chính document `funds/{fundId}` bằng Cloud Function như trên). Một khoản `purchase` từ quỹ tiền ăn **không** đồng thời tạo thêm một dòng `Sinh hoạt` ở sổ chính — quỹ là sổ con độc lập để theo dõi chi tiêu ăn uống chi tiết, tránh đếm trùng khi tính tổng chi hộ gia đình.
 
 **Quy tắc bảo mật Firestore (rút gọn):**
 
@@ -67,13 +131,13 @@ match /families/{familyId}/{document=**} {
 
 ### Phase 1 — MVP: Ghi chép & Đồng bộ realtime
 **Mục tiêu:** Thay thế được sheet hiện tại cho việc ghi chép hàng ngày.
-**Công việc:** Tạo/tham gia Sổ chung qua mã mời; CRUD giao dịch với đầy đủ trường `type` (thu/chi), hạng mục, số tiền, ghi chú, người chi, ngày, trạng thái; danh mục mặc định dựng từ sheet hiện tại (Sinh hoạt, Ăn uống, Di chuyển, Tự thưởng, Dâng hiến, Cho đi, Tiết kiệm) và cho thêm danh mục tuỳ chỉnh; danh sách giao dịch theo tháng nhóm theo ngày; đồng bộ realtime hai chiều giữa các thành viên; hoạt động offline nhờ Firestore local cache, tự đồng bộ khi có mạng lại.
-**Tiêu chí hoàn thành:** Vợ thêm giao dịch trên điện thoại → chồng thấy ngay trên máy của mình mà không cần refresh; tắt mạng vẫn nhập được, bật mạng lại tự đồng bộ không mất dữ liệu.
+**Công việc:** Tạo/tham gia Sổ chung qua mã mời; CRUD giao dịch đầy đủ hạng mục/`kind`, số tiền, ghi chú, người chi (Vợ/Chồng), ngày, trạng thái (cho `cho_di`/`dang_hien`); danh mục mặc định lấy **đúng theo sheet thật** (Thu nhập, Sinh hoạt, Đầu tư, Tự thưởng, Cho đi, Tiết kiệm, Dâng hiến, Chồng đưa vợ, Vợ đưa chồng) và cho thêm danh mục tuỳ chỉnh; màn hình Trang chủ hiển thị **Số dư + Tiết kiệm riêng cho từng người** (không gộp chung); màn hình **Quỹ tiền ăn** riêng (nạp tiền vào quỹ, ghi từng khoản đã mua + số tiền, xem số dư quỹ còn lại) theo kiểu phong bì ngân sách; danh sách giao dịch theo tháng nhóm theo ngày, dữ liệu Firestore chia theo `months/{yearMonth}` để mở nhanh dù sổ đã dùng nhiều năm; đồng bộ realtime hai chiều giữa các thành viên; hoạt động offline nhờ Firestore local cache, tự đồng bộ khi có mạng lại.
+**Tiêu chí hoàn thành:** Vợ thêm giao dịch trên điện thoại → chồng thấy ngay trên máy của mình mà không cần refresh; tắt mạng vẫn nhập được, bật mạng lại tự đồng bộ không mất dữ liệu; số dư/tiết kiệm của Vợ và Chồng hiển thị đúng, tách biệt.
 **Thời gian ước tính:** 2–3 tuần.
 
 ### Phase 2 — Ngân sách & Báo cáo tài chính
 **Mục tiêu:** Từ "ghi chép" tiến lên "quản lý" — đúng tinh thần tài chính cá nhân thực sự.
-**Công việc:** Đặt ngân sách theo hạng mục/tháng và cảnh báo khi đạt 80%/100% ngân sách; màn hình Tổng hợp với biểu đồ tròn theo hạng mục và biểu đồ đường theo tháng; các chỉ số tài chính chủ chốt tính tự động — tỷ lệ tiết kiệm (Thu − Chi)/Thu, tỷ lệ Dâng hiến/Cho đi trên tổng thu, hạng mục chi nhiều nhất; nhắc nhở nhập chi tiêu hàng ngày qua thông báo đẩy.
+**Công việc:** Đặt ngân sách theo hạng mục/tháng và cảnh báo khi đạt 80%/100% ngân sách; màn hình Tổng hợp với biểu đồ tròn theo hạng mục và biểu đồ đường theo tháng; các chỉ số tài chính chủ chốt tính tự động — tỷ lệ tiết kiệm (Thu − Chi)/Thu, tỷ lệ Dâng hiến/Cho đi trên tổng thu, hạng mục chi nhiều nhất; khối theo dõi Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi cho Dâng hiến & Cho đi (đúng khối K-L trong sheet Tổng hợp thật); tách **tiết kiệm hiện tại** và **tiết kiệm đã gửi ngân hàng** trong mục Tiết kiệm của mỗi người; nhắc nhở nhập chi tiêu hàng ngày qua thông báo đẩy.
 **Tiêu chí hoàn thành:** Xem được một tháng bất kỳ và biết ngay: thu bao nhiêu, chi bao nhiêu, tiết kiệm được bao nhiêu %, hạng mục nào đang vượt ngân sách.
 **Thời gian ước tính:** 1.5–2 tuần.
 

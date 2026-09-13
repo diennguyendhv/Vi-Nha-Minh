@@ -1,13 +1,14 @@
 import 'dart:async';
 
+import '../../domain/entities/family_member.dart';
+import '../../domain/entities/savings_destination.dart';
 import '../../domain/entities/transaction.dart';
-import '../../domain/entities/transaction_type.dart';
 import '../../domain/repositories/transaction_repository.dart';
 
 /// In-memory stand-in for the Firestore-backed repository (Phase 1).
 ///
-/// Seeded with the same demo data used in the design prototype so the UI
-/// can be built and reviewed before a real Firebase project exists.
+/// Dữ liệu mẫu phỏng theo đúng sheet "Quản lý tài chính 2026" thật (hạng
+/// mục, người tiêu, trạng thái) để dựng UI trước khi có Firebase project.
 class MockTransactionRepository implements TransactionRepository {
   MockTransactionRepository() {
     _transactions.addAll(_seed);
@@ -19,84 +20,95 @@ class MockTransactionRepository implements TransactionRepository {
   static final _seed = <Transaction>[
     Transaction(
       id: '1',
-      type: TransactionType.income,
-      categoryId: 'luong',
+      categoryId: 'thu_nhap',
       amount: 15000000,
       date: DateTime(2026, 9, 1),
+      spender: FamilyMember.chong,
       note: 'Lương tháng 9',
-      spenderName: 'Chồng',
     ),
     Transaction(
       id: '2',
-      type: TransactionType.expense,
-      categoryId: 'sinhhoat',
+      categoryId: 'sinh_hoat',
       amount: 1500000,
       date: DateTime(2026, 9, 2),
+      spender: FamilyMember.vo,
       note: 'Tiền nhà tháng 9',
-      spenderName: 'Vợ',
     ),
     Transaction(
       id: '3',
-      type: TransactionType.expense,
-      categoryId: 'anuong',
-      amount: 180000,
-      date: DateTime(2026, 9, 2),
-      note: 'Đi chợ',
-      spenderName: 'Vợ',
+      categoryId: 'dang_hien',
+      amount: 1500000,
+      date: DateTime(2026, 9, 3),
+      spender: FamilyMember.chong,
+      note: 'Dâng hiến tháng 9',
+      status: 'Đã dâng',
     ),
     Transaction(
       id: '4',
-      type: TransactionType.expense,
-      categoryId: 'danghien',
-      amount: 1500000,
-      date: DateTime(2026, 9, 3),
-      note: 'Dâng hiến tháng 9',
-      spenderName: 'Chồng',
+      categoryId: 'dau_tu',
+      amount: 250000,
+      date: DateTime(2026, 9, 5),
+      spender: FamilyMember.chong,
+      note: 'Sách + vở',
     ),
     Transaction(
       id: '5',
-      type: TransactionType.expense,
-      categoryId: 'dichuyen',
-      amount: 250000,
-      date: DateTime(2026, 9, 5),
-      note: 'Xăng xe',
-      spenderName: 'Chồng',
+      categoryId: 'tu_thuong',
+      amount: 120000,
+      date: DateTime(2026, 9, 7),
+      spender: FamilyMember.vo,
+      note: 'Cà phê cuối tuần',
     ),
     Transaction(
       id: '6',
-      type: TransactionType.expense,
-      categoryId: 'tuthuong',
-      amount: 120000,
-      date: DateTime(2026, 9, 7),
-      note: 'Cà phê cuối tuần',
-      spenderName: 'Vợ',
+      categoryId: 'cho_di',
+      amount: 200000,
+      date: DateTime(2026, 9, 10),
+      spender: FamilyMember.vo,
+      note: 'Ủng hộ quỹ lớp',
+      status: 'Đã chuẩn bị',
     ),
     Transaction(
       id: '7',
-      type: TransactionType.expense,
-      categoryId: 'chodi',
-      amount: 200000,
+      categoryId: 'cho_di',
+      amount: 130000,
       date: DateTime(2026, 9, 10),
-      note: 'Ủng hộ quỹ lớp',
-      spenderName: 'Vợ',
+      spender: FamilyMember.chong,
+      note: 'ctps sb tuần 4',
+      status: 'Chưa chuẩn bị',
     ),
     Transaction(
       id: '8',
-      type: TransactionType.income,
-      categoryId: 'thuong',
+      categoryId: 'thu_nhap',
       amount: 2000000,
       date: DateTime(2026, 9, 11),
+      spender: FamilyMember.vo,
       note: 'Thưởng dự án',
-      spenderName: 'Vợ',
     ),
     Transaction(
       id: '9',
-      type: TransactionType.expense,
-      categoryId: 'anuong',
-      amount: 95000,
-      date: DateTime(2026, 9, 12),
-      note: 'Ăn sáng',
-      spenderName: 'Chồng',
+      categoryId: 'tiet_kiem',
+      amount: 850000,
+      date: DateTime(2026, 9, 3),
+      spender: FamilyMember.chong,
+      savingsDestination: SavingsDestination.onHand,
+    ),
+    Transaction(
+      id: '10',
+      categoryId: 'tiet_kiem',
+      amount: 500000,
+      date: DateTime(2026, 9, 13),
+      spender: FamilyMember.vo,
+      note: 'Gửi tiết kiệm ngân hàng',
+      savingsDestination: SavingsDestination.bank,
+    ),
+    Transaction(
+      id: '11',
+      categoryId: 'chong_dua_vo',
+      amount: 500000,
+      date: DateTime(2026, 9, 8),
+      spender: FamilyMember.chong,
+      note: 'Đưa vợ tiêu tuần này',
     ),
   ];
 

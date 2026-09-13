@@ -1,5 +1,6 @@
+import '../../core/constants/default_categories.dart';
+import '../entities/category_kind.dart';
 import '../entities/transaction.dart';
-import '../entities/transaction_type.dart';
 
 class CategoryTotal {
   const CategoryTotal({required this.categoryId, required this.total});
@@ -16,7 +17,9 @@ class CategoryTotal {
 List<CategoryTotal> computeExpenseBreakdown(List<Transaction> transactions) {
   final totals = <String, int>{};
   for (final t in transactions) {
-    if (t.type != TransactionType.expense) continue;
+    if (DefaultCategories.byId(t.categoryId).kind != CategoryKind.expense) {
+      continue;
+    }
     totals.update(t.categoryId, (v) => v + t.amount, ifAbsent: () => t.amount);
   }
   final result = totals.entries

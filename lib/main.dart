@@ -18,7 +18,7 @@ class ViNhaMinhApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Ví Nhà Mình',
+      title: 'HomeWallet',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: appRouter,

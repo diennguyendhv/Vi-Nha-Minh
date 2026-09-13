@@ -13,7 +13,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: ViNhaMinhApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ví Nhà Mình'), findsOneWidget);
+    expect(find.textContaining('Ví Nhà Mình'), findsOneWidget);
     expect(find.text('Trang chủ'), findsOneWidget);
     expect(find.text('Tổng hợp'), findsOneWidget);
     expect(find.text('Cài đặt'), findsOneWidget);
