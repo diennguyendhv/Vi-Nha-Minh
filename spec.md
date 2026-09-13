@@ -49,14 +49,21 @@ Với `cho_di` và `dang_hien`, mỗi giao dịch còn có trường `status` th
 
 **Tiết kiệm chia 2 loại con (yêu cầu mới, sheet hiện chưa có — cần bổ sung khi lên app):** mỗi tài khoản tiết kiệm tách thành **tiết kiệm hiện tại** (tiền mặt/chưa gửi) và **tiết kiệm đã gửi ngân hàng**, để biết chính xác bao nhiêu đang nằm ở đâu.
 
-**Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `families/{familyId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn A bên dưới, **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
+**Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `families/{familyId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn B bên dưới (làm cùng lúc với phần mời/tham gia thật), **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
 
 **Mời qua mã hoặc đường link:** mỗi lời mời có mã ngẫu nhiên 6-8 ký tự (đủ khó đoán để không ai lẻn vào gia đình người khác), **có hạn dùng** (mặc định 7 ngày) và giới hạn số lần dùng. Link mời dùng **Android App Links** — không dùng Firebase Dynamic Links vì Google đã thông báo ngừng dịch vụ này, thiết kế đúng từ đầu để khỏi phải làm lại.
 
+**Local-first: mặc định lưu trên máy, chỉ lên Firestore khi thật sự có người thứ 2 tham gia.** Firestore chỉ thật sự cần thiết để đồng bộ realtime giữa nhiều thiết bị — nếu chỉ 1 người dùng (kể cả đã chọn "Gia đình" lúc onboarding nhưng chưa mời ai), không có lý do gì phải trả phí/độ trễ mạng cho việc đó. Vì vậy:
+
+- Mọi tài khoản mới **luôn bắt đầu ở `syncMode: "local"`** — dữ liệu lưu bằng database cục bộ trên máy (SQLite/Hive qua `drift`/`hive`), không cần đăng nhập, không cần mạng, không đụng tới Firebase.
+- `families/{familyId}` trên Firestore **chỉ thật sự được tạo tại thời điểm lời mời đầu tiên được người khác chấp nhận.** Trước đó, "gia đình" chỉ tồn tại cục bộ trên máy người tạo.
+- Khi người thứ 2 chấp nhận lời mời: toàn bộ dữ liệu local (giao dịch, Quỹ) được **migrate lên Firestore** đúng schema bên dưới, `syncMode` đổi thành `"cloud"`, và từ đó app dùng `FirestoreTransactionRepository` thay vì repository local — cả 2 máy đọc chung 1 nguồn.
+- `TransactionRepository`/`FundRepository` là interface trừu tượng (đã thiết kế theo Clean Architecture ngay từ đầu) nên việc có 2 cách triển khai song song (local/cloud) không phá vỡ `domain/` hay `presentation/` — chỉ đổi implementation nào được inject lúc runtime dựa vào `syncMode`.
+
 ```
 families/{familyId}
-  name, accountType ("personal" | "family"), ownerUid, createdAt,
-  memberIds: [uid1, uid2, ...]
+  name, accountType ("personal" | "family"), syncMode ("local" | "cloud"),
+  ownerUid, createdAt, memberIds: [uid1, uid2, ...]
 
 families/{familyId}/members/{uid}
   displayName, roleLabel (chuỗi tự do, gia đình tự đặt), joinedAt, isOwner
@@ -134,96 +141,101 @@ match /families/{familyId}/{document=**} {
 
 Mỗi phase dưới đây là **một đơn vị việc làm trọn vẹn theo đúng quy trình thác nước**: viết code xong → chạy thử thật (trên máy/thiết bị/emulator) → kiểm thử đạt tiêu chí → mới chuyển sang phase kế tiếp. Không phase nào bắt đầu khi phase trước chưa qua được bước Test. Phase đã có dấu ✅ là đã hoàn thành trong phiên làm việc dựng nền tảng ban đầu.
 
-### Giai đoạn A — Nền tảng kỹ thuật, Firebase thật & Cá nhân/Gia đình (19 phase)
+### Giai đoạn A — Nền tảng & lưu trữ local-first (15 phase, đánh số 1-15)
+
+Toàn bộ tính năng ghi chép cá nhân (giao dịch + Quỹ tiền ăn) chạy đầy đủ ở giai đoạn này **mà chưa cần đụng tới Firebase** — chỉ khi thật sự có người thứ 2 tham gia (Giai đoạn B) mới cần lên mạng.
 
 1. ✅ **Khởi tạo Flutter project + kiến trúc 3 lớp** — Code: `flutter create`, dựng `presentation/domain/data/core`. Chạy: `flutter run` trên điện thoại thật. Test: app mở được, không crash.
 2. ✅ **Cấu hình lint chuẩn** — Code: bật `flutter_lints` trong `analysis_options.yaml`. Chạy: `dart analyze`. Test: 0 lỗi/cảnh báo.
 3. **CI cơ bản trên GitHub Actions** — Code: workflow chạy `flutter analyze` + `flutter test` mỗi lần push. Chạy: push thử 1 commit. Test: Action chạy xanh.
 4. ✅ **Đẩy code lên GitHub** — Code: `git init`, `git remote add`, push. Chạy: mở repo trên github.com. Test: đủ file, không lộ secret/API key.
-5. **Tạo Firebase project thật** — Firebase Console, đặt tên, chọn khu vực gần VN. Chạy: mở lại project trên console. Test: project tồn tại, đúng cấu hình.
-6. **Đăng ký app Android vào Firebase, tải `google-services.json`** — Code: đặt file vào `android/app/`, khai đúng `applicationId`. Chạy: `flutter build apk --debug`. Test: build qua, không lỗi thiếu config.
-7. **`flutterfire configure` + `Firebase.initializeApp()`** — Code: sinh `firebase_options.dart`, gọi init trong `main.dart`. Chạy: `flutter run` trên máy thật. Test: log xác nhận Firebase khởi tạo, app không crash.
-8. **Bật Cloud Firestore (Native mode)** — thao tác Console. Chạy: mở tab Firestore. Test: database trống đã tồn tại, đúng khu vực.
-9. **Bật Firebase Authentication (Google Sign-In)** — Code: cấu hình OAuth client ID Android (SHA-1). Chạy: xem trạng thái trên Console. Test: phương thức Google hiện "Đã bật".
-10. **Viết Security Rules bản đầu** (`families/{familyId}` chỉ `memberIds` đọc/ghi) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
-11. **Test rule bằng Firebase Emulator Suite** — Code: test rule (`@firebase/rules-unit-testing`). Chạy: `firebase emulators:exec`. Test: tài khoản ngoài family bị chặn đọc/ghi — đây là rủi ro nghiêm trọng nhất của app (xem mục Rủi ro), không được bỏ qua.
-12. **Màn hình Đăng nhập Google** — Code: `presentation/features/auth/`. Chạy: bấm đăng nhập trên máy thật. Test: đăng nhập thành công, `FirebaseAuth.instance.currentUser` đúng.
-13. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`uid`, `roleLabel` tự do) ở domain layer, cập nhật `compute_member_financials`/`transferFrom-To` theo model mới. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát, không còn phụ thuộc đúng 2 vai trò cố định.
-14. **Onboarding: chọn Cá nhân hoặc Gia đình** — Code: `presentation/features/onboarding/`. Chạy: chạy thử cả 2 luồng. Test: chọn Cá nhân tạo `families/{id}` với `accountType: "personal"` và 1 thành viên; chọn Gia đình chuyển sang bước mời.
-15. **Luồng tạo "Sổ chung" (gia đình)** — Code: `CreateFamily` use case, `accountType: "family"`. Chạy: tạo thử 1 sổ. Test: document đúng trên Firestore Console.
-16. **Sinh mã mời có hạn dùng** — Code: `GenerateInvite` use case (mã ngẫu nhiên 6-8 ký tự, `expiresAt`, `maxUses`). Chạy: tạo thử 1 mã. Test: document `invites/{id}` đúng, mã không trùng/không đoán được theo mẫu tuần tự.
-17. **Màn hình chia sẻ mã/link mời (Android App Links)** — Code: UI hiển thị mã + nút chia sẻ link (không dùng Firebase Dynamic Links vì đã bị ngừng hỗ trợ). Chạy: chia sẻ thử qua tin nhắn. Test: bấm link trên máy khác mở đúng màn hình tham gia (hoặc Play Store nếu chưa cài app).
-18. **Luồng tham gia qua mã/link** — Code: `JoinFamily` use case validate mã (chưa hết hạn, chưa hết lượt dùng). Chạy: dùng tài khoản thứ 2 tham gia. Test: `memberIds` có đủ 2 uid; mã hết hạn/hết lượt bị từ chối đúng.
-19. **Màn hình quản lý thành viên** (đổi `roleLabel`, xem danh sách, rời/xoá thành viên) — Code: `presentation/features/members/`. Chạy: đổi thử vai trò 1 thành viên. Test: `roleLabel` cập nhật đúng và hiển thị đúng ở Trang chủ + sheet Thêm giao dịch.
+5. ✅ **Domain entities & mock repository** — đã code/chạy/test qua `MockTransactionRepository` để dựng UI trước; sẽ thay bằng repository local ở phase kế mà không đổi domain.
+6. **`LocalTransactionRepository` (lưu cục bộ trên máy)** — Code: implement `TransactionRepository` bằng SQLite/Hive, không phụ thuộc Firebase. Chạy: `flutter run` khi chưa cấu hình Firebase gì cả, thêm thử giao dịch. Test: lưu/đọc đúng, dữ liệu còn nguyên sau khi đóng/mở lại app.
+7. **App dùng Local ngay từ lần mở đầu tiên, không bắt đăng nhập** — Code: bỏ yêu cầu đăng nhập ở luồng khởi động mặc định. Chạy: cài app mới hoàn toàn, dùng thử. Test: ghi chép đầy đủ tính năng mà không cần tài khoản Google, không cần mạng.
+8. **Nối sheet Thêm giao dịch ghi vào Local** — Code: gọi `LocalTransactionRepository` thay mock. Chạy: thêm 1 giao dịch thật. Test: xuất hiện đúng trong danh sách, còn nguyên sau khi khởi động lại app.
+9. **Danh sách giao dịch theo ngày + chuyển xem tháng khác (đọc từ Local)** — Code: query local DB theo tháng. Chạy: thêm giao dịch nhiều tháng, chuyển qua lại. Test: nhóm đúng theo ngày, đúng tháng đang xem.
+10. **Sửa/Xoá giao dịch** — Code: `EditTransaction`/`DeleteTransaction` use case. Chạy: sửa và xoá thử. Test: local DB cập nhật đúng, UI phản ánh ngay.
+11. **Validate input khi ghi thật** — Code: số tiền > 0, bắt buộc chọn hạng mục + người ghi. Chạy: thử bấm Lưu khi thiếu dữ liệu. Test: nút Lưu khoá đúng.
+12. **`syncMode: "local" | "cloud"`, mặc định `"local"`** — Code: field lưu cục bộ (SharedPreferences hoặc trong chính local DB). Chạy: kiểm tra giá trị khi tạo mới. Test: mọi tài khoản mới đều `"local"`, chưa đụng gì tới Firestore.
+13. **`LocalFundRepository` (Quỹ tiền ăn)** — Code: implement `FundRepository` bằng local storage. Chạy: nạp/mua thử quỹ. Test: số dư đúng, hoạt động hoàn toàn offline.
+14. **Màn hình Quỹ tiền ăn hoạt động trên Local** — Code: nối UI đã có với `LocalFundRepository`. Chạy: dùng thử nạp + ghi mua trên máy thật. Test: số dư quỹ đúng như unit test `computeFundBalance` đã có.
+15. **Mốc kiểm tra: dùng đầy đủ ghi chép + Quỹ liên tục nhiều ngày, hoàn toàn không cần Firebase** — Chạy: dùng thử thật vài ngày. Test: không phát sinh lỗi nào đòi hỏi mạng/Firebase cho việc ghi chép cá nhân.
 
-### Giai đoạn B — Ghi chép giao dịch nối Firestore thật (12 phase, đánh số 20-31)
+### Giai đoạn B — Firebase & đồng bộ khi có người thứ 2 tham gia (17 phase, đánh số 16-32)
 
-20. ✅ **Domain entities & mock repository** — đã code/chạy/test qua `MockTransactionRepository` để dựng UI trước.
-21. **`FirestoreTransactionRepository`** — Code: implement interface, ghi vào `families/{id}/months/{yearMonth}/transactions`. Chạy: gọi thử `addTransaction()`. Test: document đúng path trên Console.
-22. **Đổi provider sang Firestore thật** — Code: `transactionRepositoryProvider` trỏ Firestore, inject `familyId` hiện tại. Chạy: `flutter run`. Test: Trang chủ đọc được dữ liệu thật (ban đầu rỗng, không lỗi).
-23. **Test rule cho `months/transactions`** — Code: rule con cho subcollection. Chạy: `firebase emulators:exec`. Test: user ngoài family bị chặn ghi vào bất kỳ tháng nào.
-24. **Nối sheet Thêm giao dịch ghi thật** — Code: gọi repository thật thay mock. Chạy: thêm 1 giao dịch trên máy thật. Test: xuất hiện đúng trên Firestore + UI cập nhật ngay không cần refresh.
-25. **Danh sách giao dịch theo ngày đọc dữ liệu thật** — Code: `StreamProvider` lắng nghe `months/{currentYearMonth}/transactions`. Chạy: thêm vài giao dịch khác ngày. Test: nhóm đúng theo ngày, mới nhất trên đầu.
-26. **Chuyển xem tháng khác** — Code: UI chọn tháng, đổi listener sang `months/{yearMonth}` khác + huỷ listener cũ. Chạy: chuyển qua lại 3 tháng. Test: dữ liệu đúng tháng đang xem, không rò rỉ listener tháng cũ.
-27. **Sửa giao dịch** — Code: `EditTransaction` use case + UI. Chạy: sửa thử 1 giao dịch. Test: Firestore cập nhật đúng document, UI phản ánh ngay.
-28. **Xoá giao dịch** — Code: `DeleteTransaction` + xác nhận trước khi xoá. Chạy: xoá thử. Test: document biến mất, giao dịch khác không bị ảnh hưởng.
-29. **Validate input khi ghi thật** — Code: số tiền > 0, bắt buộc chọn hạng mục + người ghi. Chạy: thử bấm Lưu khi thiếu dữ liệu. Test: nút Lưu khoá đúng như đã kiểm chứng ở bản mock.
-30. **Test offline** — Chạy: bật Airplane mode, thêm giao dịch, tắt Airplane mode. Test: giao dịch tự đồng bộ lên Firestore khi có mạng lại, không mất, không trùng.
-31. **Test đồng bộ realtime 2 máy** — Chạy: máy A (tài khoản Chồng) thêm giao dịch. Test: máy B (tài khoản Vợ) thấy ngay không cần refresh.
+Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với người khác — không có Firebase project nào được tạo trước đó.
 
-### Giai đoạn C — Tài khoản riêng từng thành viên & Quỹ tiền ăn (9 phase, đánh số 32-40)
+16. **Tạo Firebase project thật** — Firebase Console, đặt tên, chọn khu vực gần VN. Chạy: mở lại project trên console. Test: project tồn tại, đúng cấu hình.
+17. **Đăng ký app Android vào Firebase, tải `google-services.json`** — Code: đặt file vào `android/app/`, khai đúng `applicationId`. Chạy: `flutter build apk --debug`. Test: build qua, không lỗi thiếu config.
+18. **`flutterfire configure` + `Firebase.initializeApp()` (chỉ init khi thật sự cần)** — Code: sinh `firebase_options.dart`, chỉ gọi init khi người dùng bấm "Mời người khác" lần đầu, không init ngay lúc mở app ở chế độ local. Chạy: bấm nút Mời. Test: Firebase khởi tạo đúng lúc cần, không tải SDK không cần thiết khi đang dùng local.
+19. **Bật Cloud Firestore (Native mode)** — thao tác Console. Chạy: mở tab Firestore. Test: database trống đã tồn tại, đúng khu vực.
+20. **Bật Firebase Authentication (Google Sign-In), kích hoạt khi cần mời** — Code: cấu hình OAuth client ID Android (SHA-1); màn hình đăng nhập chỉ hiện khi bấm "Mời người khác". Chạy: bấm Mời lần đầu trên máy thật. Test: được yêu cầu đăng nhập đúng lúc, `FirebaseAuth.instance.currentUser` đúng sau đó.
+21. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`uid`, `roleLabel` tự do), cập nhật `compute_member_financials`/`transferFrom-To`. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát.
+22. **Viết Security Rules bản đầu** (`families/{familyId}` chỉ `memberIds` đọc/ghi) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
+23. **Test rule bằng Firebase Emulator Suite** — Code: test rule (`@firebase/rules-unit-testing`). Chạy: `firebase emulators:exec`. Test: tài khoản ngoài family bị chặn đọc/ghi — rủi ro nghiêm trọng nhất của app, không được bỏ qua.
+24. **Sinh mã mời có hạn dùng** — Code: `GenerateInvite` use case (mã ngẫu nhiên 6-8 ký tự, `expiresAt`, `maxUses`). Chạy: tạo thử 1 mã. Test: document `invites/{id}` đúng, mã không đoán được theo mẫu tuần tự.
+25. **Màn hình chia sẻ mã/link mời (Android App Links)** — Code: UI hiển thị mã + nút chia sẻ link (không dùng Firebase Dynamic Links vì đã bị ngừng hỗ trợ). Chạy: chia sẻ thử qua tin nhắn. Test: bấm link trên máy khác mở đúng màn hình tham gia.
+26. **Luồng tham gia qua mã/link** — Code: `JoinFamily` use case validate mã (chưa hết hạn, chưa hết lượt). Chạy: dùng tài khoản thứ 2 nhập mã. Test: mã hợp lệ được chấp nhận; mã hết hạn/hết lượt bị từ chối đúng.
+27. **Migrate dữ liệu local → Firestore khi người thứ 2 thật sự tham gia** — Code: khi lời mời được chấp nhận, đọc toàn bộ giao dịch + Quỹ đang lưu local của người tạo, ghi đúng schema `families/{id}/months/{yearMonth}/transactions` (và `funds/`) lên Firestore, đổi `syncMode` sang `"cloud"`. Chạy: tạo ~20 giao dịch local mẫu, mời + chấp nhận từ máy thứ 2. Test: toàn bộ dữ liệu local xuất hiện đúng trên Firestore, không trùng không mất; sau đó cả 2 máy đọc cùng dữ liệu.
+28. **`FirestoreTransactionRepository`/`FirestoreFundRepository` + chọn implementation theo `syncMode`** — Code: provider chọn Local hay Firestore lúc runtime dựa vào `syncMode` của gia đình hiện tại. Chạy: dùng thử app ở cả gia đình còn local và gia đình đã chuyển cloud. Test: đúng repository được dùng cho từng trường hợp, không lẫn lộn.
+29. **Test rule cho `months/transactions`** — Code: rule con cho subcollection. Chạy: `firebase emulators:exec`. Test: user ngoài family bị chặn ghi vào bất kỳ tháng nào.
+30. **Test offline ở chế độ cloud (Firestore local cache)** — Chạy: bật Airplane mode, thêm giao dịch, tắt Airplane mode. Test: giao dịch tự đồng bộ khi có mạng lại, không mất, không trùng.
+31. **Test đồng bộ realtime 2 máy** — Chạy: máy A thêm giao dịch. Test: máy B thấy ngay không cần refresh.
+32. **Màn hình quản lý thành viên** (đổi `roleLabel`, xem danh sách, rời/xoá thành viên) — Code: `presentation/features/members/`. Chạy: đổi thử vai trò 1 thành viên. Test: `roleLabel` cập nhật đúng, hiển thị đúng ở toàn bộ app.
 
-32. **Cloud Function cập nhật `memberBalances`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()`. Chạy: `firebase deploy --only functions`, thêm giao dịch thử. Test: `memberBalances/{uid}` đúng sau nhiều loại giao dịch (thu/chi/tiết kiệm/chuyển khoản).
-33. **Nối 2 thẻ Vợ/Chồng đọc `memberBalances` thật** — Code: đổi nguồn dữ liệu Trang chủ. Chạy: `flutter run`. Test: số hiển thị khớp Cloud Function tính.
-34. **Unit test Cloud Function xử lý chuyển khoản 2 chiều** — Code: test bằng `firebase-functions-test`. Chạy: `npm test`. Test: cả Chồng đưa vợ và Vợ đưa chồng đổi đúng dấu ở cả 2 phía.
-35. **Nối tách tiết kiệm hiện tại/ngân hàng với dữ liệu thật** — Code: đã có UI, đổi nguồn `savingsOnHand`/`savingsInBank`. Chạy: thêm giao dịch Tiết kiệm chọn "Đã gửi ngân hàng". Test: đúng cột tăng, cột còn lại không đổi.
-36. **`FirestoreFundRepository`** — Code: implement, ghi vào `families/{id}/funds/{fundId}/entries`. Chạy: gọi thử `addEntry()`. Test: document đúng path.
-37. **Màn hình Quỹ tiền ăn** — Code: `presentation/features/fund/`, hiển thị số dư + danh sách khoản. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng mua, khớp `computeFundBalance` đã unit test.
-38. **Form nạp tiền vào quỹ** — Code: UI + `addEntry(kind: topUp)`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, entry hiện trong danh sách.
-39. **Form ghi khoản đã mua từ quỹ** — Code: UI + `addEntry(kind: purchase)`. Chạy: ghi thử "đi chợ 150.000đ". Test: số dư giảm đúng; xác nhận **không** tạo thêm dòng Sinh hoạt ở sổ chính (tránh đếm trùng).
-40. **Cloud Function cache `balance` lên `funds/{fundId}`** — Code: `onWrite` entries → increment. Chạy: deploy + test qua vài entry. Test: field `balance` khớp tổng tính tay.
+### Giai đoạn C — Tài khoản riêng từng thành viên & Quỹ tiền ăn (9 phase, đánh số 33-41)
 
-### Giai đoạn D — Trạng thái & Tổng hợp tháng (8 phase, đánh số 41-48)
+33. **Cloud Function cập nhật `memberBalances`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()`. Chạy: `firebase deploy --only functions`, thêm giao dịch thử. Test: `memberBalances/{uid}` đúng sau nhiều loại giao dịch (thu/chi/tiết kiệm/chuyển khoản).
+34. **Nối 2 thẻ Vợ/Chồng đọc `memberBalances` thật** — Code: đổi nguồn dữ liệu Trang chủ. Chạy: `flutter run`. Test: số hiển thị khớp Cloud Function tính.
+35. **Unit test Cloud Function xử lý chuyển khoản 2 chiều** — Code: test bằng `firebase-functions-test`. Chạy: `npm test`. Test: cả Chồng đưa vợ và Vợ đưa chồng đổi đúng dấu ở cả 2 phía.
+36. **Nối tách tiết kiệm hiện tại/ngân hàng với dữ liệu thật** — Code: đã có UI, đổi nguồn `savingsOnHand`/`savingsInBank`. Chạy: thêm giao dịch Tiết kiệm chọn "Đã gửi ngân hàng". Test: đúng cột tăng, cột còn lại không đổi.
+37. **`FirestoreFundRepository`** — Code: implement, ghi vào `families/{id}/funds/{fundId}/entries`. Chạy: gọi thử `addEntry()`. Test: document đúng path.
+38. **Màn hình Quỹ tiền ăn** — Code: `presentation/features/fund/`, hiển thị số dư + danh sách khoản. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng mua, khớp `computeFundBalance` đã unit test.
+39. **Form nạp tiền vào quỹ** — Code: UI + `addEntry(kind: topUp)`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, entry hiện trong danh sách.
+40. **Form ghi khoản đã mua từ quỹ** — Code: UI + `addEntry(kind: purchase)`. Chạy: ghi thử "đi chợ 150.000đ". Test: số dư giảm đúng; xác nhận **không** tạo thêm dòng Sinh hoạt ở sổ chính (tránh đếm trùng).
+41. **Cloud Function cache `balance` lên `funds/{fundId}`** — Code: `onWrite` entries → increment. Chạy: deploy + test qua vài entry. Test: field `balance` khớp tổng tính tay.
 
-41. **Nối chọn trạng thái ghi thật** — Code: đã có UI generic theo `category.statuses`, đổi sang Firestore thật. Chạy: thêm giao dịch Cho đi chọn "Đã chuẩn bị". Test: field `status` đúng trong document.
-42. **Cloud Function tính rollup `months/{yearMonth}`** — Code: `onWrite` transactions → increment `categoryTotals`/`memberTotals`/`statusTotals`. Chạy: deploy, thêm giao dịch đa dạng hạng mục/trạng thái. Test: rollup doc khớp phép tính tay.
-43. **Nối màn hình Tổng hợp đọc rollup doc** — Code: đổi provider từ stream toàn bộ transactions sang đọc 1 document. Chạy: mở màn hình Tổng hợp. Test: số liệu khớp trước/sau khi đổi nguồn — đây là điểm mấu chốt giúp app nhanh dù dùng nhiều năm.
-44. **Biểu đồ tròn theo hạng mục với dữ liệu thật** — Code: đổi nguồn data cho `fl_chart` đã dựng. Chạy: xem với >5 hạng mục có giao dịch. Test: % cộng lại đúng 100%.
-45. **Card trạng thái tự sinh theo `category.statuses` với dữ liệu thật** — Code: đổi nguồn data, UI generic đã có sẵn không cần sửa. Chạy: xem Cho đi + Dâng hiến có dữ liệu thật. Test: tổng từng bước khớp rollup doc.
-46. **Tỷ lệ tiết kiệm (Thu−Chi)/Thu ở Trang chủ với dữ liệu thật** — Code: đổi nguồn từ rollup. Chạy: xem sau vài giao dịch. Test: khớp domain logic đã unit test từ trước.
-47. **Xem Tổng hợp theo năm** — Code: use case cộng 12 document `months/{yearMonth}`. Chạy: xem 1 năm có dữ liệu. Test: tổng năm = tổng 12 tháng cộng tay.
-48. **Test hiệu năng đọc Firestore** — Chạy: đo số lượt đọc bằng Firebase Performance Monitoring khi mở Tổng hợp. Test: số lượt đọc không tăng theo số năm đã dùng (chỉ đọc rollup + tháng hiện tại, không quét lịch sử).
+### Giai đoạn D — Trạng thái & Tổng hợp tháng (8 phase, đánh số 42-49)
 
-### Giai đoạn E — Ngân sách & nhắc nhở (5 phase, đánh số 49-53)
+42. **Nối chọn trạng thái ghi thật** — Code: đã có UI generic theo `category.statuses`, đổi sang Firestore thật. Chạy: thêm giao dịch Cho đi chọn "Đã chuẩn bị". Test: field `status` đúng trong document.
+43. **Cloud Function tính rollup `months/{yearMonth}`** — Code: `onWrite` transactions → increment `categoryTotals`/`memberTotals`/`statusTotals`. Chạy: deploy, thêm giao dịch đa dạng hạng mục/trạng thái. Test: rollup doc khớp phép tính tay.
+44. **Nối màn hình Tổng hợp đọc rollup doc** — Code: đổi provider từ stream toàn bộ transactions sang đọc 1 document. Chạy: mở màn hình Tổng hợp. Test: số liệu khớp trước/sau khi đổi nguồn — đây là điểm mấu chốt giúp app nhanh dù dùng nhiều năm.
+45. **Biểu đồ tròn theo hạng mục với dữ liệu thật** — Code: đổi nguồn data cho `fl_chart` đã dựng. Chạy: xem với >5 hạng mục có giao dịch. Test: % cộng lại đúng 100%.
+46. **Card trạng thái tự sinh theo `category.statuses` với dữ liệu thật** — Code: đổi nguồn data, UI generic đã có sẵn không cần sửa. Chạy: xem Cho đi + Dâng hiến có dữ liệu thật. Test: tổng từng bước khớp rollup doc.
+47. **Tỷ lệ tiết kiệm (Thu−Chi)/Thu ở Trang chủ với dữ liệu thật** — Code: đổi nguồn từ rollup. Chạy: xem sau vài giao dịch. Test: khớp domain logic đã unit test từ trước.
+48. **Xem Tổng hợp theo năm** — Code: use case cộng 12 document `months/{yearMonth}`. Chạy: xem 1 năm có dữ liệu. Test: tổng năm = tổng 12 tháng cộng tay.
+49. **Test hiệu năng đọc Firestore** — Chạy: đo số lượt đọc bằng Firebase Performance Monitoring khi mở Tổng hợp. Test: số lượt đọc không tăng theo số năm đã dùng (chỉ đọc rollup + tháng hiện tại, không quét lịch sử).
 
-49. **Domain entity `Budget` + `budgets/{yearMonth}`** — Code: entity + repository interface thuần domain. Chạy: unit test logic. Test: test pass, không phụ thuộc Firebase.
-50. **Màn hình đặt ngân sách theo hạng mục** — Code: `presentation/features/budget/`. Chạy: đặt thử ngân sách Sinh hoạt = 3.000.000đ. Test: lưu đúng vào Firestore.
-51. **Cảnh báo 80%/100% ngân sách** — Code: so `categoryTotals` (rollup) với `budgets`. Chạy: chi vượt 80% thử. Test: cảnh báo hiện đúng ngưỡng.
-52. **Cảnh báo theo tốc độ tiêu** (gợi ý chuyên gia — so % ngày đã qua trong tháng với % ngân sách đã dùng, cảnh báo sớm hơn ngưỡng cố định) — Code: `computeBudgetPace` use case, có unit test riêng. Chạy: giả lập ngày 15/30 đã tiêu 80%. Test: cảnh báo "tiêu nhanh hơn dự kiến" đúng lúc.
-53. **Push notification nhắc ghi chi tiêu hàng ngày** — Code: Cloud Messaging + lịch gửi. Chạy: chờ tới giờ hẹn trên máy thật. Test: thông báo xuất hiện đúng giờ.
+### Giai đoạn E — Ngân sách & nhắc nhở (5 phase, đánh số 50-54)
 
-### Giai đoạn F — Bảo mật, di chuyển dữ liệu, hoàn thiện (5 phase, đánh số 54-58)
+50. **Domain entity `Budget` + `budgets/{yearMonth}`** — Code: entity + repository interface thuần domain. Chạy: unit test logic. Test: test pass, không phụ thuộc Firebase.
+51. **Màn hình đặt ngân sách theo hạng mục** — Code: `presentation/features/budget/`. Chạy: đặt thử ngân sách Sinh hoạt = 3.000.000đ. Test: lưu đúng vào Firestore.
+52. **Cảnh báo 80%/100% ngân sách** — Code: so `categoryTotals` (rollup) với `budgets`. Chạy: chi vượt 80% thử. Test: cảnh báo hiện đúng ngưỡng.
+53. **Cảnh báo theo tốc độ tiêu** (gợi ý chuyên gia — so % ngày đã qua trong tháng với % ngân sách đã dùng, cảnh báo sớm hơn ngưỡng cố định) — Code: `computeBudgetPace` use case, có unit test riêng. Chạy: giả lập ngày 15/30 đã tiêu 80%. Test: cảnh báo "tiêu nhanh hơn dự kiến" đúng lúc.
+54. **Push notification nhắc ghi chi tiêu hàng ngày** — Code: Cloud Messaging + lịch gửi. Chạy: chờ tới giờ hẹn trên máy thật. Test: thông báo xuất hiện đúng giờ.
 
-54. **Khoá PIN/vân tay** — Code: `local_auth`, `presentation/features/lock/`. Chạy: bật khoá, thoát app mở lại. Test: yêu cầu xác thực trước khi vào app.
-55. **Công cụ import CSV từ Google Sheet cũ** — Code: script import vào đúng `months/{yearMonth}`, map đúng 9 hạng mục thật. Chạy: import thử 8 tháng dữ liệu thật đã có (~1700 dòng). Test: tổng số giao dịch import khớp số dòng gốc, không trùng lặp, số dư cuối tháng 8 khớp sheet cũ.
-56. **Icon app + onboarding + empty state** — Code: `assets/icon`, `presentation/features/onboarding/`. Chạy: cài app mới hoàn toàn. Test: icon đúng, onboarding hiện đúng 1 lần, empty state rõ ràng khi chưa có giao dịch.
-57. **Kiểm thử nhiều kích thước máy Android** — Chạy: chạy trên ≥3 kích thước màn hình/phiên bản OS. Test: UI không vỡ layout ở màn hình nhỏ nhất.
-58. **Trang Chính sách quyền riêng tư** — Code: trang tĩnh khai đúng dữ liệu tài chính thu thập. Chạy: mở link. Test: nội dung đủ theo yêu cầu Play Console Data Safety.
+### Giai đoạn F — Bảo mật, di chuyển dữ liệu, hoàn thiện (5 phase, đánh số 55-59)
 
-### Giai đoạn G — Phát hành CH Play (5 phase, đánh số 59-63)
+55. **Khoá PIN/vân tay** — Code: `local_auth`, `presentation/features/lock/`. Chạy: bật khoá, thoát app mở lại. Test: yêu cầu xác thực trước khi vào app.
+56. **Công cụ import CSV từ Google Sheet cũ** — Code: script import vào đúng `months/{yearMonth}`, map đúng 9 hạng mục thật. Chạy: import thử 8 tháng dữ liệu thật đã có (~1700 dòng). Test: tổng số giao dịch import khớp số dòng gốc, không trùng lặp, số dư cuối tháng 8 khớp sheet cũ.
+57. **Icon app + onboarding + empty state** — Code: `assets/icon`, `presentation/features/onboarding/`. Chạy: cài app mới hoàn toàn. Test: icon đúng, onboarding hiện đúng 1 lần, empty state rõ ràng khi chưa có giao dịch.
+58. **Kiểm thử nhiều kích thước máy Android** — Chạy: chạy trên ≥3 kích thước màn hình/phiên bản OS. Test: UI không vỡ layout ở màn hình nhỏ nhất.
+59. **Trang Chính sách quyền riêng tư** — Code: trang tĩnh khai đúng dữ liệu tài chính thu thập. Chạy: mở link. Test: nội dung đủ theo yêu cầu Play Console Data Safety.
 
-59. **Đăng ký Google Play Console + build & ký `.aab`** — Chạy: `flutter build appbundle --release`. Test: file `.aab` sinh ra không lỗi, mở được bằng `bundletool`.
-60. **Khai báo Data Safety** — Test: khai đúng mục đích Personal Finance/Tools, không phải Lending/Payments (tránh bị yêu cầu giấy phép không cần thiết).
-61. **Internal testing** — Chạy: upload `.aab`. Test: cài được qua link testing trên máy thật.
-62. **Closed testing** — Test: đủ số ngày/người dùng tối thiểu Google yêu cầu với tài khoản developer mới.
-63. **Phát hành Production** — Test: app xuất hiện công khai trên CH Play, cài + đăng nhập được từ tài khoản Google bất kỳ, không bị gắn cờ vi phạm chính sách.
+### Giai đoạn G — Phát hành CH Play (5 phase, đánh số 60-64)
 
-### Giai đoạn H — Premium & Mở rộng, liên tục sau khi có người dùng thật (4 phase, đánh số 64-67)
+60. **Đăng ký Google Play Console + build & ký `.aab`** — Chạy: `flutter build appbundle --release`. Test: file `.aab` sinh ra không lỗi, mở được bằng `bundletool`.
+61. **Khai báo Data Safety** — Test: khai đúng mục đích Personal Finance/Tools, không phải Lending/Payments (tránh bị yêu cầu giấy phép không cần thiết).
+62. **Internal testing** — Chạy: upload `.aab`. Test: cài được qua link testing trên máy thật.
+63. **Closed testing** — Test: đủ số ngày/người dùng tối thiểu Google yêu cầu với tài khoản developer mới.
+64. **Phát hành Production** — Test: app xuất hiện công khai trên CH Play, cài + đăng nhập được từ tài khoản Google bất kỳ, không bị gắn cờ vi phạm chính sách.
 
-64. **Mở khoá tự tạo/sửa hạng mục cho gia đình khác** — đây là lúc hiện thực hoá nguyên tắc "hạng mục là dữ liệu" đã thiết kế từ Phase 1: UI cho gia đình mới tự định nghĩa `kind`/`statuses`/`transferFrom-To` thay vì dùng 9 hạng mục seed cứng của vợ chồng chủ dự án. Test: 1 gia đình test tạo bộ hạng mục hoàn toàn khác vẫn chạy đúng mà không cần sửa code.
-65. **Đa ngôn ngữ Việt/Anh** — Code: `flutter_localizations` + `.arb`, tên hiển thị đổi theo locale (Ví Nhà Mình/HomeWallet). Test: đổi ngôn ngữ máy, toàn bộ UI đổi theo, không sót chuỗi hardcode.
-66. **In-app purchase gói Premium** — Test: luồng mua hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
-67. **Widget màn hình chính, nhắc lịch hoá đơn định kỳ, xuất PDF/Excel** — Test: từng tính năng hoạt động độc lập, không phá vỡ luồng core đã ổn định.
+### Giai đoạn H — Premium & Mở rộng, liên tục sau khi có người dùng thật (4 phase, đánh số 65-68)
+
+65. **Mở khoá tự tạo/sửa hạng mục cho gia đình khác** — đây là lúc hiện thực hoá nguyên tắc "hạng mục là dữ liệu" đã thiết kế từ Phase 1: UI cho gia đình mới tự định nghĩa `kind`/`statuses`/`transferFrom-To` thay vì dùng 9 hạng mục seed cứng của vợ chồng chủ dự án. Test: 1 gia đình test tạo bộ hạng mục hoàn toàn khác vẫn chạy đúng mà không cần sửa code.
+66. **Đa ngôn ngữ Việt/Anh** — Code: `flutter_localizations` + `.arb`, tên hiển thị đổi theo locale (Ví Nhà Mình/HomeWallet). Test: đổi ngôn ngữ máy, toàn bộ UI đổi theo, không sót chuỗi hardcode.
+67. **In-app purchase gói Premium** — Test: luồng mua hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
+68. **Widget màn hình chính, nhắc lịch hoá đơn định kỳ, xuất PDF/Excel** — Test: từng tính năng hoạt động độc lập, không phá vỡ luồng core đã ổn định.
 
 ---
 
@@ -231,8 +243,8 @@ Mỗi phase dưới đây là **một đơn vị việc làm trọn vẹn theo �
 
 | Giai đoạn | Số phase | Ước tính |
 |---|---|---|
-| A — Nền tảng, Firebase & Cá nhân/Gia đình | 19 (4 đã xong) | 7–9 ngày |
-| B — Ghi chép nối Firestore | 12 | 1.5–2 tuần |
+| A — Nền tảng & lưu trữ local-first | 15 (4 đã xong) | 5–7 ngày |
+| B — Firebase & đồng bộ khi có người thứ 2 | 17 | 1.5–2 tuần |
 | C — Tài khoản riêng & Quỹ | 9 | 1–1.5 tuần |
 | D — Trạng thái & Tổng hợp | 8 | 1–1.5 tuần |
 | E — Ngân sách & nhắc nhở | 5 | 4–6 ngày |
@@ -240,7 +252,7 @@ Mỗi phase dưới đây là **một đơn vị việc làm trọn vẹn theo �
 | G — Phát hành CH Play | 5 | 1–2 tuần (chủ yếu chờ Google) |
 | H — Premium & mở rộng | 4 | Liên tục |
 
-**Tổng: 67 phase, 4 đã xong.** **Thời gian tới khi có app trên CH Play (hết Giai đoạn G):** khoảng 7–10 tuần làm việc bán thời gian đều đặn — mỗi phase nhỏ, làm xong test qua trong ngày là chuyển tiếp được, không dồn việc lớn đến cuối mới kiểm thử.
+**Tổng: 68 phase, 4 đã xong.** **Thời gian tới khi có app trên CH Play (hết Giai đoạn G):** khoảng 7–10 tuần làm việc bán thời gian đều đặn — mỗi phase nhỏ, làm xong test qua trong ngày là chuyển tiếp được, không dồn việc lớn đến cuối mới kiểm thử. **Điểm mốc quan trọng: hết Giai đoạn A (phase 15) app đã dùng đầy đủ được rồi — hoàn toàn miễn phí, không cần đụng tới Firebase — cho tới khi thật sự cần chia sẻ với người thứ 2.**
 
 ## Chi phí
 
