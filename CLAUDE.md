@@ -57,15 +57,23 @@ App **không chỉ dành cho thị trường Việt Nam** — kiến trúc và t
 
 ## 9. Hạng mục là dữ liệu, không phải hằng số cứng trong code — nguyên tắc bắt buộc
 
-Sổ hiện tại của vợ chồng chủ dự án có "Cho đi", "Dâng hiến", và quy trình trạng thái Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi — **đây là thói quen riêng của HỌ, không phải khái niệm chung cho mọi gia đình dùng app sau này.** Một gia đình khác có thể không có "Dâng hiến" mà có hạng mục hoàn toàn khác, và có thể không cần theo dõi trạng thái chuẩn bị/gửi chút nào — hoặc muốn bật trạng thái đó cho một hạng mục khác hẳn.
+Sổ hiện tại của vợ chồng chủ dự án có "Cho đi", "Dâng hiến", và quy trình trạng thái Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi — **đây là thói quen riêng của HỌ, không phải khái niệm chung cho mọi gia đình dùng app sau này.** Một gia đình khác có thể không có "Dâng hiến" mà có hạng mục hoàn toàn khác, và có thể không cần theo dõi trạng thái chuẩn bị/gửi chút nào — hoặc muốn bật trạng thái đó cho một hạng mục khác hẳn, kể cả "Sinh hoạt".
 
-Vì vậy, **không bao giờ** viết logic kiểu `if (categoryId == 'cho_di')` hay `if (categoryId == 'dang_hien')` trong `domain/`/`presentation/`. Mọi hành vi đặc thù phải là **thuộc tính của `Category`** mà từng gia đình tự đặt khi tạo hạng mục:
+Vì vậy, **không bao giờ** viết logic kiểu `if (categoryId == 'cho_di')` hay `if (categoryId == 'dang_hien')` trong `domain/`/`presentation/`. Mọi hành vi đặc thù phải là **thuộc tính của `Category`** (bản vẽ đầy đủ ở [`docs/design.html`](docs/design.html)) mà từng gia đình tự đặt khi tạo hạng mục:
 
-- `statuses` (`List<String>`) — danh sách các bước trạng thái do CHÍNH gia đình đặt tên, theo đúng thứ tự họ muốn (vd Cho đi: `['Chưa chuẩn bị', 'Đã chuẩn bị', 'Đã gửi']`). **Không giới hạn số bước, không giới hạn tên bước** — gia đình khác có thể có 2 bước, 5 bước, tên hoàn toàn khác. Danh sách rỗng = hạng mục không theo dõi trạng thái. `hasStatus` chỉ là `statuses.isNotEmpty`, không phải field riêng để tránh 2 nguồn sự thật lệch nhau.
-- `transferFrom` / `transferTo` (`FamilyMember?`) — chỉ hạng mục `kind == transfer` mới có, xác định ai bị trừ/ai được cộng, không hardcode theo tên hạng mục "Chồng đưa vợ".
+- **Phân loại gốc chỉ có Thu hoặc Chi** (`typeId`) — không còn `kind` nhiều giá trị (`income`/`expense`/`savings`/`transfer`) như bản nháp đầu. Tiết kiệm và 2 hạng mục chuyển khoản đều là danh mục thuộc Chi, phân biệt bằng 2 cờ dưới đây, không phải loại riêng.
+- `isSaving` (`bool`) — chỉ có ý nghĩa khi `typeId` là Chi; đánh dấu category dùng cho tiết kiệm, giao dịch dưới category này mang thêm `savingsAction` (`topUp`/`withdrawToBalance`/`moveToBank`).
+- `transferToUid` (`String?`) — chỉ hạng mục chuyển khoản mới có, xác định ai được cộng tiền (người bị trừ luôn là `spenderUid` của chính giao dịch đó) — không hardcode theo tên hạng mục "Chồng đưa vợ".
+- `statuses` — **là subcollection `categories/{id}/statuses/{statusId}` (`name`, `sortOrder`), không phải mảng cứng trong 1 field.** Xem/thêm/sửa/xoá/sắp xếp qua UI (`docs/design.html` màn "Danh mục — Chỉnh sửa"), do CHÍNH gia đình đặt tên và thứ tự. **Không giới hạn số bước, không giới hạn tên bước** — gia đình khác có thể có 2 bước, 5 bước, tên hoàn toàn khác. Rỗng = hạng mục không theo dõi trạng thái. Giao dịch tham chiếu `statusId` (không phải chuỗi tự do) và **sửa được sau khi tạo** — trạng thái không cố định lúc ghi, người dùng đổi lại bất cứ lúc nào (vd hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị").
+- `statsEnabled` (`bool`) — bật/tắt việc category có hiện ở màn Tổng hợp trạng thái hay không. Nhiều category có `statuses` nhưng không phải cái nào cũng cần lên báo cáo tổng hợp thường xuyên.
+- `fundId` (trên transaction, không phải trên category) — tuỳ chọn, gắn 1 giao dịch Chi với 1 Quỹ cụ thể; xem mục Quỹ bên dưới.
 - UI (màn hình Tổng hợp, sheet Thêm giao dịch) phải **lặp qua `category.statuses`** để tự sinh đúng số chip/dòng trạng thái tương ứng — không viết cứng "3 trạng thái" hay tên bước cụ thể ở bất kỳ đâu trong widget.
 
-Giai đoạn hiện tại (Phase 1) code thẳng cho đúng 9 hạng mục mặc định của vợ chồng chủ dự án (xem `DefaultCategories` trong `core/constants/`) — điều đó **được phép** vì đây là dữ liệu seed mặc định, không phải logic hardcode. Khi lên Phase Premium/public (`spec.md` Phase 5 — "nhiều sổ chung"), việc mở khoá cho gia đình khác tự thêm/sửa hạng mục + tự đặt danh sách trạng thái qua UI phải hoạt động được **mà không cần sửa lại code** — vì cơ chế đã tách đúng từ đầu.
+**Khác với bản nháp đầu: CRUD danh mục/trạng thái là tính năng của Phase 1 (Giai đoạn A, xem `spec.md`), không đợi tới Phase Premium.** 9 hạng mục mặc định của vợ chồng chủ dự án (`DefaultCategories` trong `core/constants/`) chỉ là dữ liệu seed ban đầu — người dùng (kể cả bản demo hiện tại) đã xem/thêm/sửa/xoá được ngay từ đầu qua UI, không cần sửa code. Việc còn lại ở Phase Premium/public (`spec.md` Giai đoạn H) chỉ là cung cấp thêm bộ mẫu (template) tham khảo cho gia đình mới, cơ chế CRUD nền tảng đã có sẵn.
+
+**Quỹ (`funds`) cũng là dữ liệu tạo được nhiều cái, không hardcode 1 "Quỹ tiền ăn" duy nhất.** Nạp quỹ và khoản chi tích 1 quỹ đều là **giao dịch Chi thật** (trừ số dư người thực hiện bình thường) kèm `fundId`, tự sinh `FUND_ENTRY` liên kết (`linkedTxId`) — khác bản nháp đầu (từng coi Quỹ là sổ con hoàn toàn tách biệt). Luôn kiểm tra `balance` quỹ trước khi cho chọn — **quỹ không bao giờ được phép âm**, kiểm tra cả ở client (UI khoá lựa chọn) lẫn server (Cloud Function từ chối nếu sẽ âm, tránh race condition 2 máy ghi cùng lúc).
+
+**Công thức cân đối bắt buộc đúng ở mọi domain logic tổng hợp:** `Tổng thu = Tổng chi + Số tiền còn lại`, trong đó `Tổng chi = Chi phí + Tiết kiệm`. Vì tiết kiệm chỉ là 1 category có `isSaving = true`, phương trình đúng bằng cộng dồn số học đơn giản — không viết nhánh logic riêng cho tiết kiệm.
 
 ## 10. Gợi ý từ góc nhìn chuyên gia tài chính cá nhân — cân nhắc khi có thời gian
 
@@ -79,4 +87,5 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 
 ## 11. Tài liệu liên quan
 
-`spec.md` — đặc tả sản phẩm, mô hình dữ liệu, lộ trình theo phase, kế hoạch phát hành CH Play, tài chính domain logic (ngân sách, tỷ lệ tiết kiệm...). Đọc file đó trước khi bắt đầu bất kỳ phase nào.
+- `spec.md` — đặc tả sản phẩm, mô hình dữ liệu, lộ trình theo phase (76 phase, Giai đoạn A-H), kế hoạch phát hành CH Play, tài chính domain logic (ngân sách, tỷ lệ tiết kiệm...). Đọc file đó trước khi bắt đầu bất kỳ phase nào.
+- `docs/design.html` — bản vẽ giao diện đã chốt: sơ đồ use case (9 nhóm/35 use case), ERD quan hệ (12 bảng, khớp `spec.md`), và 18 màn hình mô phỏng có tương tác (chọn/đổi trạng thái, CRUD danh mục, chọn quỹ có validate âm quỹ...). Mọi màn hình thật khi code phải khớp luồng trong file này; nếu cần đổi khác đi, cập nhật lại `docs/design.html` trước rồi mới đổi code, để 2 nơi không lệch nhau.
