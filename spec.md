@@ -214,28 +214,29 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 53. **Cảnh báo theo tốc độ tiêu** (gợi ý chuyên gia — so % ngày đã qua trong tháng với % ngân sách đã dùng, cảnh báo sớm hơn ngưỡng cố định) — Code: `computeBudgetPace` use case, có unit test riêng. Chạy: giả lập ngày 15/30 đã tiêu 80%. Test: cảnh báo "tiêu nhanh hơn dự kiến" đúng lúc.
 54. **Push notification nhắc ghi chi tiêu hàng ngày** — Code: Cloud Messaging + lịch gửi. Chạy: chờ tới giờ hẹn trên máy thật. Test: thông báo xuất hiện đúng giờ.
 
-### Giai đoạn F — Bảo mật, di chuyển dữ liệu, hoàn thiện (5 phase, đánh số 55-59)
+### Giai đoạn F — Bảo mật, di chuyển dữ liệu, hoàn thiện (6 phase, đánh số 55-60)
 
 55. **Khoá PIN/vân tay** — Code: `local_auth`, `presentation/features/lock/`. Chạy: bật khoá, thoát app mở lại. Test: yêu cầu xác thực trước khi vào app.
 56. **Công cụ import CSV từ Google Sheet cũ** — Code: script import vào đúng `months/{yearMonth}`, map đúng 9 hạng mục thật. Chạy: import thử 8 tháng dữ liệu thật đã có (~1700 dòng). Test: tổng số giao dịch import khớp số dòng gốc, không trùng lặp, số dư cuối tháng 8 khớp sheet cũ.
 57. **Icon app + onboarding + empty state** — Code: `assets/icon`, `presentation/features/onboarding/`. Chạy: cài app mới hoàn toàn. Test: icon đúng, onboarding hiện đúng 1 lần, empty state rõ ràng khi chưa có giao dịch.
 58. **Kiểm thử nhiều kích thước máy Android** — Chạy: chạy trên ≥3 kích thước màn hình/phiên bản OS. Test: UI không vỡ layout ở màn hình nhỏ nhất.
 59. **Trang Chính sách quyền riêng tư** — Code: trang tĩnh khai đúng dữ liệu tài chính thu thập. Chạy: mở link. Test: nội dung đủ theo yêu cầu Play Console Data Safety.
+60. **Cơ chế bắt buộc cập nhật (force update)** — Code: đọc `minSupportedVersion`/`latestVersion` từ Firebase Remote Config lúc khởi động; nếu `buildNumber` hiện tại < `minSupportedVersion` thì hiện màn chặn toàn bộ, chỉ có nút "Cập nhật ngay" mở Play Store, không có nút bỏ qua; nếu chỉ thấp hơn `latestVersion` thì hiện gợi ý, cho phép bỏ qua. Chạy: đổi `minSupportedVersion` trên Remote Config console cao hơn bản đang cài, mở lại app. Test: app bị chặn đúng lúc cần (vd khi chính sách/schema đổi phải ép người dùng lên bản mới), không cần chờ Google duyệt bản mới mới ép được.
 
-### Giai đoạn G — Phát hành CH Play (5 phase, đánh số 60-64)
+### Giai đoạn G — Phát hành CH Play (5 phase, đánh số 61-65)
 
-60. **Đăng ký Google Play Console + build & ký `.aab`** — Chạy: `flutter build appbundle --release`. Test: file `.aab` sinh ra không lỗi, mở được bằng `bundletool`.
-61. **Khai báo Data Safety** — Test: khai đúng mục đích Personal Finance/Tools, không phải Lending/Payments (tránh bị yêu cầu giấy phép không cần thiết).
-62. **Internal testing** — Chạy: upload `.aab`. Test: cài được qua link testing trên máy thật.
-63. **Closed testing** — Test: đủ số ngày/người dùng tối thiểu Google yêu cầu với tài khoản developer mới.
-64. **Phát hành Production** — Test: app xuất hiện công khai trên CH Play, cài + đăng nhập được từ tài khoản Google bất kỳ, không bị gắn cờ vi phạm chính sách.
+61. **Đăng ký Google Play Console + build & ký `.aab`** — Chạy: `flutter build appbundle --release`. Test: file `.aab` sinh ra không lỗi, mở được bằng `bundletool`.
+62. **Khai báo Data Safety** — Test: khai đúng mục đích Personal Finance/Tools, không phải Lending/Payments (tránh bị yêu cầu giấy phép không cần thiết).
+63. **Internal testing** — Chạy: upload `.aab`. Test: cài được qua link testing trên máy thật.
+64. **Closed testing** — Test: đủ số ngày/người dùng tối thiểu Google yêu cầu với tài khoản developer mới.
+65. **Phát hành Production** — Test: app xuất hiện công khai trên CH Play, cài + đăng nhập được từ tài khoản Google bất kỳ, không bị gắn cờ vi phạm chính sách.
 
-### Giai đoạn H — Premium & Mở rộng, liên tục sau khi có người dùng thật (4 phase, đánh số 65-68)
+### Giai đoạn H — Premium & Mở rộng, liên tục sau khi có người dùng thật (4 phase, đánh số 66-69)
 
-65. **Mở khoá tự tạo/sửa hạng mục cho gia đình khác** — đây là lúc hiện thực hoá nguyên tắc "hạng mục là dữ liệu" đã thiết kế từ Phase 1: UI cho gia đình mới tự định nghĩa `kind`/`statuses`/`transferFrom-To` thay vì dùng 9 hạng mục seed cứng của vợ chồng chủ dự án. Test: 1 gia đình test tạo bộ hạng mục hoàn toàn khác vẫn chạy đúng mà không cần sửa code.
-66. **Đa ngôn ngữ Việt/Anh** — Code: `flutter_localizations` + `.arb`, tên hiển thị đổi theo locale (Ví Nhà Mình/HomeWallet). Test: đổi ngôn ngữ máy, toàn bộ UI đổi theo, không sót chuỗi hardcode.
-67. **In-app purchase gói Premium** — Test: luồng mua hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
-68. **Widget màn hình chính, nhắc lịch hoá đơn định kỳ, xuất PDF/Excel** — Test: từng tính năng hoạt động độc lập, không phá vỡ luồng core đã ổn định.
+66. **Mở khoá tự tạo/sửa hạng mục cho gia đình khác** — đây là lúc hiện thực hoá nguyên tắc "hạng mục là dữ liệu" đã thiết kế từ Phase 1: UI cho gia đình mới tự định nghĩa `kind`/`statuses`/`transferFrom-To` thay vì dùng 9 hạng mục seed cứng của vợ chồng chủ dự án. Test: 1 gia đình test tạo bộ hạng mục hoàn toàn khác vẫn chạy đúng mà không cần sửa code.
+67. **Đa ngôn ngữ Việt/Anh** — Code: `flutter_localizations` + `.arb`, tên hiển thị đổi theo locale (Ví Nhà Mình/HomeWallet). Test: đổi ngôn ngữ máy, toàn bộ UI đổi theo, không sót chuỗi hardcode.
+68. **In-app purchase gói Premium** — Test: luồng mua hoạt động trơn tru từ giao diện đến ghi nhận quyền lợi trong Firestore.
+69. **Widget màn hình chính, nhắc lịch hoá đơn định kỳ, xuất PDF/Excel** — Test: từng tính năng hoạt động độc lập, không phá vỡ luồng core đã ổn định.
 
 ---
 
@@ -248,11 +249,11 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 | C — Tài khoản riêng & Quỹ | 9 | 1–1.5 tuần |
 | D — Trạng thái & Tổng hợp | 8 | 1–1.5 tuần |
 | E — Ngân sách & nhắc nhở | 5 | 4–6 ngày |
-| F — Bảo mật & hoàn thiện | 5 | 1–1.5 tuần |
+| F — Bảo mật & hoàn thiện | 6 | 1–1.5 tuần |
 | G — Phát hành CH Play | 5 | 1–2 tuần (chủ yếu chờ Google) |
 | H — Premium & mở rộng | 4 | Liên tục |
 
-**Tổng: 68 phase, 4 đã xong.** **Thời gian tới khi có app trên CH Play (hết Giai đoạn G):** khoảng 7–10 tuần làm việc bán thời gian đều đặn — mỗi phase nhỏ, làm xong test qua trong ngày là chuyển tiếp được, không dồn việc lớn đến cuối mới kiểm thử. **Điểm mốc quan trọng: hết Giai đoạn A (phase 15) app đã dùng đầy đủ được rồi — hoàn toàn miễn phí, không cần đụng tới Firebase — cho tới khi thật sự cần chia sẻ với người thứ 2.**
+**Tổng: 69 phase, 4 đã xong.** **Thời gian tới khi có app trên CH Play (hết Giai đoạn G):** khoảng 7–10 tuần làm việc bán thời gian đều đặn — mỗi phase nhỏ, làm xong test qua trong ngày là chuyển tiếp được, không dồn việc lớn đến cuối mới kiểm thử. **Điểm mốc quan trọng: hết Giai đoạn A (phase 15) app đã dùng đầy đủ được rồi — hoàn toàn miễn phí, không cần đụng tới Firebase — cho tới khi thật sự cần chia sẻ với người thứ 2.**
 
 ## Chi phí
 

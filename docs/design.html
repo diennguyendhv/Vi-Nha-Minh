@@ -1,0 +1,1549 @@
+<title>Bản Vẽ Ví Nhà Mình</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ink:#101828;
+  --ink-soft:#667085;
+  --paper:#EEF1F8;
+  --paper-raised:#FFFFFF;
+  --paper-sunken:#F1F4FA;
+  --line:#E1E5F0;
+  --jade:#0B57F5;
+  --jade-soft:#E3ECFF;
+  --jade-deep:#0A3FC4;
+  --amber:#FF9A3D;
+  --amber-soft:#FFEAD2;
+  --amber-dark:#E8720C;
+  --rust:#FF5C87;
+  --rust-soft:#FFE1E9;
+  --slate:#7C5CFC;
+  --slate-soft:#EAE3FF;
+  --slate-light:#17B8C4;
+  --grey-transfer:#8891A5;
+  --diagram-bg:#FFFFFF;
+  --diagram-line:#E1E5F0;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 10px 24px -10px rgba(16,24,40,.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#EEF1F8;
+    --ink-soft:#8B94AC;
+    --paper:#0A0F1E;
+    --paper-raised:#141B2E;
+    --paper-sunken:#0F1526;
+    --line:#232C42;
+    --jade:#4C87FF;
+    --jade-soft:rgba(76,135,255,.16);
+    --jade-deep:#0A3FC4;
+    --amber:#FFA65C;
+    --amber-soft:rgba(255,166,92,.16);
+    --amber-dark:#FF8A2E;
+    --rust:#FF7A9C;
+    --rust-soft:rgba(255,122,156,.16);
+    --slate:#9B84FF;
+    --slate-soft:rgba(155,132,255,.16);
+    --slate-light:#3DD1DC;
+    --grey-transfer:#8B94AC;
+    --diagram-bg:#FFFFFF;
+    --diagram-line:#E1E5F0;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 26px -10px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#EEF1F8;
+  --ink-soft:#8B94AC;
+  --paper:#0A0F1E;
+  --paper-raised:#141B2E;
+  --paper-sunken:#0F1526;
+  --line:#232C42;
+  --jade:#4C87FF;
+  --jade-soft:rgba(76,135,255,.16);
+  --jade-deep:#0A3FC4;
+  --amber:#FFA65C;
+  --amber-soft:rgba(255,166,92,.16);
+  --amber-dark:#FF8A2E;
+  --rust:#FF7A9C;
+  --rust-soft:rgba(255,122,156,.16);
+  --slate:#9B84FF;
+  --slate-soft:rgba(155,132,255,.16);
+  --slate-light:#3DD1DC;
+  --grey-transfer:#8B94AC;
+  --diagram-bg:#FFFFFF;
+  --diagram-line:#E1E5F0;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 26px -10px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:'Be Vietnam Pro',system-ui,-apple-system,sans-serif;
+  font-variant-numeric:tabular-nums;
+  padding:0 20px;
+}
+h1,h2,h3{font-family:'Sora',sans-serif;text-wrap:balance;margin:0;}
+p{line-height:1.65;margin:0;}
+.wrap{max-width:1080px;margin:0 auto;}
+
+/* ---- top nav ---- */
+.topbar{
+  position:sticky;top:0;z-index:20;
+  background:color-mix(in srgb, var(--paper) 88%, transparent);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+  margin:0 -20px;padding:14px 20px;
+}
+.topbar-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.brand{display:flex;align-items:baseline;gap:8px;}
+.brand-mark{font-family:'Sora',sans-serif;font-weight:700;font-size:1.05rem;}
+.brand-sub{font-size:.72rem;color:var(--ink-soft);font-family:'JetBrains Mono',monospace;letter-spacing:.03em;}
+nav.pills{display:flex;gap:6px;flex-wrap:wrap;}
+nav.pills a{
+  font-size:.82rem;font-weight:500;color:var(--ink-soft);text-decoration:none;
+  padding:6px 12px;border-radius:999px;border:1px solid transparent;
+  transition:color .15s, border-color .15s, background .15s;
+  white-space:nowrap;
+}
+nav.pills a:hover{color:var(--ink);}
+nav.pills a.active{color:var(--jade);border-color:var(--jade);background:var(--jade-soft);}
+
+/* ---- hero ---- */
+.hero{padding:56px 0 40px;}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--jade);font-weight:500;
+}
+.hero h1{font-size:clamp(2rem,5vw,3.1rem);font-weight:700;margin-top:10px;line-height:1.08;}
+.hero .lede{max-width:62ch;margin-top:18px;font-size:1.05rem;color:var(--ink-soft);}
+.deliverables{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:14px;margin-top:32px;
+}
+.deliv-card{
+  background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;
+  padding:18px 18px 20px;text-decoration:none;color:var(--ink);
+  box-shadow:var(--shadow);transition:transform .15s;
+}
+.deliv-card:hover{transform:translateY(-2px);}
+.deliv-num{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--ink-soft);}
+.deliv-card h3{font-size:1.15rem;margin-top:6px;}
+.deliv-card p{font-size:.88rem;color:var(--ink-soft);margin-top:8px;}
+
+/* ---- sections ---- */
+section.block{padding:52px 0;border-top:1px solid var(--line);}
+.block-head{max-width:70ch;margin-bottom:28px;}
+.block-head h2{font-size:clamp(1.5rem,3vw,2.1rem);}
+.block-head p{margin-top:10px;color:var(--ink-soft);}
+
+.diagram-card{
+  background:var(--diagram-bg);border:1px solid var(--diagram-line);border-radius:16px;
+  padding:20px;box-shadow:var(--shadow);color:#1E2620;
+}
+.diagram-scroll{overflow-x:auto;}
+.diagram-scroll pre.mermaid{min-width:640px;margin:0;}
+.diagram-legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;font-size:.82rem;color:var(--ink-soft);}
+.diagram-legend span{display:inline-flex;align-items:center;gap:6px;}
+.leg-line{width:20px;height:0;border-top:2px solid var(--ink-soft);display:inline-block;}
+.leg-dash{width:20px;height:0;border-top:2px dashed var(--ink-soft);display:inline-block;}
+
+/* ---- screens gallery ---- */
+.screens-scroll{
+  display:flex;gap:22px;overflow-x:auto;padding:6px 4px 18px;
+  scroll-snap-type:x proximity;
+}
+.screen-col{scroll-snap-align:start;flex:0 0 auto;width:266px;}
+.phone{
+  width:266px;border-radius:30px;background:var(--ink);padding:9px;box-shadow:var(--shadow);
+}
+.phone-screen{
+  background:var(--paper-raised);border-radius:22px;overflow:hidden;
+  font-size:.78rem;min-height:560px;display:flex;flex-direction:column;
+}
+.phone-notch{height:20px;display:flex;align-items:center;justify-content:center;}
+.phone-notch::after{content:"";width:56px;height:5px;border-radius:3px;background:var(--line);}
+.phone-head{
+  padding:18px 16px 16px;font-family:'Sora',sans-serif;font-weight:700;font-size:1.02rem;
+  display:flex;align-items:center;justify-content:space-between;
+  color:#fff;background:linear-gradient(135deg,var(--jade),var(--jade-deep));
+  border-radius:0 0 20px 20px;
+}
+.phone-head .sub{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:rgba(255,255,255,.78);font-weight:400;}
+.phone-body{padding:14px 14px 4px;flex:1;display:flex;flex-direction:column;gap:12px;}
+.bottom-nav{display:flex;align-items:flex-end;justify-content:space-around;padding:10px 4px 4px;margin:auto -14px 0;border-top:1px solid var(--line);}
+.bottom-nav .tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.54rem;color:var(--ink-soft);font-weight:600;flex:1;}
+.bottom-nav .tab .ic{width:18px;height:18px;border-radius:6px;background:var(--paper-sunken);}
+.bottom-nav .tab.active{color:var(--jade);}
+.bottom-nav .tab.active .ic{background:var(--jade);}
+.bottom-nav .tab-center{margin-top:-28px;}
+.bottom-nav .tab-center .ic{width:44px;height:44px;border-radius:50%;background:var(--jade);box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;font-weight:700;border:4px solid var(--paper-raised);}
+.screen-caption{margin-top:12px;}
+.screen-caption .tag{
+  font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--jade);letter-spacing:.03em;
+}
+.screen-caption p{font-size:.85rem;color:var(--ink-soft);margin-top:4px;}
+
+/* balance cards (home) */
+.member-row{display:flex;gap:8px;}
+.member-card{flex:1;background:var(--paper-sunken);border-radius:12px;padding:10px;}
+.member-card .name{font-weight:600;font-size:.8rem;}
+.member-card .bal{font-family:'JetBrains Mono',monospace;font-size:.95rem;font-weight:500;margin-top:4px;color:var(--jade);}
+.member-card .mini{font-size:.66rem;color:var(--ink-soft);margin-top:6px;display:flex;justify-content:space-between;}
+.service-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.service-tile{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:.58rem;font-weight:600;color:var(--ink);text-align:center;background:none;border:none;font-family:inherit;cursor:pointer;}
+.service-tile .ic{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Sora',sans-serif;font-weight:700;font-size:.72rem;}
+.stat-strip{background:var(--jade-soft);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;align-items:baseline;}
+.stat-strip .v{font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--jade);}
+.fab{
+  align-self:flex-end;width:38px;height:38px;border-radius:50%;background:var(--jade);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:1.2rem;font-weight:600;
+  box-shadow:var(--shadow);border:none;
+}
+.tx-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line);}
+.tx-row:first-of-type{border-top:none;}
+.tx-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+.tx-main{flex:1;min-width:0;}
+.tx-main .n{font-weight:500;font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tx-main .m{font-size:.65rem;color:var(--ink-soft);}
+.tx-amt{font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:500;white-space:nowrap;}
+.tx-amt.pos{color:var(--jade);}
+.tx-amt.neg{color:var(--ink);}
+.section-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:500;margin-top:2px;}
+
+/* add-transaction screen */
+.field-label{font-size:.68rem;color:var(--ink-soft);font-weight:500;display:block;}
+.field-label .hint{font-family:'JetBrains Mono',monospace;font-style:normal;color:var(--jade);font-size:.6rem;}
+.chip-grid{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.cat-chip{
+  font-family:inherit;font-size:.68rem;font-weight:500;color:var(--ink);
+  background:transparent;border:1.4px solid var(--c,var(--line));border-radius:999px;
+  padding:5px 10px;cursor:pointer;transition:background .15s,color .15s;
+}
+.cat-chip.active{background:var(--c,var(--jade));border-color:var(--c,var(--jade));color:#fff;}
+.amount-input{
+  font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:600;
+  background:var(--paper-sunken);border-radius:10px;padding:10px 12px;margin-top:4px;color:var(--ink);
+}
+.amount-input span{font-size:.85rem;color:var(--ink-soft);font-weight:400;}
+.person-toggle{display:flex;gap:6px;margin-top:6px;}
+.person-toggle button{
+  flex:1;font-family:inherit;font-size:.75rem;font-weight:500;padding:7px;border-radius:8px;
+  border:1.4px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;
+}
+.person-toggle button.active{background:var(--slate);border-color:var(--slate);color:#fff;}
+.text-input{
+  background:var(--paper-sunken);border-radius:8px;padding:8px 10px;margin-top:4px;
+  font-size:.75rem;color:var(--ink-soft);
+}
+.fund-pick-row{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+.fund-pick{display:flex;justify-content:space-between;align-items:center;font-family:inherit;font-size:.74rem;font-weight:500;
+  padding:8px 10px;border-radius:9px;border:1.4px solid var(--line);background:var(--paper-raised);color:var(--ink);cursor:pointer;}
+.fund-pick .b{font-family:'JetBrains Mono',monospace;font-size:.66rem;color:var(--ink-soft);}
+.fund-pick.active{border-color:var(--jade);background:var(--jade-soft);}
+.fund-pick.active .b{color:var(--jade);}
+.fund-warn{font-size:.66rem;color:var(--rust);background:var(--rust-soft);padding:7px 9px;border-radius:8px;margin-top:2px;}
+.status-stepper{background:var(--amber-soft);border-radius:10px;padding:10px;margin-top:2px;}
+.stepper-track{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
+.step{display:flex;align-items:center;gap:8px;font-size:.72rem;color:var(--ink-soft);}
+.step .dot{width:9px;height:9px;border-radius:50%;border:1.6px solid var(--amber-dark);flex:0 0 auto;}
+.step.current{color:var(--ink);font-weight:600;}
+.step.current .dot{background:var(--amber-dark);}
+.btn-primary{
+  margin-top:auto;background:var(--jade);color:#fff;border:none;border-radius:10px;
+  padding:11px;font-family:inherit;font-weight:600;font-size:.82rem;cursor:pointer;
+}
+.btn-outline{
+  background:transparent;color:var(--jade);border:1.5px solid var(--jade);border-radius:10px;
+  padding:10px;font-family:inherit;font-weight:600;font-size:.8rem;cursor:pointer;
+}
+
+/* transaction list screen */
+.month-switch{display:flex;align-items:center;justify-content:space-between;font-size:.8rem;font-weight:600;}
+.month-switch button{background:none;border:none;color:var(--ink-soft);font-size:.95rem;cursor:pointer;}
+.day-group{margin-top:4px;}
+.day-head{display:flex;justify-content:space-between;font-size:.66rem;color:var(--ink-soft);
+  text-transform:uppercase;letter-spacing:.04em;padding-bottom:4px;border-bottom:1px solid var(--line);}
+.day-head b{font-family:'JetBrains Mono',monospace;color:var(--ink);}
+.status-chip{
+  font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:1px 6px;border-radius:6px;
+  background:var(--amber-soft);color:var(--amber-dark);display:inline-block;margin-top:2px;
+}
+
+/* summary screen */
+.donut-wrap{display:flex;align-items:center;justify-content:center;padding:6px 0;}
+.donut{
+  width:132px;height:132px;border-radius:50%;position:relative;
+  background:conic-gradient(var(--ink-soft) 0% 38%, var(--slate) 38% 56%, var(--amber) 56% 70%, var(--amber-dark) 70% 80%, var(--rust) 80% 88%, var(--slate-light) 88% 100%);
+}
+.donut::after{
+  content:"";position:absolute;inset:20px;border-radius:50%;background:var(--paper-raised);
+  display:flex;
+}
+.donut-label{position:absolute;inset:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.donut-label b{font-family:'JetBrains Mono',monospace;font-size:1.05rem;color:var(--jade);}
+.donut-label span{font-size:.58rem;color:var(--ink-soft);text-align:center;line-height:1.2;}
+.legend-list{display:flex;flex-direction:column;gap:5px;}
+.legend-row{display:flex;align-items:center;gap:7px;font-size:.7rem;}
+.legend-row .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+.legend-row .lbl{flex:1;}
+.legend-row .pct{color:var(--ink-soft);font-family:'JetBrains Mono',monospace;}
+.status-card{background:var(--paper-sunken);border-radius:10px;padding:9px 10px;}
+.status-card .title{font-size:.72rem;font-weight:600;display:flex;justify-content:space-between;}
+.progress-bar{height:6px;border-radius:4px;background:var(--line);margin-top:6px;overflow:hidden;display:flex;}
+.progress-bar .seg{height:100%;}
+.status-breakdown{margin-top:8px;display:flex;flex-direction:column;gap:1px;}
+.sb-row{display:flex;justify-content:space-between;font-size:.66rem;color:var(--ink-soft);padding:4px 2px;border-radius:6px;cursor:pointer;}
+.sb-row:hover{background:var(--paper-raised);}
+.sb-row.current{color:var(--ink);font-weight:600;}
+
+/* fund screen */
+.fund-balance{background:var(--jade);color:#fff;border-radius:14px;padding:16px;text-align:center;}
+.fund-balance .lbl{font-size:.68rem;opacity:.85;}
+.fund-balance .val{font-family:'JetBrains Mono',monospace;font-size:1.5rem;font-weight:700;margin-top:4px;}
+.fund-btns{display:flex;gap:8px;}
+.fund-btns button{flex:1;}
+.fund-entry{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line);}
+.fund-entry:first-of-type{border-top:none;}
+.fund-entry .n{font-size:.75rem;font-weight:500;}
+.fund-entry .d{font-size:.62rem;color:var(--ink-soft);}
+
+/* invite screen */
+.invite-code{
+  background:var(--paper-sunken);border:1.5px dashed var(--jade);border-radius:12px;
+  text-align:center;padding:16px;
+}
+.invite-code .code{font-family:'JetBrains Mono',monospace;font-size:1.5rem;font-weight:700;letter-spacing:.12em;color:var(--jade);}
+.invite-code .exp{font-size:.65rem;color:var(--ink-soft);margin-top:6px;}
+.member-list-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:.75rem;}
+.member-list-row:first-of-type{border-top:none;}
+.role-chip{font-size:.62rem;background:var(--slate-soft);color:var(--slate);padding:2px 8px;border-radius:999px;font-weight:500;}
+
+/* schema notes grid */
+.note-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:22px;}
+.note-card{background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;padding:16px;}
+.note-card h4{font-size:.85rem;margin:0 0 6px;font-family:'Be Vietnam Pro',sans-serif;font-weight:600;}
+.note-card p{font-size:.82rem;color:var(--ink-soft);}
+
+/* confirm box */
+.confirm{
+  background:var(--paper-raised);border:1px solid var(--line);border-radius:18px;
+  padding:28px 30px;box-shadow:var(--shadow);
+}
+.confirm h2{font-size:1.4rem;}
+.confirm ol{margin:16px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:10px;}
+.confirm li{font-size:.92rem;color:var(--ink-soft);}
+.confirm li b{color:var(--ink);}
+.confirm .cta{margin-top:20px;font-size:.9rem;padding:12px 16px;background:var(--jade-soft);border-radius:10px;color:var(--ink);}
+
+footer{padding:36px 0 60px;color:var(--ink-soft);font-size:.78rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+
+/* equation card */
+.equation-card{background:var(--jade-soft);border:1px solid var(--jade);border-radius:16px;padding:22px 24px;margin-bottom:24px;}
+.eq-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:1.05rem;font-weight:500;}
+.eq-row.sub{margin-top:8px;font-size:.92rem;color:var(--ink-soft);}
+.eq-op{color:var(--ink-soft);}
+.eq-term.highlight{color:var(--jade);font-weight:700;}
+.equation-card p{margin-top:14px;font-size:.86rem;color:var(--ink-soft);max-width:60ch;}
+
+/* type badges */
+.type-badge{font-family:'JetBrains Mono',monospace;font-size:.6rem;font-weight:600;padding:2px 7px;border-radius:6px;letter-spacing:.03em;}
+.type-badge.thu{background:var(--jade-soft);color:var(--jade);}
+.type-badge.chi{background:var(--rust-soft);color:var(--rust);}
+
+/* screen group headers */
+.screen-group-head{margin:36px 0 12px;}
+.screen-group-head:first-child{margin-top:0;}
+.screen-group-head h3{font-size:1.05rem;font-family:'Be Vietnam Pro',sans-serif;font-weight:700;}
+.screen-group-head p{font-size:.85rem;color:var(--ink-soft);margin-top:4px;max-width:60ch;}
+
+/* welcome screen */
+.welcome-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:12px;padding:20px 6px;}
+.welcome-glyph{width:60px;height:60px;border-radius:18px;background:var(--jade-soft);display:flex;align-items:center;justify-content:center;color:var(--jade);font-family:'Sora',sans-serif;font-size:1.7rem;font-weight:700;}
+.welcome-mark{font-family:'Sora',sans-serif;font-weight:700;font-size:1.35rem;}
+.welcome-sub{font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--ink-soft);letter-spacing:.04em;}
+.welcome-tag{font-size:.76rem;color:var(--ink-soft);max-width:22ch;}
+.welcome-foot{font-size:.6rem;color:var(--ink-soft);margin-top:auto;padding-top:14px;}
+
+/* login screen */
+.login-body{flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;}
+.acct-btn{display:flex;align-items:center;gap:10px;border:1.4px solid var(--line);border-radius:10px;padding:11px 14px;font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;background:var(--paper-raised);color:var(--ink);width:100%;}
+.acct-btn .dot-g{width:18px;height:18px;border-radius:50%;background:conic-gradient(var(--jade),var(--slate),var(--amber),var(--rust));flex:0 0 auto;}
+.skip-link{text-align:center;font-size:.74rem;color:var(--ink-soft);text-decoration:underline;cursor:pointer;background:none;border:none;font-family:inherit;}
+
+/* choose type screen */
+.choice-card{border:1.6px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:6px;cursor:pointer;background:var(--paper-raised);}
+.choice-card.active{border-color:var(--jade);background:var(--jade-soft);}
+.choice-card .icon-shape{width:32px;height:32px;border-radius:9px;background:var(--paper-sunken);display:flex;align-items:center;justify-content:center;font-family:'Sora',sans-serif;font-weight:700;color:var(--jade);font-size:.9rem;}
+.choice-card.active .icon-shape{background:var(--jade);color:#fff;}
+.choice-card .t{font-weight:600;font-size:.85rem;}
+.choice-card .d{font-size:.68rem;color:var(--ink-soft);}
+
+/* settings rows (family / personal hub) */
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-top:1px solid var(--line);font-size:.76rem;gap:8px;}
+.settings-row:first-of-type{border-top:none;}
+.settings-row .l{color:var(--ink-soft);}
+.settings-row .r{font-weight:500;text-align:right;}
+.sync-badge{font-family:'JetBrains Mono',monospace;font-size:.6rem;background:var(--slate-soft);color:var(--slate);padding:2px 8px;border-radius:999px;white-space:nowrap;}
+.upsell-card{background:var(--amber-soft);border-radius:12px;padding:12px;margin-top:auto;}
+.upsell-card p{font-size:.7rem;color:var(--ink);margin-bottom:8px;}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--slate-soft);color:var(--slate);display:flex;align-items:center;justify-content:center;font-size:.66rem;font-weight:700;flex:0 0 auto;}
+.fam-member-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);}
+.fam-member-row:first-of-type{border-top:none;}
+.fam-member-row .nm{flex:1;font-size:.78rem;font-weight:500;}
+
+/* category list screen */
+.cat-group-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft);font-weight:600;margin-top:2px;}
+.cat-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);}
+.cat-row:first-of-type{border-top:none;}
+.cat-row .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto;}
+.cat-row .info{flex:1;min-width:0;}
+.cat-row .info .n{font-size:.78rem;font-weight:500;}
+.cat-row .info .m{font-size:.62rem;color:var(--ink-soft);}
+.cat-row .chev{color:var(--ink-soft);font-size:.9rem;}
+
+/* category edit screen */
+.segmented{display:flex;background:var(--paper-sunken);border-radius:10px;padding:3px;margin-top:6px;}
+.segmented button{flex:1;font-family:inherit;font-size:.74rem;font-weight:600;padding:7px;border-radius:8px;border:none;background:transparent;color:var(--ink-soft);cursor:pointer;}
+.segmented button.active{background:var(--paper-raised);color:var(--ink);box-shadow:var(--shadow);}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;}
+.toggle-row .lbl{font-size:.78rem;font-weight:500;}
+.switch{width:34px;height:19px;border-radius:999px;background:var(--line);position:relative;flex:0 0 auto;cursor:pointer;border:none;}
+.switch.on{background:var(--jade);}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:transform .15s;}
+.switch.on::after{transform:translateX(15px);}
+.swatch-row{display:flex;gap:7px;margin-top:6px;}
+.swatch{width:21px;height:21px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;}
+.swatch.active{border-color:var(--ink);}
+.status-edit-row{display:flex;align-items:center;gap:7px;padding:6px 0;border-top:1px solid var(--line);}
+.status-edit-row:first-of-type{border-top:none;}
+.status-edit-row .handle{color:var(--ink-soft);font-size:.66rem;letter-spacing:1px;}
+.status-edit-row .txt{flex:1;font-size:.75rem;background:var(--paper-sunken);border-radius:7px;padding:6px 9px;}
+.status-edit-row .rm{background:none;border:none;color:var(--rust);font-size:1rem;cursor:pointer;line-height:1;padding:2px 5px;}
+.status-add-row{display:flex;gap:6px;margin-top:8px;}
+.status-add-row input{flex:1;font-family:inherit;font-size:.75rem;border:1.4px dashed var(--line);border-radius:7px;padding:6px 9px;background:transparent;color:var(--ink);min-width:0;}
+.status-add-row button{background:var(--jade);color:#fff;border:none;border-radius:7px;padding:0 12px;font-weight:600;cursor:pointer;font-size:.85rem;}
+.danger-link{color:var(--rust);font-size:.76rem;font-weight:500;text-align:center;background:none;border:none;cursor:pointer;padding:6px;width:100%;font-family:inherit;}
+
+@media (max-width:640px){
+  .topbar-inner{gap:8px;}
+  nav.pills{gap:4px;}
+  nav.pills a{padding:5px 9px;font-size:.76rem;}
+}
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">Ví Nhà Mình</span>
+      <span class="brand-sub">/ HomeWallet</span>
+    </div>
+    <nav class="pills" id="navPills">
+      <a href="#tong-quan">Tổng quan</a>
+      <a href="#usecase">Use case</a>
+      <a href="#schema">Cơ sở dữ liệu</a>
+      <a href="#giao-dien">Giao diện</a>
+      <a href="#confirm">Cần chốt</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="hero" id="tong-quan">
+    <div class="eyebrow">Đặc tả thiết kế · trước khi code Giai đoạn A</div>
+    <h1>Bản vẽ Ví Nhà Mình</h1>
+    <p class="lede">Ba phần cần chốt trước khi đặt bút viết code: sơ đồ use case cho toàn bộ tính năng, cơ sở dữ liệu Firestore trình bày theo kiểu quan hệ để dễ rà soát, và giao diện mô phỏng cho các màn hình chính. Dựa trên <code>spec.md</code> và <code>CLAUDE.md</code> hiện có trong repo — chưa có dòng code ứng dụng nào được viết dựa trên bản này.</p>
+
+    <div class="deliverables">
+      <a class="deliv-card" href="#usecase">
+        <div class="deliv-num">01 — chức năng</div>
+        <h3>Sơ đồ Use Case</h3>
+        <p>1 tác nhân, 9 nhóm tính năng, 35 use case — từ khởi động, danh mục/trạng thái, quỹ/tiết kiệm đến xuất báo cáo.</p>
+      </a>
+      <a class="deliv-card" href="#schema">
+        <div class="deliv-num">02 — dữ liệu</div>
+        <h3>Cơ sở dữ liệu</h3>
+        <p>12 "bảng" — thêm TRANSACTION_TYPE (Thu/Chi) và STATUS làm bảng riêng, có CRUD thật thay vì hằng số cứng.</p>
+      </a>
+      <a class="deliv-card" href="#giao-dien">
+        <div class="deliv-num">03 — giao diện</div>
+        <h3>18 màn hình mô phỏng</h3>
+        <p>Khởi động, Gia đình/Cá nhân, Danh mục & Trạng thái, ghi chép hằng ngày, Tổng hợp & Quỹ.</p>
+      </a>
+    </div>
+  </section>
+
+  <section class="block" id="usecase">
+    <div class="block-head">
+      <h2>Sơ đồ Use Case</h2>
+      <p>Tác nhân duy nhất là <b>Chủ sổ / Thành viên gia đình</b> — quyền gần như ngang nhau (đúng nguyên tắc "mọi vai trò là dữ liệu tự đặt" ở <code>CLAUDE.md</code> mục 9), chỉ khác ở việc ai được tạo/thu hồi lời mời. Nhóm theo 6 mảng tính năng bám sát Giai đoạn A–F trong <code>spec.md</code>, chưa liệt kê hết 68 phase kỹ thuật.</p>
+    </div>
+    <div class="diagram-card">
+      <div class="diagram-scroll">
+<pre class="mermaid">
+flowchart LR
+  classDef actor fill:#2E6650,stroke:#16342A,color:#F6F4EE,stroke-width:2px,font-weight:600
+  classDef usecase fill:#FAFAF4,stroke:#2E6650,color:#1E2620,stroke-width:1.5px
+
+  ChuSo["Chủ sổ / Thành viên gia đình"]:::actor
+
+  subgraph G0["Khởi động và Tài khoản"]
+    direction TB
+    U01(["Xem màn chào mừng"]):::usecase
+    U02(["Đăng nhập hoặc bỏ qua, dùng cục bộ"]):::usecase
+    U03(["Chọn Cá nhân hoặc Gia đình"]):::usecase
+  end
+
+  subgraph G1["Sổ và Thành viên"]
+    direction TB
+    U04(["Mời thành viên qua mã / link"]):::usecase
+    U05(["Tham gia sổ qua mã mời"]):::usecase
+    U06(["Đặt vai trò tự do (Vợ, Chồng,...)"]):::usecase
+    U07(["Quản lý danh sách thành viên gia đình"]):::usecase
+    U08(["Quản lý cài đặt sổ cá nhân"]):::usecase
+    U09(["Chuyển từ Cá nhân sang Gia đình"]):::usecase
+  end
+
+  subgraph G2["Danh mục và Trạng thái"]
+    direction TB
+    U10(["Xem danh sách danh mục"]):::usecase
+    U11(["Thêm danh mục mới, chọn Thu hoặc Chi"]):::usecase
+    U12(["Sửa danh mục"]):::usecase
+    U13(["Xoá danh mục"]):::usecase
+    U14(["Thêm trạng thái cho danh mục"]):::usecase
+    U15(["Sửa hoặc xoá trạng thái"]):::usecase
+    U16(["Sắp xếp thứ tự trạng thái"]):::usecase
+    U16b(["Bật/tắt hiện danh mục ở Tổng hợp trạng thái"]):::usecase
+  end
+
+  subgraph G3["Giao dịch"]
+    direction TB
+    U17(["Thêm giao dịch"]):::usecase
+    U18(["Sửa hoặc xoá giao dịch"]):::usecase
+    U19(["Xem theo ngày / chuyển tháng"]):::usecase
+    U20(["Gắn trạng thái cho giao dịch"]):::usecase
+  end
+
+  subgraph G4["Quỹ, tạo được nhiều cái"]
+    direction TB
+    U20b(["Tạo quỹ mới, đặt tên tự do"]):::usecase
+    U21(["Nạp tiền vào quỹ, tự trừ chi phí người nạp"]):::usecase
+    U22(["Tích 1 quỹ khi ghi khoản chi, chặn nếu quỹ không đủ"]):::usecase
+    U23(["Xem số dư và lịch sử từng quỹ"]):::usecase
+  end
+
+  subgraph G4b["Tiết kiệm"]
+    direction TB
+    U23b(["Rút tiết kiệm về ví chính"]):::usecase
+    U23c(["Gửi tiết kiệm vào ngân hàng"]):::usecase
+  end
+
+  subgraph G5["Ngân sách và cảnh báo"]
+    direction TB
+    U24(["Đặt ngân sách theo hạng mục"]):::usecase
+    U25(["Nhận cảnh báo vượt ngưỡng 80/100%"]):::usecase
+    U26(["Nhận cảnh báo theo tốc độ tiêu"]):::usecase
+  end
+
+  subgraph G6["Tổng hợp và báo cáo"]
+    direction TB
+    U27(["Xem tổng hợp theo tháng"]):::usecase
+    U28(["Xem biểu đồ theo hạng mục"]):::usecase
+    U29(["Xem tổng hợp theo năm"]):::usecase
+    U30(["Xuất báo cáo CSV / Excel"]):::usecase
+  end
+
+  subgraph G7["Bảo mật"]
+    direction TB
+    U31(["Khoá bằng PIN hoặc vân tay"]):::usecase
+    U32(["Nhập dữ liệu từ Sheet cũ"]):::usecase
+  end
+
+  ChuSo --> G0
+  ChuSo --> G1
+  ChuSo --> G2
+  ChuSo --> G3
+  ChuSo --> G4
+  ChuSo --> G4b
+  ChuSo --> G5
+  ChuSo --> G6
+  ChuSo --> G7
+
+  U03 -.->|"tạo family 1 thành viên"| U08
+  U09 -.->|"cần đăng nhập"| U04
+  U04 -->|"kích hoạt khi được chấp nhận"| U05
+  U11 -.->|"tạo kèm bước trạng thái đầu tiên"| U14
+  U17 -.->|"sinh trạng thái nếu danh mục có statuses"| U20
+  U17 -->|"tích ô Quỹ tiền ăn"| U22
+  U20b -.->|"trước khi nạp/dùng"| U21
+  U21 -.->|"đồng thời là 1 giao dịch Chi"| U17
+  U22 -.->|"trừ luôn vào số dư quỹ"| U23
+  U24 -.->|"so với categoryTotals"| U25
+  U24 -.->|"so % ngày đã qua trong tháng"| U26
+  U27 -.->|"cộng dồn 12 tháng"| U29
+</pre>
+      </div>
+      <div class="diagram-legend">
+        <span><i class="leg-line"></i> thực hiện trực tiếp</span>
+        <span><i class="leg-dash"></i> mở rộng / kéo theo tự động</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="schema">
+    <div class="block-head">
+      <h2>Cơ sở dữ liệu</h2>
+      <p>Backend thật là <b>Cloud Firestore</b> (NoSQL, dạng document lồng nhau theo <code>families/{familyId}/...</code> — xem nguyên bản trong <code>spec.md</code>). Sơ đồ dưới đây vẽ lại đúng các collection đó dưới dạng "bảng" có khoá chính/khoá ngoại, cộng thêm 2 bảng mới theo yêu cầu — <code>TRANSACTION_TYPE</code> (Thu/Chi) và <code>STATUS</code> — để danh mục và trạng thái đều xem/thêm/sửa/xoá được thay vì là hằng số cứng.</p>
+    </div>
+
+    <div class="equation-card">
+      <div class="eq-row"><span class="eq-term">Tổng thu</span><span class="eq-op">=</span><span class="eq-term">Tổng chi</span><span class="eq-op">+</span><span class="eq-term highlight">Số tiền còn lại</span></div>
+      <div class="eq-row sub"><span class="eq-term">Tổng chi</span><span class="eq-op">=</span><span class="eq-term">Chi phí</span><span class="eq-op">+</span><span class="eq-term">Tiết kiệm</span></div>
+      <p>Tiết kiệm không còn là một "loại" (<code>kind</code>) riêng như bản trước — nó chỉ là một <b>CATEGORY thuộc nhóm Chi</b>, đánh dấu bằng <code>isSaving = true</code>. Nhờ vậy phương trình cân đối luôn đúng bằng cộng dồn số học đơn giản (<code>totalIncome</code> trừ <code>totalSpending</code> trừ <code>totalSaving</code> ở <code>MONTH_SUMMARY</code>), không cần logic riêng cho tiết kiệm.</p>
+    </div>
+
+    <div class="diagram-card">
+      <div class="diagram-scroll">
+<pre class="mermaid">
+erDiagram
+  FAMILY ||--o{ MEMBER : "co thanh vien"
+  FAMILY ||--o{ INVITE : "phat hanh loi moi"
+  FAMILY ||--o{ CATEGORY : "dinh nghia danh muc"
+  FAMILY ||--o{ MONTH_SUMMARY : "co du lieu theo thang"
+  FAMILY ||--o{ FUND : "co quy"
+  FAMILY ||--o{ BUDGET : "dat ngan sach theo thang"
+  TRANSACTION_TYPE ||--o{ CATEGORY : "phan loai Thu hoac Chi"
+  CATEGORY ||--o{ STATUS : "co cac buoc trang thai, tu them"
+  MONTH_SUMMARY ||--o{ TRANSACTION_ENTRY : "chua giao dich"
+  CATEGORY ||--o{ TRANSACTION_ENTRY : "phan loai"
+  STATUS ||--o{ TRANSACTION_ENTRY : "gan trang thai, doi duoc sau khi tao"
+  MEMBER ||--o{ TRANSACTION_ENTRY : "ghi boi"
+  MEMBER ||--|| MEMBER_BALANCE : "co so du luy ke"
+  FUND ||--o{ FUND_ENTRY : "chua khoan nap / mua"
+  MEMBER ||--o{ FUND_ENTRY : "tao"
+  FUND ||--o{ TRANSACTION_ENTRY : "duoc tich khi ghi giao dich"
+
+  TRANSACTION_TYPE {
+    string typeId PK "thu hoac chi"
+    string name
+  }
+  FAMILY {
+    string familyId PK
+    string name
+    string accountType "personal hoac family"
+    string syncMode "local hoac cloud"
+    string ownerUid FK
+    timestamp createdAt
+  }
+  MEMBER {
+    string uid PK
+    string familyId FK
+    string displayName
+    string roleLabel "tu do, gia dinh tu dat"
+    boolean isOwner
+    timestamp joinedAt
+  }
+  INVITE {
+    string inviteId PK
+    string familyId FK
+    string code "6 den 8 ky tu"
+    string suggestedRoleLabel
+    timestamp expiresAt
+    int maxUses
+    int usedCount
+  }
+  CATEGORY {
+    string categoryId PK
+    string familyId FK
+    string typeId FK "Thu hoac Chi"
+    string name
+    string color
+    boolean isSaving "chi ap dung khi typeId la Chi"
+    string transferToUid FK "chi danh muc chuyen khoan"
+    boolean isDefault
+    boolean statsEnabled "bat/tat hien o Tong hop trang thai, mac dinh tat"
+  }
+  STATUS {
+    string statusId PK
+    string categoryId FK
+    string name
+    int sortOrder
+  }
+  MONTH_SUMMARY {
+    string yearMonth PK "vi du 2026-09"
+    string familyId FK
+    number totalIncome
+    number totalSpending "chi phi, khong tinh tiet kiem"
+    number totalSaving "cong don cac category isSaving"
+    map categoryTotals
+    map statusTotals
+  }
+  TRANSACTION_ENTRY {
+    string txId PK
+    string yearMonth FK
+    string categoryId FK
+    string statusId FK "sua duoc sau khi tao, null neu danh muc khong co trang thai"
+    timestamp statusUpdatedAt "moi lan doi trang thai"
+    string spenderUid FK
+    string fundId FK "co neu tich Quy tien an"
+    number amount
+    string note
+    date date
+    string savingsDestination "chi khi category isSaving: hien tai / da gui NH"
+  }
+  MEMBER_BALANCE {
+    string uid PK
+    number balance
+    number savingsOnHand
+    number savingsInBank
+  }
+  FUND {
+    string fundId PK
+    string familyId FK
+    string name
+    number balance "derived tu entries"
+  }
+  FUND_ENTRY {
+    string entryId PK
+    string fundId FK
+    string createdBy FK
+    string linkedTxId FK "giao dich da tru chi phi nguoi tao"
+    string kind "topUp hoac purchase"
+    number amount
+    string note
+    date date
+  }
+  BUDGET {
+    string yearMonth PK
+    string familyId FK
+    map categoryLimits
+  }
+</pre>
+      </div>
+    </div>
+
+    <div class="note-grid">
+      <div class="note-card">
+        <h4>STATUS là bảng con, không còn mảng cứng</h4>
+        <p>Xem/thêm/sửa/xoá đầy đủ, áp dụng cho <b>mọi</b> danh mục chứ không riêng Cho đi/Dâng hiến — kể cả Sinh hoạt cũng tự thêm được bước trạng thái riêng. <code>statusId</code> trên giao dịch sửa được sau khi tạo, không cố định lúc ghi. Cờ <code>statsEnabled</code> trên từng danh mục quyết định có hiện ở Tổng hợp trạng thái hay không — nhiều danh mục có <code>statuses</code> nhưng không phải cái nào cũng cần lên báo cáo.</p>
+      </div>
+      <div class="note-card">
+        <h4>TRANSACTION_TYPE là gốc của mọi phân loại</h4>
+        <p>Mọi danh mục chỉ thuộc Thu hoặc Chi — không còn <code>kind</code> riêng cho tiết kiệm/chuyển khoản. Tiết kiệm và "Chồng đưa vợ/Vợ đưa chồng" đều là danh mục thuộc Chi.</p>
+      </div>
+      <div class="note-card">
+        <h4>FUND nối thẳng vào TRANSACTION_ENTRY</h4>
+        <p>Nạp quỹ và khoản chi tích "Quỹ tiền ăn" đều là <b>một giao dịch thật</b> — trừ số dư người thực hiện như bình thường — kèm <code>fundId</code>, tự sinh <code>FUND_ENTRY</code> liên kết. Không tích thì không đụng gì tới quỹ.</p>
+      </div>
+      <div class="note-card">
+        <h4>MEMBER_BALANCE là dữ liệu dẫn xuất</h4>
+        <p>Không phải nguồn sự thật — tính lại từ toàn bộ TRANSACTION_ENTRY của người đó, cache bằng Cloud Function để tránh cộng dồn hàng nghìn dòng ở client mỗi lần mở app.</p>
+      </div>
+      <div class="note-card">
+        <h4>Local-first trước khi có FAMILY thật</h4>
+        <p>Ở Giai đoạn A, toàn bộ sơ đồ này chưa tồn tại trên Firestore — dữ liệu nằm trong SQLite/Hive cục bộ. FAMILY document trên Firestore chỉ sinh ra khi lời mời đầu tiên được chấp nhận.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="giao-dien">
+    <div class="block-head">
+      <h2>Giao diện mô phỏng</h2>
+      <p>18 màn hình, nhóm theo luồng thật: khởi động & chọn loại sổ, quản lý Gia đình/Cá nhân, quản lý Danh mục & Trạng thái, rồi mới tới ghi chép hằng ngày và tổng hợp. Nhiều màn có tương tác thật — thử bấm để thấy hành vi chứ không chỉ nhìn ảnh tĩnh.</p>
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Khởi động & chọn loại sổ</h3>
+      <p>Local-first: có thể bấm "Bỏ qua" ở màn Đăng nhập và dùng ngay không cần tài khoản — chỉ khi mời người khác mới thật sự cần đăng nhập.</p>
+    </div>
+    <div class="screens-scroll">
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="welcome-body">
+            <div class="welcome-glyph">V</div>
+            <div class="welcome-mark">Ví Nhà Mình</div>
+            <div class="welcome-sub">HOMEWALLET</div>
+            <div class="welcome-tag">Quản lý chi tiêu gia đình, riêng tư và đơn giản</div>
+            <button class="btn-primary" style="margin-top:10px;width:100%">Bắt đầu</button>
+            <div class="welcome-foot">Không cần tài khoản để bắt đầu ghi chép</div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">01 · CHÀO MỪNG</div><p>Mở app lần đầu — chưa hỏi đăng nhập, đúng nguyên tắc local-first.</p></div>
+      </div>
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Đăng nhập</div>
+          <div class="login-body">
+            <p style="font-size:.78rem;color:var(--ink-soft)">Cần tài khoản để mời người thân và đồng bộ real-time giữa các máy.</p>
+            <button class="acct-btn"><span class="dot-g"></span> Tiếp tục với Google</button>
+            <button class="skip-link">Bỏ qua, dùng cục bộ trên máy</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">02 · ĐĂNG NHẬP</div><p>Chỉ xuất hiện khi bấm "Mời thành viên" hoặc "Chuyển sang Gia đình" lần đầu — không chặn luồng dùng cá nhân.</p></div>
+      </div>
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Bạn dùng sổ này cho ai?</div>
+          <div class="phone-body" id="chooseTypeBody">
+            <button class="choice-card active" data-c="ca_nhan" style="text-align:left">
+              <div class="icon-shape">1</div>
+              <div class="t">Cá nhân</div>
+              <div class="d">Chỉ mình bạn ghi chép, lưu trên máy, không cần mạng.</div>
+            </button>
+            <button class="choice-card" data-c="gia_dinh" style="text-align:left">
+              <div class="icon-shape">2+</div>
+              <div class="t">Gia đình</div>
+              <div class="d">Chia sẻ sổ với người thân, đồng bộ real-time qua Firebase.</div>
+            </button>
+            <button class="btn-primary" style="margin-top:auto">Tiếp tục</button>
+            <p style="font-size:.62rem;color:var(--ink-soft);text-align:center">Có thể chuyển từ Cá nhân sang Gia đình bất cứ lúc nào</p>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">03 · CHỌN LOẠI SỔ</div><p>Bấm thử 2 thẻ — Cá nhân và Gia đình dùng chung 1 schema, chọn Cá nhân chỉ là family 1 thành viên.</p></div>
+      </div>
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Gia đình</h3>
+      <p>"+ Mời thành viên mới" xuất hiện ngay trên màn quản lý gia đình, không phải đào sâu vào cài đặt mới tìm thấy.</p>
+    </div>
+    <div class="screens-scroll">
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Gia đình <span class="sub">Nhà Nguyễn</span></div>
+          <div class="phone-body">
+            <div>
+              <div class="section-label">Thành viên (2)</div>
+              <div class="fam-member-row"><div class="avatar">V</div><div class="nm">Vợ</div><span class="role-chip">Chủ sổ</span></div>
+              <div class="fam-member-row"><div class="avatar">C</div><div class="nm">Chồng</div><span class="role-chip">Thành viên</span></div>
+            </div>
+            <button class="btn-primary" style="margin-top:0">+ Mời thành viên mới</button>
+            <div>
+              <div class="section-label">Cài đặt sổ</div>
+              <div class="settings-row"><span class="l">Tên sổ</span><span class="r">Nhà Nguyễn ›</span></div>
+              <div class="settings-row"><span class="l">Đồng bộ</span><span class="sync-badge">Cloud</span></div>
+            </div>
+            <button class="danger-link">Rời khỏi gia đình</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">04 · GIA ĐÌNH — QUẢN LÝ</div><p>Danh sách thành viên + nút mời ngay trên màn hình chính.</p></div>
+      </div>
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Cá nhân</h3>
+      <p>Không có danh sách thành viên — chỉ cài đặt riêng của một người, với lối tắt nâng cấp lên Gia đình khi cần.</p>
+    </div>
+    <div class="screens-scroll">
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Cá nhân</div>
+          <div class="phone-body">
+            <div class="fam-member-row"><div class="avatar">B</div><div class="nm">Bạn</div><span class="sync-badge">Local</span></div>
+            <div>
+              <div class="settings-row"><span class="l">Chế độ lưu trữ</span><span class="r">Cục bộ trên máy</span></div>
+              <div class="toggle-row" style="padding:9px 0;border-top:1px solid var(--line)"><span class="lbl" style="font-size:.76rem;color:var(--ink-soft)">Khoá bằng PIN / vân tay</span><button class="switch on"></button></div>
+              <div class="settings-row"><span class="l">Xuất dữ liệu</span><span class="r">CSV / Excel ›</span></div>
+              <div class="settings-row"><span class="l">Nhập từ Sheet cũ</span><span class="r">›</span></div>
+            </div>
+            <div class="upsell-card">
+              <p>Muốn chia sẻ sổ với người thân và đồng bộ real-time?</p>
+              <button class="btn-primary" style="margin-top:0">Chuyển sang Gia đình</button>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">05 · CÁ NHÂN — QUẢN LÝ</div><p>"Chuyển sang Gia đình" migrate dữ liệu local lên Firestore, đổi syncMode — không có màn "nâng cấp" riêng.</p></div>
+      </div>
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Danh mục & Trạng thái</h3>
+      <p>Trọng tâm của đợt cập nhật này — cả hai đều xem/thêm/sửa/xoá được, không còn là hằng số cứng. Thử bấm + và × ở màn 07 để thấy CRUD trạng thái hoạt động thật.</p>
+    </div>
+    <div class="screens-scroll">
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Danh mục <span class="sub">+ thêm</span></div>
+          <div class="phone-body">
+            <div class="cat-group-label">Thu</div>
+            <div class="cat-row"><span class="dot" style="background:var(--jade)"></span><div class="info"><div class="n">Thu nhập</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-group-label">Chi</div>
+            <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div><div class="m">2 trạng thái, tự thêm</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Đầu tư</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Cho đi</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">Dâng hiến</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Đánh dấu Tiết kiệm</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chồng đưa vợ</div><div class="m">Chuyển khoản nội bộ</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Vợ đưa chồng</div><div class="m">Chuyển khoản nội bộ</div></div><span class="chev">›</span></div>
+            <button class="btn-outline" style="margin-top:4px">+ Thêm danh mục</button>
+            <div class="bottom-nav">
+              <div class="tab"><span class="ic"></span>Trang chủ</div>
+              <div class="tab"><span class="ic"></span>Giao dịch</div>
+              <div class="tab tab-center"><span class="ic">+</span></div>
+              <div class="tab active"><span class="ic"></span>Danh mục</div>
+              <div class="tab"><span class="ic"></span>Tổng hợp</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>Nhóm theo Thu/Chi. Sinh hoạt cũng có trạng thái tự thêm — không riêng gì Cho đi/Dâng hiến.</p></div>
+      </div>
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Sửa danh mục <span class="sub" style="color:var(--rust)">Xoá</span></div>
+          <div class="phone-body">
+            <div>
+              <label class="field-label">Tên danh mục</label>
+              <div class="text-input" style="color:var(--ink)">Cho đi</div>
+            </div>
+            <div>
+              <label class="field-label">Phân loại</label>
+              <div class="segmented" id="typeSeg">
+                <button data-t="thu">Thu</button>
+                <button class="active" data-t="chi">Chi</button>
+              </div>
+            </div>
+            <div class="toggle-row" id="savingRow">
+              <span class="lbl">Đánh dấu là Tiết kiệm</span>
+              <button class="switch" id="savingSwitch"></button>
+            </div>
+            <div>
+              <label class="field-label">Màu</label>
+              <div class="swatch-row">
+                <button class="swatch active" style="background:var(--amber)"></button>
+                <button class="swatch" style="background:var(--jade)"></button>
+                <button class="swatch" style="background:var(--slate)"></button>
+                <button class="swatch" style="background:var(--rust)"></button>
+                <button class="swatch" style="background:var(--slate-light)"></button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Trạng thái <span class="hint">(để trống nếu không cần theo dõi)</span></label>
+              <div id="statusEditList">
+                <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">Chưa chuẩn bị</span><button class="rm">×</button></div>
+                <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">Đã chuẩn bị</span><button class="rm">×</button></div>
+                <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">Đã gửi</span><button class="rm">×</button></div>
+              </div>
+              <div class="status-add-row">
+                <input type="text" id="newStatusInput" placeholder="Thêm bước trạng thái...">
+                <button id="addStatusBtn">+</button>
+              </div>
+            </div>
+            <div class="toggle-row" style="background:var(--paper-sunken);border-radius:10px;padding:9px 10px">
+              <span class="lbl" style="font-size:.76rem">Thống kê <span class="hint" style="display:block;font-weight:400;margin-top:2px">Hiện danh mục này ở màn Tổng hợp trạng thái</span></span>
+              <button class="switch on" id="statsToggle"></button>
+            </div>
+            <button class="btn-primary">Lưu danh mục</button>
+            <button class="danger-link">Xoá danh mục này</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Bấm + để thêm bước trạng thái, × để xoá. Công tắc "Thống kê" quyết định danh mục này có hiện ở màn Tổng hợp trạng thái (13) hay không — nhiều danh mục có trạng thái nhưng không phải cái nào cũng cần xem thường xuyên.</p></div>
+      </div>
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Ghi chép hằng ngày</h3>
+      <p>Thêm giao dịch giờ có ô tích "Quỹ tiền ăn" — tích thì vừa trừ số dư người ghi vừa trừ số dư quỹ, không tích thì chỉ trừ số dư như bình thường. Trạng thái của một giao dịch đã ghi cũng đổi được sau đó, không cố định lúc tạo.</p>
+    </div>
+    <div class="screens-scroll">
+
+      <!-- SCREEN 1: HOME -->
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Trang chủ <span class="sub">Th 9, 2026</span></div>
+          <div class="phone-body">
+            <div class="member-row">
+              <div class="member-card">
+                <div class="name">Vợ</div>
+                <div class="bal">4.850.000 đ</div>
+                <div class="mini"><span>TK hiện tại</span><span>1.200.000 đ</span></div>
+                <div class="mini"><span>Đã gửi NH</span><span>8.000.000 đ</span></div>
+              </div>
+              <div class="member-card">
+                <div class="name">Chồng</div>
+                <div class="bal">6.120.000 đ</div>
+                <div class="mini"><span>TK hiện tại</span><span>500.000 đ</span></div>
+                <div class="mini"><span>Đã gửi NH</span><span>5.500.000 đ</span></div>
+              </div>
+            </div>
+            <div class="service-grid">
+              <div class="service-tile"><span class="ic" style="background:var(--jade-soft);color:var(--jade)">+</span>Thêm</div>
+              <div class="service-tile"><span class="ic" style="background:var(--amber-soft);color:var(--amber-dark)">Q</span>Quỹ</div>
+              <div class="service-tile"><span class="ic" style="background:var(--slate-soft);color:var(--slate)">NS</span>Ngân sách</div>
+              <div class="service-tile"><span class="ic" style="background:var(--rust-soft);color:var(--rust)">TK</span>Tiết kiệm</div>
+            </div>
+            <div class="stat-strip"><span>Tỷ lệ tiết kiệm tháng này</span><span class="v">31%</span></div>
+            <div>
+              <div class="section-label">Hôm nay · 15/09</div>
+              <div class="tx-row">
+                <span class="tx-dot" style="background:var(--slate)"></span>
+                <div class="tx-main"><div class="n">Lương tháng 9</div><div class="m">Thu nhập · Chồng</div></div>
+                <div class="tx-amt pos">+16.000.000</div>
+              </div>
+              <div class="tx-row">
+                <span class="tx-dot" style="background:var(--ink-soft)"></span>
+                <div class="tx-main"><div class="n">Đi chợ</div><div class="m">Sinh hoạt · Vợ</div></div>
+                <div class="tx-amt neg">-180.000</div>
+              </div>
+              <div class="tx-row">
+                <span class="tx-dot" style="background:var(--amber)"></span>
+                <div class="tx-main"><div class="n">Ủng hộ quỹ lớp</div><div class="m">Cho đi · Vợ</div></div>
+                <div class="tx-amt neg">-500.000</div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="tab active"><span class="ic"></span>Trang chủ</div>
+              <div class="tab"><span class="ic"></span>Giao dịch</div>
+              <div class="tab tab-center"><span class="ic">+</span></div>
+              <div class="tab"><span class="ic"></span>Danh mục</div>
+              <div class="tab"><span class="ic"></span>Tổng hợp</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">08 · TRANG CHỦ</div><p>Số dư/tiết kiệm riêng từng thành viên (memberBalances) + tỷ lệ tiết kiệm tháng + giao dịch gần nhất.</p></div>
+      </div>
+
+      <!-- SCREEN 2: ADD TRANSACTION -->
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Thêm giao dịch</div>
+          <div class="phone-body">
+            <div>
+              <label class="field-label">Hạng mục</label>
+              <div class="cat-group-label" style="margin-top:6px">Thu</div>
+              <div class="chip-grid">
+                <button class="cat-chip" data-cat="thu_nhap" style="--c:var(--jade)">Thu nhập</button>
+              </div>
+              <div class="cat-group-label" style="margin-top:6px">Chi</div>
+              <div class="chip-grid" id="catGrid">
+                <button class="cat-chip active" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
+                <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
+                <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
+                <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
+                <button class="cat-chip" data-cat="tiet_kiem" style="--c:var(--slate-light)">Tiết kiệm</button>
+                <button class="cat-chip" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
+                <button class="cat-chip" data-cat="chong_dua_vo" style="--c:var(--grey-transfer)">Chồng đưa vợ</button>
+                <button class="cat-chip" data-cat="vo_dua_chong" style="--c:var(--grey-transfer)">Vợ đưa chồng</button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Số tiền</label>
+              <div class="amount-input">200.000 <span>đ</span></div>
+            </div>
+            <div>
+              <label class="field-label">Người ghi</label>
+              <div class="person-toggle">
+                <button class="active">Vợ</button>
+                <button>Chồng</button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Ghi chú</label>
+              <div class="text-input">Mua đồ ăn</div>
+            </div>
+            <div>
+              <label class="field-label">Dùng quỹ <span class="hint">(tuỳ chọn — trừ luôn cả số dư và quỹ)</span></label>
+              <div class="fund-pick-row">
+                <button class="fund-pick" data-bal="none">Không dùng quỹ</button>
+                <button class="fund-pick active" data-bal="1850000">Quỹ tiền ăn <span class="b">còn 1.850.000đ</span></button>
+                <button class="fund-pick" data-bal="100000">Quỹ sinh hoạt <span class="b">còn 100.000đ</span></button>
+              </div>
+              <p class="fund-warn" id="fundWarn" hidden></p>
+            </div>
+            <div class="status-stepper" id="statusStepper" hidden>
+              <label class="field-label">Trạng thái <span class="hint">category.statuses</span></label>
+              <div class="stepper-track" id="stepperTrack"></div>
+            </div>
+            <button class="btn-primary">Lưu giao dịch</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">09 · THÊM GIAO DỊCH</div><p>Bấm "Quỹ sinh hoạt" (chỉ còn 100.000đ, nhỏ hơn 200.000đ đang nhập) để thấy cảnh báo âm quỹ — không cho chọn. "Quỹ tiền ăn" đủ tiền nên chọn được bình thường.</p></div>
+      </div>
+
+      <!-- SCREEN 3: TRANSACTION LIST -->
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Giao dịch</div>
+          <div class="phone-body">
+            <div class="month-switch"><button>‹</button><span>Tháng 9, 2026</span><button>›</button></div>
+            <div class="day-group">
+              <div class="day-head"><span>14/09 · Chủ Nhật</span><b>-320.000 đ</b></div>
+              <div class="tx-row"><span class="tx-dot" style="background:var(--ink-soft)"></span>
+                <div class="tx-main"><div class="n">Ăn sáng</div><div class="m">Sinh hoạt · Chồng</div></div>
+                <div class="tx-amt neg">-45.000</div></div>
+              <div class="tx-row"><span class="tx-dot" style="background:var(--ink-soft)"></span>
+                <div class="tx-main"><div class="n">Đi chợ</div><div class="m">Sinh hoạt · Vợ</div></div>
+                <div class="tx-amt neg">-275.000</div></div>
+            </div>
+            <div class="day-group">
+              <div class="day-head"><span>13/09 · Thứ Bảy</span><b>+16.000.000 đ</b></div>
+              <div class="tx-row"><span class="tx-dot" style="background:var(--jade)"></span>
+                <div class="tx-main"><div class="n">Lương tháng 9</div><div class="m">Thu nhập · Chồng</div></div>
+                <div class="tx-amt pos">+16.000.000</div></div>
+            </div>
+            <div class="day-group">
+              <div class="day-head"><span>10/09 · Thứ Tư</span><b>-500.000 đ</b></div>
+              <div class="tx-row"><span class="tx-dot" style="background:var(--amber)"></span>
+                <div class="tx-main"><div class="n">Ủng hộ quỹ lớp</div><div class="m">Cho đi · Vợ</div><span class="status-chip">Đã chuẩn bị</span></div>
+                <div class="tx-amt neg">-500.000</div></div>
+            </div>
+            <div class="bottom-nav">
+              <div class="tab"><span class="ic"></span>Trang chủ</div>
+              <div class="tab active"><span class="ic"></span>Giao dịch</div>
+              <div class="tab tab-center"><span class="ic">+</span></div>
+              <div class="tab"><span class="ic"></span>Danh mục</div>
+              <div class="tab"><span class="ic"></span>Tổng hợp</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">10 · DANH SÁCH</div><p>Nhóm theo ngày kèm tổng ngày, chuyển tháng bằng mũi tên, chip trạng thái hiện đúng cho hạng mục có theo dõi.</p></div>
+      </div>
+
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Chi tiết giao dịch</div>
+          <div class="phone-body">
+            <div class="tx-row" style="border-top:none">
+              <span class="tx-dot" style="background:var(--amber-dark)"></span>
+              <div class="tx-main"><div class="n">Dâng hiến tháng 9</div><div class="m">Dâng hiến · Vợ · 10/09</div></div>
+              <div class="tx-amt neg">-500.000</div>
+            </div>
+            <div>
+              <label class="field-label">Trạng thái <span class="hint">bấm để đổi</span></label>
+              <div class="stepper-track" id="detailStepper" style="margin-top:8px"></div>
+              <p id="detailStatusNote" style="font-size:.6rem;color:var(--ink-soft);margin-top:8px">Cập nhật lần cuối: 10/09/2026</p>
+            </div>
+            <button class="btn-primary">Lưu thay đổi</button>
+            <button class="danger-link">Xoá giao dịch</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">11 · CHI TIẾT & ĐỔI TRẠNG THÁI</div><p>Trạng thái không cố định lúc tạo — bấm thử từng bước: hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", rồi "Đã dâng".</p></div>
+      </div>
+
+    </div>
+
+    <div class="screen-group-head">
+      <h3>Tổng hợp, Quỹ & Tiết kiệm</h3>
+      <p>Quỹ giờ quản lý như danh sách nhiều envelope riêng (không còn 1 quỹ cố định). Tiết kiệm tách hẳn khỏi Quỹ — có màn quản lý riêng với rút về ví chính / gửi ngân hàng.</p>
+    </div>
+    <div class="screens-scroll">
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Tổng hợp <span class="sub">Th 9</span></div>
+          <div class="phone-body">
+            <div class="donut-wrap">
+              <div class="donut">
+                <div class="donut-label"><b>31%</b><span>tiết kiệm</span></div>
+              </div>
+            </div>
+            <div class="legend-list">
+              <div class="legend-row"><span class="dot" style="background:var(--ink-soft)"></span><span class="lbl">Sinh hoạt</span><span class="pct">38%</span></div>
+              <div class="legend-row"><span class="dot" style="background:var(--slate)"></span><span class="lbl">Đầu tư</span><span class="pct">18%</span></div>
+              <div class="legend-row"><span class="dot" style="background:var(--amber)"></span><span class="lbl">Cho đi</span><span class="pct">14%</span></div>
+              <div class="legend-row"><span class="dot" style="background:var(--amber-dark)"></span><span class="lbl">Dâng hiến</span><span class="pct">10%</span></div>
+              <div class="legend-row"><span class="dot" style="background:var(--rust)"></span><span class="lbl">Tự thưởng</span><span class="pct">8%</span></div>
+              <div class="legend-row"><span class="dot" style="background:var(--slate-light)"></span><span class="lbl">Tiết kiệm</span><span class="pct">12%</span></div>
+            </div>
+            <div class="stat-strip" style="background:var(--paper-sunken)"><span>Tổng chi (Chi phí + Tiết kiệm)</span><span class="v" style="color:var(--ink)">11.000.000 đ</span></div>
+            <div class="status-card">
+              <div class="title"><span>Cho đi</span><span>1.500.000 đ</span></div>
+              <div class="progress-bar"><span class="seg" style="width:20%;background:var(--line)"></span><span class="seg" style="width:40%;background:var(--amber-soft)"></span><span class="seg" style="width:40%;background:var(--amber)"></span></div>
+              <div class="status-breakdown">
+                <div class="sb-row"><span>Chưa chuẩn bị</span><span>300.000 đ</span></div>
+                <div class="sb-row"><span>Đã chuẩn bị</span><span>600.000 đ</span></div>
+                <div class="sb-row current"><span>Đã gửi</span><span>600.000 đ</span></div>
+              </div>
+            </div>
+            <div class="status-card">
+              <div class="title"><span>Dâng hiến</span><span>1.100.000 đ</span></div>
+              <div class="progress-bar"><span class="seg" style="width:0%;background:var(--line)"></span><span class="seg" style="width:20%;background:var(--amber-soft)"></span><span class="seg" style="width:80%;background:var(--amber-dark)"></span></div>
+              <div class="status-breakdown">
+                <div class="sb-row"><span>Chưa chuẩn bị</span><span>0 đ</span></div>
+                <div class="sb-row"><span>Đã chuẩn bị</span><span>200.000 đ</span></div>
+                <div class="sb-row current"><span>Đã dâng</span><span>900.000 đ</span></div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="tab"><span class="ic"></span>Trang chủ</div>
+              <div class="tab"><span class="ic"></span>Giao dịch</div>
+              <div class="tab tab-center"><span class="ic">+</span></div>
+              <div class="tab"><span class="ic"></span>Danh mục</div>
+              <div class="tab active"><span class="ic"></span>Tổng hợp</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">12 · TỔNG HỢP</div><p>Biểu đồ tròn theo hạng mục + card trạng thái tự sinh theo <code>category.statuses</code>, cộng tổng tiền theo từng bước — chạm 1 dòng để xem danh sách (màn 13).</p></div>
+      </div>
+
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Trạng thái <span class="sub">Cho đi</span></div>
+          <div class="phone-body">
+            <div class="segmented" id="statusFilterSeg">
+              <button class="active" data-s="0">Chưa chuẩn bị</button>
+              <button data-s="1">Đã chuẩn bị</button>
+              <button data-s="2">Đã gửi</button>
+            </div>
+            <div class="stat-strip"><span>Tổng tiền ở bước này</span><span class="v" id="statusFilterTotal">300.000 đ</span></div>
+            <div id="statusFilterList"></div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">13 · TRẠNG THÁI — CHI TIẾT</div><p>Bấm từng bước để xem danh sách + tổng tiền — phục vụ đối chiếu cuối tháng: khoản nào còn "Chưa chuẩn bị" cần nhắc, khoản nào "Đã gửi" xong.</p></div>
+      </div>
+
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Quỹ <span class="sub">+ tạo mới</span></div>
+          <div class="phone-body">
+            <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Quỹ tiền ăn</div><div class="m">1.850.000 đ</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Quỹ sinh hoạt</div><div class="m">100.000 đ</div></div><span class="chev">›</span></div>
+            <button class="btn-outline" style="margin-top:4px">+ Tạo quỹ mới</button>
+            <p style="font-size:.66rem;color:var(--ink-soft)">Mỗi quỹ là một envelope riêng — gia đình đặt tên tự do, không giới hạn số lượng.</p>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">14 · QUỸ — DANH SÁCH</div><p>Tạo được nhiều quỹ (tiền ăn, sinh hoạt...) — không còn cố định 1 quỹ duy nhất như bản trước.</p></div>
+      </div>
+
+      <!-- SCREEN 5: FUND -->
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Quỹ tiền ăn</div>
+          <div class="phone-body">
+            <div class="fund-balance">
+              <div class="lbl">Số dư quỹ</div>
+              <div class="val">1.850.000 đ</div>
+            </div>
+            <div class="fund-btns">
+              <button class="btn-outline">Nạp quỹ</button>
+              <button class="btn-primary" style="margin-top:0">Ghi khoản mua</button>
+            </div>
+            <div>
+              <div class="section-label">Lịch sử <span style="font-weight:400;text-transform:none;letter-spacing:0">· mỗi dòng cũng đã trừ số dư người thực hiện</span></div>
+              <div class="fund-entry"><div><div class="n">Nạp quỹ</div><div class="d">01/09 · Vợ</div></div><div class="tx-amt pos">+2.000.000</div></div>
+              <div class="fund-entry"><div><div class="n">Đi chợ cuối tuần</div><div class="d">07/09 · Vợ</div></div><div class="tx-amt neg">-150.000</div></div>
+              <div class="fund-entry"><div><div class="n">Thịt bò, rau</div><div class="d">12/09 · Chồng</div></div><div class="tx-amt neg">-95.000</div></div>
+              <div class="fund-entry"><div><div class="n">Mua đồ ăn</div><div class="d">14/09 · Vợ</div></div><div class="tx-amt neg">-200.000</div></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">15 · QUỸ TIỀN ĂN — CHI TIẾT</div><p>Nạp quỹ và mua có tích quỹ đều là giao dịch thật, trừ luôn số dư người thực hiện (xem màn 09) — quỹ không còn là sổ tách biệt hoàn toàn.</p></div>
+      </div>
+
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Tiết kiệm</div>
+          <div class="phone-body">
+            <div class="fund-balance" style="background:linear-gradient(135deg,var(--slate),var(--jade-deep))">
+              <div class="lbl">Tổng tiết kiệm</div>
+              <div class="val">10.500.000 đ</div>
+            </div>
+            <div class="member-row">
+              <div class="member-card"><div class="name">Hiện tại</div><div class="bal">500.000 đ</div></div>
+              <div class="member-card"><div class="name">Đã gửi NH</div><div class="bal">10.000.000 đ</div></div>
+            </div>
+            <div class="fund-btns">
+              <button class="btn-outline">Rút về ví chính</button>
+              <button class="btn-primary" style="margin-top:0">Gửi ngân hàng</button>
+            </div>
+            <div>
+              <div class="section-label">Lịch sử</div>
+              <div class="fund-entry"><div><div class="n">Gửi ngân hàng</div><div class="d">15/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">10.000.000</div></div>
+              <div class="fund-entry"><div><div class="n">Rút về ví chính</div><div class="d">15/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">500.000</div></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">16 · TIẾT KIỆM — QUẢN LÝ</div><p>Ví dụ: có 11.000.000 tiết kiệm → rút 500.000 về ví chính để tiêu, gửi 10.000.000 vào ngân hàng, còn lại 500.000 "hiện tại". Bấm 1 trong 2 nút mở màn nhập giao dịch (17).</p></div>
+      </div>
+
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Nhập giao dịch tiết kiệm</div>
+          <div class="phone-body">
+            <div>
+              <label class="field-label">Loại hình</label>
+              <div class="segmented" id="savingsTypeSeg">
+                <button class="active" data-t="rut">Rút về ví chính</button>
+                <button data-t="gui">Gửi ngân hàng</button>
+              </div>
+            </div>
+            <div>
+              <label class="field-label">Số tiền</label>
+              <div class="amount-input">500.000 <span>đ</span></div>
+            </div>
+            <div>
+              <label class="field-label">Ghi chú</label>
+              <div class="text-input">Rút tiêu Tết</div>
+            </div>
+            <div class="settings-row"><span class="l">Ngày ghi nhận</span><span class="r">16/09/2026 · tự động</span></div>
+            <button class="btn-primary">Lưu giao dịch</button>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">17 · TIẾT KIỆM — NHẬP GIAO DỊCH</div><p>Mở khi bấm "Rút về ví chính" hoặc "Gửi ngân hàng" ở màn 16 — nhập số tiền, ghi chú; ngày tháng hệ thống tự lưu (<code>createdAt</code>), không cho sửa tay.</p></div>
+      </div>
+
+      <!-- SCREEN 6: INVITE -->
+      <div class="screen-col">
+        <div class="phone"><div class="phone-screen">
+          <div class="phone-notch"></div>
+          <div class="phone-head">Mời thành viên</div>
+          <div class="phone-body">
+            <div class="invite-code">
+              <div class="code">7K9-QXZ</div>
+              <div class="exp">Hết hạn sau 6 ngày · 21/09/2026</div>
+            </div>
+            <button class="btn-primary" style="margin-top:0">Chia sẻ đường link</button>
+            <div>
+              <div class="section-label">Thành viên hiện tại</div>
+              <div class="member-list-row"><span>Vợ</span><span class="role-chip">Chủ sổ</span></div>
+              <div class="member-list-row"><span>Chồng</span><span class="role-chip">Thành viên</span></div>
+            </div>
+          </div>
+        </div></div>
+        <div class="screen-caption"><div class="tag">18 · MỜI THÀNH VIÊN</div><p>Mở ra khi bấm "+ Mời thành viên mới" ở màn 04. Mã ngẫu nhiên 6-8 ký tự có hạn dùng, Android App Links thay vì Firebase Dynamic Links (đã ngừng hỗ trợ).</p></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="block" id="confirm">
+    <div class="confirm">
+      <div class="eyebrow">Trước khi bắt đầu code</div>
+      <h2>Cần bạn chốt những điểm này</h2>
+      <ol>
+        <li><b>Phạm vi use case</b> — 9 nhóm/35 use case (mới thêm Khởi động, Danh mục & Trạng thái, chuyển đổi trạng thái, tạo nhiều Quỹ, Tiết kiệm) đã đủ cho Giai đoạn A–D chưa?</li>
+        <li><b>Công thức Tổng thu = Tổng chi + Số tiền còn lại</b> (Tổng chi = Chi phí + Tiết kiệm) — đúng cách bạn muốn tính chưa? Tiết kiệm chỉ là 1 category thuộc Chi, có ổn không?</li>
+        <li><b>Quỹ tiền ăn trừ kép</b> — nạp quỹ và khoản chi tích 1 quỹ (màn 09, có thể chọn "Không dùng quỹ") đều trừ cả số dư người thực hiện lẫn số dư quỹ; không tích thì chỉ trừ số dư như bình thường (màn 15). Đúng luồng bạn mô tả chưa?</li>
+        <li><b>Danh mục & Trạng thái CRUD</b> — màn 06/07 cho xem/thêm/sửa/xoá danh mục và từng bước trạng thái (kể cả Sinh hoạt) — đúng ý chưa?</li>
+        <li><b>Đổi trạng thái sau khi ghi</b> — màn 11 cho bấm lại để chuyển trạng thái một giao dịch đã có (không cố định lúc tạo) — đủ chưa hay cần thêm gì (vd nhắc trạng thái "già")?</li>
+        <li><b>Luồng khởi động & Gia đình/Cá nhân</b> — Chào mừng → Đăng nhập/Bỏ qua → Chọn loại sổ (màn 01-03), cộng màn Gia đình (04) và Cá nhân (05) — có bước nào thừa/thiếu?</li>
+        <li><b>Quỹ tạo được nhiều cái + chặn âm quỹ</b> — màn 14 (danh sách quỹ) và màn 09 (thử bấm "Quỹ sinh hoạt" để thấy cảnh báo) — đúng luồng bạn mô tả chưa?</li>
+        <li><b>Tiết kiệm quản lý riêng</b> — màn 16-17: rút về ví chính / gửi ngân hàng qua màn nhập giao dịch riêng (số tiền + ghi chú, ngày tự động), ví dụ khớp đúng số bạn đưa (11tr → rút 500k, gửi NH 10tr, còn 500k hiện tại) — đúng chưa?</li>
+        <li><b>Thống kê theo trạng thái</b> — màn 13: xem tổng tiền + danh sách giao dịch theo từng bước (Chưa chuẩn bị/Đã chuẩn bị/Đã gửi) để đối chiếu cuối tháng — đủ chưa hay cần thêm cột nào?</li>
+        <li><b>Giao diện đổi hướng fintech</b> — nền xanh dương, thẻ trắng, lưới icon phẳng, thanh tab dưới kiểu Zalopay — đây có phải đúng hướng bạn muốn, hay cần chỉnh màu/kiểu chữ gì thêm?</li>
+      </ol>
+      <div class="cta">Trả lời trong chat — OK từng mục hoặc góp ý cần sửa gì. Sau khi chốt, mình bắt đầu code theo đúng bản vẽ này, bắt đầu từ phase còn lại của Giai đoạn A.</div>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <div class="wrap" style="display:flex;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px;">
+    <span>Ví Nhà Mình · bản nháp thiết kế, chưa code</span>
+    <span>Nguồn: spec.md · CLAUDE.md</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var statusMap = {
+    thu_nhap: [], dau_tu: [], tu_thuong: [], tiet_kiem: [],
+    sinh_hoat: ['Đã lên kế hoạch','Đã chi'],
+    cho_di: ['Chưa chuẩn bị','Đã chuẩn bị','Đã gửi'],
+    dang_hien: ['Chưa chuẩn bị','Đã chuẩn bị','Đã dâng'],
+    chong_dua_vo: [], vo_dua_chong: []
+  };
+  var stepper = document.getElementById('statusStepper');
+  var track = document.getElementById('stepperTrack');
+  function renderStepper(cat, currentIdx){
+    var steps = statusMap[cat] || [];
+    if(!steps.length){ if(stepper) stepper.hidden = true; return; }
+    if(!stepper) return;
+    stepper.hidden = false;
+    track.innerHTML = steps.map(function(s,i){
+      return '<div class="step'+(i===currentIdx?' current':'')+'"><span class="dot"></span>'+s+'</div>';
+    }).join('');
+  }
+  var grid = document.getElementById('catGrid');
+  if(grid){
+    grid.querySelectorAll('.cat-chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        grid.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderStepper(btn.dataset.cat, 1);
+      });
+    });
+  }
+  renderStepper('sinh_hoat', 1);
+
+  var demoAmount = 200000;
+  var fundWarn = document.getElementById('fundWarn');
+  document.querySelectorAll('.fund-pick').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if(btn.dataset.bal === 'none'){
+        if(fundWarn) fundWarn.hidden = true;
+        document.querySelectorAll('.fund-pick').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        return;
+      }
+      var bal = parseInt(btn.dataset.bal, 10);
+      if(bal < demoAmount){
+        if(fundWarn){
+          fundWarn.hidden = false;
+          fundWarn.textContent = 'Vượt số dư quỹ — quỹ này còn ' + bal.toLocaleString('vi-VN') + 'đ, không thể trừ âm.';
+        }
+        return;
+      }
+      if(fundWarn) fundWarn.hidden = true;
+      document.querySelectorAll('.fund-pick').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
+
+  document.querySelectorAll('.switch').forEach(function(sw){
+    if(sw.id === 'fundToggle') return;
+    sw.addEventListener('click', function(){ sw.classList.toggle('on'); });
+  });
+
+  var chooseBody = document.getElementById('chooseTypeBody');
+  if(chooseBody){
+    chooseBody.querySelectorAll('.choice-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        chooseBody.querySelectorAll('.choice-card').forEach(function(c){ c.classList.remove('active'); });
+        card.classList.add('active');
+      });
+    });
+  }
+
+  var typeSeg = document.getElementById('typeSeg');
+  var savingRow = document.getElementById('savingRow');
+  if(typeSeg){
+    typeSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        typeSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        if(savingRow) savingRow.hidden = (btn.dataset.t === 'thu');
+      });
+    });
+  }
+
+  var savingsSeg = document.getElementById('savingsTypeSeg');
+  if(savingsSeg){
+    savingsSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        savingsSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+    });
+  }
+
+  var statusFilterData = [
+    { total: '300.000 đ', items: [
+      { n: 'Ủng hộ quỹ lớp con B', m: 'Vợ · 08/09', amt: '-300.000' }
+    ]},
+    { total: '600.000 đ', items: [
+      { n: 'Cho bạn mượn', m: 'Chồng · 10/09', amt: '-600.000' }
+    ]},
+    { total: '600.000 đ', items: [
+      { n: 'Ủng hộ quỹ lớp', m: 'Vợ · 10/09', amt: '-600.000' }
+    ]}
+  ];
+  var statusFilterSeg = document.getElementById('statusFilterSeg');
+  var statusFilterTotal = document.getElementById('statusFilterTotal');
+  var statusFilterList = document.getElementById('statusFilterList');
+  function renderStatusFilter(idx){
+    var d = statusFilterData[idx];
+    if(statusFilterTotal) statusFilterTotal.textContent = d.total;
+    if(statusFilterList){
+      statusFilterList.innerHTML = d.items.map(function(it){
+        return '<div class="tx-row"><span class="tx-dot" style="background:var(--amber)"></span>'
+          + '<div class="tx-main"><div class="n">'+it.n+'</div><div class="m">'+it.m+'</div></div>'
+          + '<div class="tx-amt neg">'+it.amt+'</div></div>';
+      }).join('');
+    }
+  }
+  if(statusFilterSeg){
+    statusFilterSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        statusFilterSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderStatusFilter(parseInt(btn.dataset.s, 10));
+      });
+    });
+    renderStatusFilter(0);
+  }
+
+  document.querySelectorAll('.swatch-row').forEach(function(row){
+    row.querySelectorAll('.swatch').forEach(function(sw){
+      sw.addEventListener('click', function(){
+        row.querySelectorAll('.swatch').forEach(function(s){ s.classList.remove('active'); });
+        sw.classList.add('active');
+      });
+    });
+  });
+
+  var statusList = document.getElementById('statusEditList');
+  var newStatusInput = document.getElementById('newStatusInput');
+  var addStatusBtn = document.getElementById('addStatusBtn');
+  function bindRemove(row){
+    row.querySelector('.rm').addEventListener('click', function(){ row.remove(); });
+  }
+  if(statusList){
+    statusList.querySelectorAll('.status-edit-row').forEach(bindRemove);
+  }
+  if(addStatusBtn){
+    addStatusBtn.addEventListener('click', function(){
+      var val = (newStatusInput.value || '').trim();
+      if(!val) return;
+      var row = document.createElement('div');
+      row.className = 'status-edit-row';
+      row.innerHTML = '<span class="handle">⋮⋮</span><span class="txt"></span><button class="rm">×</button>';
+      row.querySelector('.txt').textContent = val;
+      statusList.appendChild(row);
+      bindRemove(row);
+      newStatusInput.value = '';
+      newStatusInput.focus();
+    });
+  }
+
+  var detailStepper = document.getElementById('detailStepper');
+  var detailNote = document.getElementById('detailStatusNote');
+  if(detailStepper){
+    var detailSteps = statusMap.dang_hien;
+    var detailCurrent = 0;
+    function renderDetail(){
+      detailStepper.innerHTML = detailSteps.map(function(s,i){
+        return '<div class="step'+(i===detailCurrent?' current':'')+'" data-i="'+i+'" style="cursor:pointer"><span class="dot"></span>'+s+'</div>';
+      }).join('');
+      detailStepper.querySelectorAll('.step').forEach(function(el){
+        el.addEventListener('click', function(){
+          detailCurrent = parseInt(el.dataset.i, 10);
+          renderDetail();
+          if(detailNote) detailNote.textContent = 'Cập nhật lần cuối: hôm nay · ' + detailSteps[detailCurrent];
+        });
+      });
+    }
+    renderDetail();
+  }
+
+  var links = document.querySelectorAll('#navPills a');
+  var sections = Array.prototype.map.call(links, function(a){ return document.querySelector(a.getAttribute('href')); });
+  function onScroll(){
+    var y = window.scrollY + 120;
+    var idx = 0;
+    sections.forEach(function(sec, i){ if(sec && sec.offsetTop <= y) idx = i; });
+    links.forEach(function(a,i){ a.classList.toggle('active', i===idx); });
+  }
+  document.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+})();
+</script>
