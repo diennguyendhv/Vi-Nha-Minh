@@ -1151,20 +1151,33 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">10 · DANH SÁCH</div><p>Nhóm theo ngày kèm tổng ngày, chuyển tháng bằng mũi tên, chip trạng thái hiện đúng cho hạng mục có theo dõi.</p></div>
+        <div class="screen-caption"><div class="tag">10 · DANH SÁCH</div><p>Nhóm theo ngày kèm tổng ngày, chuyển tháng bằng mũi tên, chip trạng thái hiện đúng cho hạng mục có theo dõi. Bấm 1 dòng bất kỳ mở màn Chi tiết (11) để sửa.</p></div>
       </div>
 
       <div class="screen-col">
         <div class="phone"><div class="phone-screen">
           <div class="phone-notch"></div>
-          <div class="phone-head">Chi tiết giao dịch</div>
+          <div class="phone-head">Chi tiết giao dịch <span class="sub">10/09 · Vợ</span></div>
           <div class="phone-body">
-            <div class="tx-row" style="border-top:none">
-              <span class="tx-dot" style="background:var(--amber-dark)"></span>
-              <div class="tx-main"><div class="n">Dâng hiến tháng 9</div><div class="m">Dâng hiến · Vợ · 10/09</div></div>
-              <div class="tx-amt neg">-500.000</div>
+            <div>
+              <label class="field-label">Hạng mục</label>
+              <div class="chip-grid" id="detailCatGrid">
+                <button class="cat-chip" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
+                <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
+                <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
+                <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
+                <button class="cat-chip active" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
+              </div>
             </div>
             <div>
+              <label class="field-label">Số tiền</label>
+              <div class="amount-input">500.000 <span>đ</span></div>
+            </div>
+            <div>
+              <label class="field-label">Ghi chú</label>
+              <div class="text-input">Dâng hiến tháng 9</div>
+            </div>
+            <div id="detailStatusBlock">
               <label class="field-label">Trạng thái <span class="hint">bấm để đổi</span></label>
               <div class="stepper-track" id="detailStepper" style="margin-top:8px"></div>
               <p id="detailStatusNote" style="font-size:.6rem;color:var(--ink-soft);margin-top:8px">Cập nhật lần cuối: 10/09/2026</p>
@@ -1173,7 +1186,7 @@ erDiagram
             <button class="danger-link">Xoá giao dịch</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">11 · CHI TIẾT & ĐỔI TRẠNG THÁI</div><p>Trạng thái không cố định lúc tạo — bấm thử từng bước: hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", rồi "Đã dâng".</p></div>
+        <div class="screen-caption"><div class="tag">11 · CHI TIẾT & ĐỔI TRẠNG THÁI</div><p>Bấm vào bất kỳ dòng lịch sử nào (màn 10, 13, 15, 16...) đều mở đúng màn này — sửa được cả danh mục, số tiền, ghi chú lẫn trạng thái, không chỉ trạng thái. Đổi danh mục ở đây cũng đổi luôn bộ bước trạng thái bên dưới. Sửa số tiền/danh mục đi qua reversal ledger (<code>docs/financial-core-v2.md</code> mục 21) — không ghi đè bản gốc.</p></div>
       </div>
 
     </div>
@@ -1680,22 +1693,39 @@ erDiagram
 
   var detailStepper = document.getElementById('detailStepper');
   var detailNote = document.getElementById('detailStatusNote');
-  if(detailStepper){
-    var detailSteps = statusMap.dang_hien;
-    var detailCurrent = 0;
-    function renderDetail(){
-      detailStepper.innerHTML = detailSteps.map(function(s,i){
-        return '<div class="step'+(i===detailCurrent?' current':'')+'" data-i="'+i+'" style="cursor:pointer"><span class="dot"></span>'+s+'</div>';
-      }).join('');
-      detailStepper.querySelectorAll('.step').forEach(function(el){
-        el.addEventListener('click', function(){
-          detailCurrent = parseInt(el.dataset.i, 10);
-          renderDetail();
-          if(detailNote) detailNote.textContent = 'Cập nhật lần cuối: hôm nay · ' + detailSteps[detailCurrent];
-        });
-      });
+  var detailStatusBlock = document.getElementById('detailStatusBlock');
+  var detailCatGrid = document.getElementById('detailCatGrid');
+  var detailSteps = statusMap.dang_hien;
+  var detailCurrent = 1;
+  function renderDetail(){
+    if(!detailStepper) return;
+    if(!detailSteps.length){
+      if(detailStatusBlock) detailStatusBlock.hidden = true;
+      return;
     }
-    renderDetail();
+    if(detailStatusBlock) detailStatusBlock.hidden = false;
+    detailStepper.innerHTML = detailSteps.map(function(s,i){
+      return '<div class="step'+(i===detailCurrent?' current':'')+'" data-i="'+i+'" style="cursor:pointer"><span class="dot"></span>'+s+'</div>';
+    }).join('');
+    detailStepper.querySelectorAll('.step').forEach(function(el){
+      el.addEventListener('click', function(){
+        detailCurrent = parseInt(el.dataset.i, 10);
+        renderDetail();
+        if(detailNote) detailNote.textContent = 'Cập nhật lần cuối: hôm nay · ' + detailSteps[detailCurrent];
+      });
+    });
+  }
+  if(detailStepper) renderDetail();
+  if(detailCatGrid){
+    detailCatGrid.querySelectorAll('.cat-chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        detailCatGrid.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        detailSteps = statusMap[btn.dataset.cat] || [];
+        detailCurrent = 0;
+        renderDetail();
+      });
+    });
   }
 
   var links = document.querySelectorAll('#navPills a');
