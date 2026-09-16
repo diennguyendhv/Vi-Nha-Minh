@@ -50,6 +50,8 @@ Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật
 
 **Mẫu "tiền hộ người khác" (thu nhập có phần phải trả lại) — dùng Category + Status có sẵn, không cần cơ chế mới:** ví dụ thu học phí dạy kèm 2.000.000đ nhưng phải trả 1.000.000đ tiền công cho giáo viên thuê ngoài (không phải thành viên gia đình) — **không nhập số âm vào Thu nhập** (vi phạm `amountMinor` luôn dương, xem Invariant 12 ở `docs/financial-core-v2.md`). Thay vào đó ghi **2 giao dịch riêng**: 1 `INCOME` "Học phí" +2.000.000đ, và 1 `EXPENSE` dưới category tự tạo (vd "Trả tiền dạy kèm") có `statuses: ["Chưa gửi", "Đã gửi"]` −1.000.000đ — đúng cơ chế trạng thái đã có cho Cho đi/Dâng hiến, để biết còn nợ ai bao nhiêu chưa trả. Số dư ròng vẫn tăng đúng 1.000.000đ; `Tổng thu`/`Tổng chi` hiện đúng cả 2 chiều tiền thay vì gộp tắt thành 1 số net, minh bạch hơn khi xem lại báo cáo.
 
+**"Thu nhập ròng" — xem nhanh phần còn lại sau khi trừ khoản phải trả, không cần tự cộng trừ 2 category bằng tay.** Category `type=INCOME` có thêm field tuỳ chọn **`linkedExpenseCategoryId`**, trỏ tới 1 category `type=EXPENSE` khác (vd "Học phí" liên kết "Trả lương giáo viên"). Khi đã liên kết, màn Danh mục/Tổng hợp tự tính và hiện thêm dòng **"Thu nhập ròng" = Tổng thu category Thu − Tổng chi category Chi liên kết (cộng cả trạng thái Chưa gửi lẫn Đã gửi, vì tiền đã bị trừ khỏi số dư ngay lúc ghi, status chỉ là nhãn tiến độ)**. Đây **chỉ là số hiển thị thêm** — không đổi cách tính `Tổng thu`/`Tổng chi`/`Tổng tài sản` ở mục công thức tài chính, và **không gộp 2 giao dịch thành 1** (vẫn ghi Thu/Chi riêng như trên) — field này thuần để nối 2 category lại với nhau cho mục đích báo cáo, phần lớn category Thu khác (Lương, Thu nhập khác...) để trống. Xem field đầy đủ + test case ở `docs/financial-core-v2.md` mục 11, 17, 24 (Test 18).
+
 Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nhất cho mọi loại**: nếu `sourceKind ≠ EXTERNAL` thì trừ `amountMinor` khỏi pool nguồn; nếu `destinationKind ≠ EXTERNAL` thì cộng `amountMinor` vào pool đích. Không có nhánh if/else riêng theo category — xem code mẫu ở `docs/financial-core-v2.md` mục 6.
 
 **Trạng thái (`statuses`) là bảng con CRUD được, áp dụng cho mọi danh mục, không riêng Cho đi/Dâng hiến:** `families/{familyId}/categories/{categoryId}/statuses/{statusId}` gồm `name` (tự đặt) và `sortOrder` (tự sắp xếp) — thay cho mảng cứng `statuses: string[]` ở bản nháp đầu, để người dùng xem/thêm/sửa/xoá/sắp xếp từng bước qua UI (màn "Danh mục — Chỉnh sửa"). Giao dịch tham chiếu `statusId` (không phải chuỗi tự do), sửa được sau khi tạo (`statusUpdatedAt` ghi lại lần đổi gần nhất) — ví dụ Dâng hiến hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", không cố định lúc ghi.
@@ -87,6 +89,8 @@ families/{familyId}/categories/{categoryId}
   name, color, type ("INCOME" | "EXPENSE" | "TRANSFER"),
   statsEnabled (bool, hien o Tong hop trang thai),
   excludeFromTotals (bool, bo qua khi tinh totalIncome/totalExpense o rollup, mac dinh false),
+  linkedExpenseCategoryId (categoryId?, chi hop le khi type=INCOME, mac dinh null —
+                            de tinh "Thu nhap rong" hien thi, khong doi Tong thu/Tong chi),
   isDefault, isActive (soft delete)
 
 families/{familyId}/categories/{categoryId}/statuses/{statusId}

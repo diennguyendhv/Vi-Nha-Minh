@@ -686,6 +686,7 @@ erDiagram
     boolean isActive "soft delete"
     boolean statsEnabled "bat/tat hien o Tong hop trang thai"
     boolean excludeFromTotals "bo qua khi tinh totalIncome/totalExpense"
+    string linkedExpenseCategoryId "chi hop le khi type=INCOME, de tinh Thu nhap rong"
   }
   STATUS {
     string statusId PK
@@ -905,12 +906,14 @@ erDiagram
             <div class="cat-group-label">Thu</div>
             <div class="cat-row"><span class="dot" style="background:var(--jade-soft)"></span><div class="info"><div class="n">Số dư ban đầu</div><div class="m">Không tính vào Tổng thu (excludeFromTotals)</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--jade)"></span><div class="info"><div class="n">Thu nhập</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--jade-deep)"></span><div class="info"><div class="n">Học phí</div><div class="m">Liên kết Chi "Trả lương giáo viên" · Ròng 2.000.000 đ</div></div><span class="chev">›</span></div>
             <div class="cat-group-label">Chi</div>
             <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div><div class="m">2 trạng thái, tự thêm · Thống kê: bật</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Đầu tư</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Cho đi</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">Dâng hiến</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Trả lương giáo viên</div><div class="m">2 trạng thái · Thống kê: bật · Thu hộ cho "Học phí"</div></div><span class="chev">›</span></div>
             <div class="cat-group-label">Chuyển <span style="font-weight:400;text-transform:none;letter-spacing:0">· hệ thống, không tự tạo/xoá được</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chuyển tiền cho thành viên khác</div><div class="m">Chọn người nhận khi ghi</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Nạp / Rút / Gửi ngân hàng</div></div><span class="chev">›</span></div>
@@ -925,7 +928,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>3 nhóm: Thu, Chi (tự tạo được), Chuyển (cố định, do hệ thống quản lý — không còn 2 danh mục cứng "Chồng đưa vợ/Vợ đưa chồng"). Sinh hoạt cũng có trạng thái tự thêm — không riêng gì Cho đi/Dâng hiến.</p></div>
+        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>3 nhóm: Thu, Chi (tự tạo được), Chuyển (cố định, do hệ thống quản lý — không còn 2 danh mục cứng "Chồng đưa vợ/Vợ đưa chồng"). Sinh hoạt cũng có trạng thái tự thêm — không riêng gì Cho đi/Dâng hiến. "Học phí" (Thu) hiện sẵn dòng phụ "Ròng 2.000.000đ" vì đã liên kết category Chi "Trả lương giáo viên" (<code>linkedExpenseCategoryId</code>) — 2 giao dịch vẫn tách riêng, chỉ gộp lại để hiển thị 1 con số duy nhất.</p></div>
       </div>
       <div class="screen-col">
         <div class="phone"><div class="phone-screen">
@@ -941,6 +944,13 @@ erDiagram
               <div class="segmented" id="typeSeg">
                 <button data-t="thu">Thu</button>
                 <button class="active" data-t="chi">Chi</button>
+              </div>
+            </div>
+            <div id="linkedExpenseField" hidden>
+              <label class="field-label">Danh mục chi liên kết <span class="hint">tuỳ chọn, để tính Thu nhập ròng</span></label>
+              <div class="fund-pick-row">
+                <button class="fund-pick active">Không liên kết</button>
+                <button class="fund-pick">Trả lương giáo viên</button>
               </div>
             </div>
             <div>
@@ -973,7 +983,7 @@ erDiagram
             <button class="danger-link">Xoá danh mục này</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Chỉ tạo được danh mục Thu/Chi — "Chuyển" (Tiết kiệm, Quỹ, chuyển tiền thành viên) là danh mục hệ thống, quản lý qua các màn riêng. Bấm + để thêm bước trạng thái, × để xoá; công tắc "Thống kê" quyết định có hiện ở màn Tổng hợp trạng thái (13) hay không.</p></div>
+        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Chỉ tạo được danh mục Thu/Chi — "Chuyển" (Tiết kiệm, Quỹ, chuyển tiền thành viên) là danh mục hệ thống, quản lý qua các màn riêng. Bấm + để thêm bước trạng thái, × để xoá; công tắc "Thống kê" quyết định có hiện ở màn Tổng hợp trạng thái (13) hay không. Bấm tab "Thu" ở Phân loại để thấy field mới "Danh mục chi liên kết" (<code>linkedExpenseCategoryId</code>, tuỳ chọn) — chỉ dùng cho các danh mục Thu kiểu "thu hộ" (vd Học phí), để tự tính "Thu nhập ròng" mà không cần gộp 2 giao dịch làm 1.</p></div>
       </div>
     </div>
 
@@ -1256,14 +1266,16 @@ erDiagram
           <div class="phone-notch"></div>
           <div class="phone-head">Trạng thái <span class="sub">theo dõi riêng</span></div>
           <div class="phone-body">
-            <div class="segmented" id="statusCategorySeg">
-              <button class="active" data-cat="cho_di">Cho đi</button>
-              <button data-cat="dang_hien">Dâng hiến</button>
-              <button data-cat="sinh_hoat">Sinh hoạt</button>
+            <div class="segmented" id="statusCategorySeg" style="padding:2px">
+              <button class="active" data-cat="cho_di" style="font-size:.62rem;padding:7px 2px">Cho đi</button>
+              <button data-cat="dang_hien" style="font-size:.62rem;padding:7px 2px">Dâng hiến</button>
+              <button data-cat="sinh_hoat" style="font-size:.62rem;padding:7px 2px">Sinh hoạt</button>
+              <button data-cat="tra_luong_gv" style="font-size:.62rem;padding:7px 2px">Trả lương GV</button>
             </div>
             <div class="status-card" style="background:var(--paper-sunken)">
               <div class="title"><span id="statusCatName">Cho đi</span><span id="statusCatTotal">1.500.000 đ</span></div>
               <div class="progress-bar" id="statusCatBar"></div>
+              <p id="statusCatNetNote" hidden style="font-size:.66rem;color:var(--jade-deep);margin-top:6px;font-weight:600"></p>
             </div>
             <div class="segmented" id="statusFilterSeg">
               <button class="active" data-s="0">Chưa chuẩn bị</button>
@@ -1274,7 +1286,7 @@ erDiagram
             <div id="statusFilterList"></div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">13 · TRẠNG THÁI — CHI TIẾT</div><p>Danh sách tab ở đầu = đúng những danh mục đang bật "Thống kê" ở màn 07 — không cố định 2 tab, có thể là 2, 3, hay nhiều hơn (demo thêm "Sinh hoạt" làm tab thứ 3 để thấy rõ). Chọn tab rồi bấm từng bước để xem danh sách + tổng tiền.</p></div>
+        <div class="screen-caption"><div class="tag">13 · TRẠNG THÁI — CHI TIẾT</div><p>Danh sách tab ở đầu = đúng những danh mục đang bật "Thống kê" ở màn 07 — không cố định 2 tab, có thể là 2, 3, hay nhiều hơn (demo thêm "Sinh hoạt" làm tab thứ 3 để thấy rõ). Chọn tab rồi bấm từng bước để xem danh sách + tổng tiền. Tab "Trả lương GV" là category Chi liên kết với "Học phí" (Thu) qua <code>linkedExpenseCategoryId</code> — bấm vào để thấy dòng xanh "Thu nhập ròng" tự tính (5.000.000 − 3.000.000, cộng cả 2 trạng thái Chưa gửi/Đã gửi vì tiền đã trừ ngay lúc ghi).</p></div>
       </div>
 
       <div class="screen-col">
@@ -1438,7 +1450,7 @@ Một hàm Financial Engine duy nhất (`applyTransactionEffect`) xử lý cả 
 | F-04 | `CATEGORY` gánh cả vai trò `TransactionType` lẫn business rule (isSaving, transferToUid) | HIGH | Category lẽ ra chỉ là nhãn phân loại để báo cáo/lọc, không nên quyết định tiền chạy về đâu — khó mở rộng, khó test độc lập | Tách hẳn: `TRANSACTION.type` + `TRANSACTION.source/destination` quyết định dòng tiền; `CATEGORY` chỉ còn là nhãn + `type` để nhóm báo cáo. Xem mục 11 |
 | F-05 | Công thức "Tổng thu = Tổng chi + Số tiền còn lại; Tổng chi = Chi phí + Tiết kiệm" | **CRITICAL** | Tự mâu thuẫn với F-02 — coi tiết kiệm vừa là "chi" vừa dùng để tính "còn lại". Nếu Transfer bị tính vào Chi (F-01) thì công thức càng sai thêm | Bỏ hẳn, thay bằng 3 tổng tách biệt: Income / External Expense / Transfer. Xem mục 17 |
 | F-06 | `STATUS` không có state machine, không rõ đổi trạng thái có ảnh hưởng balance không | HIGH | Nếu sau này ai đó code "Pending thì chưa trừ tiền, Paid mới trừ" sẽ đá vào balance đã trừ sẵn lúc tạo — 2 nguồn sự thật | Chốt rõ: Status **không bao giờ** ảnh hưởng balance ở app này — đã xác nhận, xem mục 12 |
-| F-07 | Không phân biệt `transactionDate` và `createdAt` | MEDIUM | Ghi hôm nay 1 khoản chi hôm qua sẽ bị tính nhầm sang tháng ghi sổ thay vì tháng phát sinh thật | Thêm `transactionDate` riêng, mọi rollup theo tháng dùng field này |
+| F-07 | Không phân biệt `transactionDate` và `createdAt` | MEDIUM | Ghi hôm nay 1 khoản chi hôm qua sẽ bị tính nhầm sang tháng ghi sổ thay vì tháng phát sinh thật | Thêm `transactionDate` riêng, mọi rollup theo tháng dùng field này | 
 | F-08 | Tiền lưu dạng số thực ngầm định (schema ghi `number amount`) | MEDIUM | Sai số dấu phẩy động khi cộng dồn hàng nghìn giao dịch (VD 0.1 + 0.2 ≠ 0.3 trong floating point) | Dùng `amountMinor` (số nguyên) + `currency`. Xem mục 6 |
 | F-09 | Xoá Category/Status/Fund/Member không có cơ chế soft-delete | HIGH | Xoá "Sinh hoạt" sau khi đã có 500 giao dịch tham chiếu → giao dịch cũ mất nhãn, UI vỡ | Soft delete (`isActive`/`deletedAt`) cho mọi entity người dùng tự tạo. Xem mục 18 |
 | F-10 | Không có cơ chế thống nhất sửa/xoá giao dịch qua Financial Engine | **CRITICAL** | Sửa thẳng `amount` trong DB mà quên cập nhật balance → số dư sai vĩnh viễn, rất khó phát hiện | `updateTransaction`/`deleteTransaction` bắt buộc qua Cloud Function tính lại pool. Xem mục 21 |
@@ -1567,7 +1579,7 @@ Không còn nhánh riêng cho "quỹ", "tiết kiệm", "chuyển khoản" trong
 
 `TRANSFER` là loại giao dịch mà **cả source và destination đều không phải `EXTERNAL`**. 5 `transferKind` hiện có (bảng trên) đều dùng chung 1 cơ chế `applyEffect`. Thêm `transferKind` mới sau này (vd chuyển giữa 2 quỹ) không cần đổi Financial Engine, chỉ cần cho phép `sourceKind/destinationKind = FUND` ở cả 2 đầu.
 
-**Đã chốt: Phương án B.** Category "Chồng đưa vợ"/"Vợ đưa chồng" bị loại khỏi seed mặc định, thay bằng 1 category **"Chuyển tiền cho thành viên khác"** (`type=TRANSFER`). Màn Thêm giao dịch khi chọn category này sẽ hiện thêm 1 field chọn **người nhận** (danh sách thành viên hiện có trong gia đình, trừ người đang ghi); người gửi (`sourceRefId`) luôn là người đang thao tác. `transferKind = MEMBER_TO_MEMBER`.
+**Đang chờ chốt (xem giải thích chi tiết + ví dụ ở mục 26, câu hỏi #2):** giữ 2 category "Chồng đưa vợ"/"Vợ đưa chồng" cố định, hay gộp thành 1 luồng "Chuyển tiền cho thành viên khác" với người dùng tự chọn người nhận mỗi lần? Đề xuất chọn phương án 2 (tổng quát, đúng nguyên tắc `roleLabel` tự do đã có trong `CLAUDE.md`).
 
 ---
 
@@ -1628,11 +1640,17 @@ CATEGORY
   statsEnabled (giu nguyen tu V1 — bat/tat hien o man Tong hop trang thai),
   excludeFromTotals (bool, mac dinh false — bo qua khi tinh totalIncome/totalExpense o rollup,
                       van cong/tru availableBalance binh thuong qua applyEffect)
+  linkedExpenseCategoryId (categoryId?, chi hop le khi type = INCOME, mac dinh null —
+                            tro toi 1 CATEGORY khac co type = EXPENSE, thuan tuy de tinh
+                            "Thu nhap rong" hien thi (muc 17), KHONG doi applyEffect/
+                            Total Income/Total External Expense)
 ```
 
 Bỏ hẳn `isSaving` và `transferToUid` khỏi Category (F-04) — 2 field này từng bắt Category "diễn" luôn vai trò của Transaction, sai nguyên tắc ở mục 14 trong yêu cầu. Category giờ **chỉ là nhãn + type để nhóm báo cáo**, không quyết định pool nào bị trừ/cộng.
 
-**`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo. Xem `spec.md` mục hạng mục seed để có ví dụ thứ 2: mẫu "thu hộ — phải trả lại" (thu học phí nhưng phải trả công giáo viên thuê ngoài) dùng 2 giao dịch (1 Income + 1 Expense có `statuses`), **không dùng số âm trên Income** (vi phạm Invariant 12).
+**`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo.
+
+**`linkedExpenseCategoryId` — ví dụ dùng: "Học phí" (Thu) liên kết "Trả lương giáo viên" (Chi).** Đây là câu trả lời cho mẫu "thu hộ — phải trả lại" (thu học phí nhưng phải trả công giáo viên thuê ngoài): **vẫn ghi 2 giao dịch riêng biệt** (1 `INCOME` "Học phí" + 1 `EXPENSE` "Trả lương giáo viên" có `statuses` Chưa gửi/Đã gửi để theo dõi tiến độ trả) — **không dùng số âm trên Income** (vi phạm Invariant 12), và **không gộp Chi vào trong Thu** thành 1 giao dịch (sẽ phá nguyên tắc 1 giao dịch chỉ có 1 `type`/1 cặp source-destination). Field này chỉ làm đúng 1 việc: đánh dấu category Thu "Học phí" biết category Chi nào là khoản nó phải trả lại, để UI tính và hiển thị thêm chỉ số **"Thu nhập ròng"** (mục 17) — hoàn toàn không đụng tới `applyEffect`, không đổi `Total Income`/`Total External Expense`/`Total Assets`. Optional — chỉ set khi gia đình cần loại báo cáo "thu hộ" này, phần lớn category Thu (Lương, Thu nhập khác...) để `null`.
 
 `STATUS` (subcollection của Category) giữ nguyên như V1: `statusId, categoryId, name, sortOrder` — không đổi.
 
@@ -1725,6 +1743,15 @@ Fund Assets             = Σ FUND.balance
 Tỷ lệ tiết kiệm tháng   = (Total Income − Total External Expense) / Total Income
                           // giữ nguyên công thức hành vi tài chính cũ — vẫn đúng vì giờ
                           // "Total External Expense" đã KHÔNG còn lẫn tiết kiệm/chuyển khoản nữa
+
+Thu nhập ròng (1 danh mục Thu có linkedExpenseCategoryId, theo kỳ)
+                        = Σ amountMinor (category = danh mục Thu đó)
+                          − Σ amountMinor (category = linkedExpenseCategoryId, MỌI status)
+                          // trừ luôn cả status "Chưa gửi" vì tiền đã bị trừ khỏi
+                          // availableBalance ngay lúc tạo transaction (mục 12) —
+                          // status chỉ là nhãn tiến độ, không phải mốc "tiền đã thật sự rời đi"
+                          // Chỉ số hiển thị (report-only) — KHÔNG thay Total Income/Total
+                          // External Expense/Total Assets ở trên, không cộng dồn liên tháng
 ```
 
 `MONTH_SUMMARY` lưu 3 số `totalIncome / totalExpense / totalTransfer` (thay cho `totalIncome/totalSpending/totalSaving` của V1), cộng `categoryTotals` (mọi type) và `statusTotals` (theo statusId).
@@ -1823,6 +1850,7 @@ Test 1-9 trong yêu cầu giữ nguyên, đều PASS với model V2 (đã kiểm
 - **Test 15 — Rebuild:** Xoá toàn bộ `MEMBER_BALANCE`/`FUND.balance` cache, chạy lại `applyEffect` cho mọi `TRANSACTION` chưa xoá theo đúng thứ tự thời gian → kết quả phải khớp 100% với cache trước khi xoá.
 - **Test 16 — `excludeFromTotals`:** Ghi `INCOME` "Số dư ban đầu" 5.000.000đ (category `excludeFromTotals=true`), rồi ghi `INCOME` "Lương" 10.000.000đ (category thường). `availableBalance` phải tăng đúng 15.000.000đ (cả 2 đều qua `applyEffect`); `months/{yearMonth}.totalIncome` chỉ được tính 10.000.000đ (bỏ qua dòng "Số dư ban đầu").
 - **Test 17 — "Thu hộ, phải trả lại":** Ghi `INCOME` "Học phí" +2.000.000đ và `EXPENSE` "Trả tiền dạy kèm" (category có `statuses`) −1.000.000đ, status ban đầu "Chưa gửi". `availableBalance` tăng đúng 1.000.000đ ròng; `totalIncome` vẫn ghi nhận đủ 2.000.000đ và `totalExpense` ghi nhận đủ 1.000.000đ (không gộp tắt thành số net); sau khi đổi status sang "Đã gửi", balance không đổi thêm (đúng Invariant 9 — status không đụng Financial Engine).
+- **Test 18 — "Thu nhập ròng" (`linkedExpenseCategoryId`):** Category "Học phí" (`type=INCOME`) có `linkedExpenseCategoryId` trỏ tới "Trả lương giáo viên" (`type=EXPENSE`, `statuses`: Chưa gửi/Đã gửi). Trong tháng ghi: `INCOME` "Học phí" 5.000.000đ; `EXPENSE` "Trả lương giáo viên" 2.000.000đ status "Chưa gửi" + 1.000.000đ status "Đã gửi". "Thu nhập ròng" hiển thị = 5.000.000 − (2.000.000 + 1.000.000) = 2.000.000đ (cộng cả 2 status, vì tiền đã trừ khỏi `availableBalance` ngay lúc tạo bất kể status). `totalIncome` tháng đó vẫn ghi đủ 5.000.000đ, `totalExpense` vẫn ghi đủ 3.000.000đ — "Thu nhập ròng" chỉ là số hiển thị thêm, không thay 2 tổng này lẫn `Total Assets`.
 
 ---
 
@@ -1920,6 +1948,8 @@ Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật
 
 **Mẫu "tiền hộ người khác" (thu nhập có phần phải trả lại) — dùng Category + Status có sẵn, không cần cơ chế mới:** ví dụ thu học phí dạy kèm 2.000.000đ nhưng phải trả 1.000.000đ tiền công cho giáo viên thuê ngoài (không phải thành viên gia đình) — **không nhập số âm vào Thu nhập** (vi phạm `amountMinor` luôn dương, xem Invariant 12 ở `docs/financial-core-v2.md`). Thay vào đó ghi **2 giao dịch riêng**: 1 `INCOME` "Học phí" +2.000.000đ, và 1 `EXPENSE` dưới category tự tạo (vd "Trả tiền dạy kèm") có `statuses: ["Chưa gửi", "Đã gửi"]` −1.000.000đ — đúng cơ chế trạng thái đã có cho Cho đi/Dâng hiến, để biết còn nợ ai bao nhiêu chưa trả. Số dư ròng vẫn tăng đúng 1.000.000đ; `Tổng thu`/`Tổng chi` hiện đúng cả 2 chiều tiền thay vì gộp tắt thành 1 số net, minh bạch hơn khi xem lại báo cáo.
 
+**"Thu nhập ròng" — xem nhanh phần còn lại sau khi trừ khoản phải trả, không cần tự cộng trừ 2 category bằng tay.** Category `type=INCOME` có thêm field tuỳ chọn **`linkedExpenseCategoryId`**, trỏ tới 1 category `type=EXPENSE` khác (vd "Học phí" liên kết "Trả lương giáo viên"). Khi đã liên kết, màn Danh mục/Tổng hợp tự tính và hiện thêm dòng **"Thu nhập ròng" = Tổng thu category Thu − Tổng chi category Chi liên kết (cộng cả trạng thái Chưa gửi lẫn Đã gửi, vì tiền đã bị trừ khỏi số dư ngay lúc ghi, status chỉ là nhãn tiến độ)**. Đây **chỉ là số hiển thị thêm** — không đổi cách tính `Tổng thu`/`Tổng chi`/`Tổng tài sản` ở mục công thức tài chính, và **không gộp 2 giao dịch thành 1** (vẫn ghi Thu/Chi riêng như trên) — field này thuần để nối 2 category lại với nhau cho mục đích báo cáo, phần lớn category Thu khác (Lương, Thu nhập khác...) để trống. Xem field đầy đủ + test case ở `docs/financial-core-v2.md` mục 11, 17, 24 (Test 18).
+
 Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nhất cho mọi loại**: nếu `sourceKind ≠ EXTERNAL` thì trừ `amountMinor` khỏi pool nguồn; nếu `destinationKind ≠ EXTERNAL` thì cộng `amountMinor` vào pool đích. Không có nhánh if/else riêng theo category — xem code mẫu ở `docs/financial-core-v2.md` mục 6.
 
 **Trạng thái (`statuses`) là bảng con CRUD được, áp dụng cho mọi danh mục, không riêng Cho đi/Dâng hiến:** `families/{familyId}/categories/{categoryId}/statuses/{statusId}` gồm `name` (tự đặt) và `sortOrder` (tự sắp xếp) — thay cho mảng cứng `statuses: string[]` ở bản nháp đầu, để người dùng xem/thêm/sửa/xoá/sắp xếp từng bước qua UI (màn "Danh mục — Chỉnh sửa"). Giao dịch tham chiếu `statusId` (không phải chuỗi tự do), sửa được sau khi tạo (`statusUpdatedAt` ghi lại lần đổi gần nhất) — ví dụ Dâng hiến hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", không cố định lúc ghi.
@@ -1957,6 +1987,8 @@ families/{familyId}/categories/{categoryId}
   name, color, type ("INCOME" | "EXPENSE" | "TRANSFER"),
   statsEnabled (bool, hien o Tong hop trang thai),
   excludeFromTotals (bool, bo qua khi tinh totalIncome/totalExpense o rollup, mac dinh false),
+  linkedExpenseCategoryId (categoryId?, chi hop le khi type=INCOME, mac dinh null —
+                            de tinh "Thu nhap rong" hien thi, khong doi Tong thu/Tong chi),
   isDefault, isActive (soft delete)
 
 families/{familyId}/categories/{categoryId}/statuses/{statusId}
@@ -2445,11 +2477,13 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
   }
 
   var typeSeg = document.getElementById('typeSeg');
+  var linkedExpenseField = document.getElementById('linkedExpenseField');
   if(typeSeg){
     typeSeg.querySelectorAll('button').forEach(function(btn){
       btn.addEventListener('click', function(){
         typeSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
         btn.classList.add('active');
+        if(linkedExpenseField) linkedExpenseField.hidden = (btn.dataset.t !== 'thu');
       });
     });
   }
@@ -2559,6 +2593,19 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
           { n: 'Đi chợ, ăn uống cả tháng', m: 'Vợ · nhiều ngày', amt: '-2.940.000' }
         ]}
       ]
+    },
+    tra_luong_gv: {
+      name: 'Trả lương giáo viên', total: '3.000.000 đ', dotColor: 'var(--slate-light)',
+      barSegs: [ {w:0,c:'var(--line)'}, {w:67,c:'var(--slate-light)'}, {w:33,c:'var(--jade-deep)'} ],
+      netNote: 'Thu nhập ròng "Học phí" = 5.000.000 − 3.000.000 = 2.000.000 đ',
+      steps: [
+        { label: 'Chưa gửi', total: '2.000.000 đ', items: [
+          { n: 'Lương dạy kèm tháng 9', m: 'Vợ · 12/09', amt: '-2.000.000' }
+        ]},
+        { label: 'Đã gửi', total: '1.000.000 đ', items: [
+          { n: 'Lương dạy kèm tháng 9 (đợt 1)', m: 'Vợ · 05/09', amt: '-1.000.000' }
+        ]}
+      ]
     }
   };
   var statusCategorySeg = document.getElementById('statusCategorySeg');
@@ -2568,6 +2615,7 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
   var statusCatName = document.getElementById('statusCatName');
   var statusCatTotal = document.getElementById('statusCatTotal');
   var statusCatBar = document.getElementById('statusCatBar');
+  var statusCatNetNote = document.getElementById('statusCatNetNote');
   var currentStatusCat = 'cho_di';
   function renderStatusCategory(){
     var cat = statusCategoryData[currentStatusCat];
@@ -2577,6 +2625,10 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
       statusCatBar.innerHTML = cat.barSegs.map(function(s){
         return '<span class="seg" style="width:'+s.w+'%;background:'+s.c+'"></span>';
       }).join('');
+    }
+    if(statusCatNetNote){
+      if(cat.netNote){ statusCatNetNote.textContent = cat.netNote; statusCatNetNote.hidden = false; }
+      else { statusCatNetNote.hidden = true; }
     }
     if(statusFilterSeg){
       var btns = statusFilterSeg.querySelectorAll('button');

@@ -222,11 +222,17 @@ CATEGORY
   statsEnabled (giu nguyen tu V1 — bat/tat hien o man Tong hop trang thai),
   excludeFromTotals (bool, mac dinh false — bo qua khi tinh totalIncome/totalExpense o rollup,
                       van cong/tru availableBalance binh thuong qua applyEffect)
+  linkedExpenseCategoryId (categoryId?, chi hop le khi type = INCOME, mac dinh null —
+                            tro toi 1 CATEGORY khac co type = EXPENSE, thuan tuy de tinh
+                            "Thu nhap rong" hien thi (muc 17), KHONG doi applyEffect/
+                            Total Income/Total External Expense)
 ```
 
 Bỏ hẳn `isSaving` và `transferToUid` khỏi Category (F-04) — 2 field này từng bắt Category "diễn" luôn vai trò của Transaction, sai nguyên tắc ở mục 14 trong yêu cầu. Category giờ **chỉ là nhãn + type để nhóm báo cáo**, không quyết định pool nào bị trừ/cộng.
 
-**`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo. Xem `spec.md` mục hạng mục seed để có ví dụ thứ 2: mẫu "thu hộ — phải trả lại" (thu học phí nhưng phải trả công giáo viên thuê ngoài) dùng 2 giao dịch (1 Income + 1 Expense có `statuses`), **không dùng số âm trên Income** (vi phạm Invariant 12).
+**`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo.
+
+**`linkedExpenseCategoryId` — ví dụ dùng: "Học phí" (Thu) liên kết "Trả lương giáo viên" (Chi).** Đây là câu trả lời cho mẫu "thu hộ — phải trả lại" (thu học phí nhưng phải trả công giáo viên thuê ngoài): **vẫn ghi 2 giao dịch riêng biệt** (1 `INCOME` "Học phí" + 1 `EXPENSE` "Trả lương giáo viên" có `statuses` Chưa gửi/Đã gửi để theo dõi tiến độ trả) — **không dùng số âm trên Income** (vi phạm Invariant 12), và **không gộp Chi vào trong Thu** thành 1 giao dịch (sẽ phá nguyên tắc 1 giao dịch chỉ có 1 `type`/1 cặp source-destination). Field này chỉ làm đúng 1 việc: đánh dấu category Thu "Học phí" biết category Chi nào là khoản nó phải trả lại, để UI tính và hiển thị thêm chỉ số **"Thu nhập ròng"** (mục 17) — hoàn toàn không đụng tới `applyEffect`, không đổi `Total Income`/`Total External Expense`/`Total Assets`. Optional — chỉ set khi gia đình cần loại báo cáo "thu hộ" này, phần lớn category Thu (Lương, Thu nhập khác...) để `null`.
 
 `STATUS` (subcollection của Category) giữ nguyên như V1: `statusId, categoryId, name, sortOrder` — không đổi.
 
@@ -319,6 +325,15 @@ Fund Assets             = Σ FUND.balance
 Tỷ lệ tiết kiệm tháng   = (Total Income − Total External Expense) / Total Income
                           // giữ nguyên công thức hành vi tài chính cũ — vẫn đúng vì giờ
                           // "Total External Expense" đã KHÔNG còn lẫn tiết kiệm/chuyển khoản nữa
+
+Thu nhập ròng (1 danh mục Thu có linkedExpenseCategoryId, theo kỳ)
+                        = Σ amountMinor (category = danh mục Thu đó)
+                          − Σ amountMinor (category = linkedExpenseCategoryId, MỌI status)
+                          // trừ luôn cả status "Chưa gửi" vì tiền đã bị trừ khỏi
+                          // availableBalance ngay lúc tạo transaction (mục 12) —
+                          // status chỉ là nhãn tiến độ, không phải mốc "tiền đã thật sự rời đi"
+                          // Chỉ số hiển thị (report-only) — KHÔNG thay Total Income/Total
+                          // External Expense/Total Assets ở trên, không cộng dồn liên tháng
 ```
 
 `MONTH_SUMMARY` lưu 3 số `totalIncome / totalExpense / totalTransfer` (thay cho `totalIncome/totalSpending/totalSaving` của V1), cộng `categoryTotals` (mọi type) và `statusTotals` (theo statusId).
@@ -417,6 +432,7 @@ Test 1-9 trong yêu cầu giữ nguyên, đều PASS với model V2 (đã kiểm
 - **Test 15 — Rebuild:** Xoá toàn bộ `MEMBER_BALANCE`/`FUND.balance` cache, chạy lại `applyEffect` cho mọi `TRANSACTION` chưa xoá theo đúng thứ tự thời gian → kết quả phải khớp 100% với cache trước khi xoá.
 - **Test 16 — `excludeFromTotals`:** Ghi `INCOME` "Số dư ban đầu" 5.000.000đ (category `excludeFromTotals=true`), rồi ghi `INCOME` "Lương" 10.000.000đ (category thường). `availableBalance` phải tăng đúng 15.000.000đ (cả 2 đều qua `applyEffect`); `months/{yearMonth}.totalIncome` chỉ được tính 10.000.000đ (bỏ qua dòng "Số dư ban đầu").
 - **Test 17 — "Thu hộ, phải trả lại":** Ghi `INCOME` "Học phí" +2.000.000đ và `EXPENSE` "Trả tiền dạy kèm" (category có `statuses`) −1.000.000đ, status ban đầu "Chưa gửi". `availableBalance` tăng đúng 1.000.000đ ròng; `totalIncome` vẫn ghi nhận đủ 2.000.000đ và `totalExpense` ghi nhận đủ 1.000.000đ (không gộp tắt thành số net); sau khi đổi status sang "Đã gửi", balance không đổi thêm (đúng Invariant 9 — status không đụng Financial Engine).
+- **Test 18 — "Thu nhập ròng" (`linkedExpenseCategoryId`):** Category "Học phí" (`type=INCOME`) có `linkedExpenseCategoryId` trỏ tới "Trả lương giáo viên" (`type=EXPENSE`, `statuses`: Chưa gửi/Đã gửi). Trong tháng ghi: `INCOME` "Học phí" 5.000.000đ; `EXPENSE` "Trả lương giáo viên" 2.000.000đ status "Chưa gửi" + 1.000.000đ status "Đã gửi". "Thu nhập ròng" hiển thị = 5.000.000 − (2.000.000 + 1.000.000) = 2.000.000đ (cộng cả 2 status, vì tiền đã trừ khỏi `availableBalance` ngay lúc tạo bất kể status). `totalIncome` tháng đó vẫn ghi đủ 5.000.000đ, `totalExpense` vẫn ghi đủ 3.000.000đ — "Thu nhập ròng" chỉ là số hiển thị thêm, không thay 2 tổng này lẫn `Total Assets`.
 
 ---
 
