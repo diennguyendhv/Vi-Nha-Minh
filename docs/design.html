@@ -879,11 +879,11 @@ erDiagram
             <div class="cat-group-label">Thu</div>
             <div class="cat-row"><span class="dot" style="background:var(--jade)"></span><div class="info"><div class="n">Thu nhập</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-group-label">Chi</div>
-            <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div><div class="m">2 trạng thái, tự thêm</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div><div class="m">2 trạng thái, tự thêm · Thống kê: bật</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Đầu tư</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Cho đi</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">Dâng hiến</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Cho đi</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">Dâng hiến</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
             <div class="cat-group-label">Chuyển <span style="font-weight:400;text-transform:none;letter-spacing:0">· hệ thống, không tự tạo/xoá được</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chuyển tiền cho thành viên khác</div><div class="m">Chọn người nhận khi ghi</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Nạp / Rút / Gửi ngân hàng</div></div><span class="chev">›</span></div>
@@ -1223,6 +1223,7 @@ erDiagram
             <div class="segmented" id="statusCategorySeg">
               <button class="active" data-cat="cho_di">Cho đi</button>
               <button data-cat="dang_hien">Dâng hiến</button>
+              <button data-cat="sinh_hoat">Sinh hoạt</button>
             </div>
             <div class="status-card" style="background:var(--paper-sunken)">
               <div class="title"><span id="statusCatName">Cho đi</span><span id="statusCatTotal">1.500.000 đ</span></div>
@@ -1237,7 +1238,7 @@ erDiagram
             <div id="statusFilterList"></div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">13 · TRẠNG THÁI — CHI TIẾT</div><p>Chuyển từ màn Tổng hợp sang đây — chọn danh mục (Cho đi/Dâng hiến) rồi bấm từng bước để xem danh sách + tổng tiền, phục vụ đối chiếu cuối tháng. Đây là màn riêng cho gia đình có thói quen theo dõi trạng thái, không bắt buộc với mọi gia đình.</p></div>
+        <div class="screen-caption"><div class="tag">13 · TRẠNG THÁI — CHI TIẾT</div><p>Danh sách tab ở đầu = đúng những danh mục đang bật "Thống kê" ở màn 07 — không cố định 2 tab, có thể là 2, 3, hay nhiều hơn (demo thêm "Sinh hoạt" làm tab thứ 3 để thấy rõ). Chọn tab rồi bấm từng bước để xem danh sách + tổng tiền.</p></div>
       </div>
 
       <div class="screen-col">
@@ -1275,9 +1276,11 @@ erDiagram
               <div class="fund-entry"><div><div class="n">Thịt bò, rau</div><div class="d">12/09 · Chồng</div></div><div class="tx-amt neg">-95.000</div></div>
               <div class="fund-entry"><div><div class="n">Mua đồ ăn</div><div class="d">14/09 · Vợ</div></div><div class="tx-amt neg">-200.000</div></div>
             </div>
+            <button class="danger-link" id="deleteFundBtn">Xoá quỹ này</button>
+            <p class="fund-warn" id="deleteFundWarn" hidden>Quỹ còn 1.850.000đ — phải rút hết về ví chính (tạo giao dịch Chuyển: Quỹ → Thành viên) thì số dư mới về 0đ và xoá được.</p>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">15 · QUỸ TIỀN ĂN — CHI TIẾT</div><p>Nạp quỹ = 1 giao dịch Chuyển (trừ người nạp, cộng quỹ). Mua từ quỹ = 1 giao dịch Chi có nguồn tiền là quỹ này (xem màn 09) — chỉ trừ quỹ, không trừ thêm số dư người mua.</p></div>
+        <div class="screen-caption"><div class="tag">15 · QUỸ TIỀN ĂN — CHI TIẾT</div><p>Màn này chỉ xem số dư + lịch sử — "Nạp quỹ"/"Ghi khoản mua" mở thẳng màn Thêm giao dịch (09) điền sẵn, không nhập trực tiếp ở đây. Bấm "Xoá quỹ này" để thấy quy tắc: chỉ xoá được khi số dư = 0đ.</p></div>
       </div>
 
       <div class="screen-col">
@@ -1304,7 +1307,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">16 · TIẾT KIỆM — QUẢN LÝ</div><p>Ví dụ: có 11.000.000 tiết kiệm → rút 500.000 về ví chính để tiêu, gửi 10.000.000 vào ngân hàng, còn lại 500.000 "hiện tại". Bấm 1 trong 2 nút mở màn nhập giao dịch (17).</p></div>
+        <div class="screen-caption"><div class="tag">16 · TIẾT KIỆM — QUẢN LÝ</div><p>Cũng chỉ xem số dư + lịch sử — bấm 1 trong 2 nút mở màn nhập giao dịch (17), không nhập trực tiếp ở đây. Ví dụ: có 11.000.000 tiết kiệm → rút 500.000 về ví chính để tiêu, gửi 10.000.000 vào ngân hàng, còn lại 500.000 "hiện tại".</p></div>
       </div>
 
       <div class="screen-col">
@@ -1518,6 +1521,14 @@ erDiagram
     });
   }
 
+  var deleteFundBtn = document.getElementById('deleteFundBtn');
+  var deleteFundWarn = document.getElementById('deleteFundWarn');
+  if(deleteFundBtn){
+    deleteFundBtn.addEventListener('click', function(){
+      if(deleteFundWarn) deleteFundWarn.hidden = !deleteFundWarn.hidden;
+    });
+  }
+
   var savingsSeg = document.getElementById('savingsTypeSeg');
   if(savingsSeg){
     savingsSeg.querySelectorAll('button').forEach(function(btn){
@@ -1556,6 +1567,18 @@ erDiagram
           { n: 'Dâng hiến tháng 9', m: 'Vợ · 10/09', amt: '-900.000' }
         ]}
       ]
+    },
+    sinh_hoat: {
+      name: 'Sinh hoạt', total: '4.200.000 đ', dotColor: 'var(--ink-soft)',
+      barSegs: [ {w:30,c:'var(--line)'}, {w:70,c:'var(--ink-soft)'} ],
+      steps: [
+        { label: 'Đã lên kế hoạch', total: '1.260.000 đ', items: [
+          { n: 'Tiền điện tháng 9', m: 'Chồng · 05/09', amt: '-1.260.000' }
+        ]},
+        { label: 'Đã chi', total: '2.940.000 đ', items: [
+          { n: 'Đi chợ, ăn uống cả tháng', m: 'Vợ · nhiều ngày', amt: '-2.940.000' }
+        ]}
+      ]
     }
   };
   var statusCategorySeg = document.getElementById('statusCategorySeg');
@@ -1577,8 +1600,15 @@ erDiagram
     }
     if(statusFilterSeg){
       var btns = statusFilterSeg.querySelectorAll('button');
-      cat.steps.forEach(function(s,i){ if(btns[i]) btns[i].textContent = s.label; });
-      btns.forEach(function(b,i){ b.classList.toggle('active', i===0); });
+      btns.forEach(function(b,i){
+        if(i < cat.steps.length){
+          b.textContent = cat.steps[i].label;
+          b.hidden = false;
+          b.classList.toggle('active', i===0);
+        } else {
+          b.hidden = true;
+        }
+      });
     }
     renderStatusFilter(0);
   }

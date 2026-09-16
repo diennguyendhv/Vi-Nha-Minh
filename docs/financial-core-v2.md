@@ -108,7 +108,7 @@ TRANSACTION
   type                 "INCOME" | "EXPENSE" | "TRANSFER"
   transferKind         nullable, chi khi type=TRANSFER:
                         "MEMBER_TO_MEMBER" | "SAVINGS_TOPUP" | "SAVINGS_WITHDRAW" |
-                        "SAVINGS_TO_BANK" | "FUND_TOPUP"
+                        "SAVINGS_TO_BANK" | "FUND_TOPUP" | "FUND_WITHDRAW"
   categoryId           FK (nhan, luon co - de bao cao/loc, KHONG quyet dinh dong tien)
   sourceKind           "MEMBER_AVAILABLE" | "MEMBER_SAVINGS_CASH" | "MEMBER_SAVINGS_BANK" | "FUND" | "EXTERNAL"
   sourceRefId          uid | fundId | null (null khi sourceKind = EXTERNAL, tuc INCOME)
@@ -137,6 +137,7 @@ TRANSACTION
 | Mua đồ ăn (dùng Quỹ tiền ăn) | EXPENSE | FUND(quỹ tiền ăn) | EXTERNAL |
 | Chồng đưa vợ 3 triệu | TRANSFER (MEMBER_TO_MEMBER) | MEMBER_AVAILABLE(Chồng) | MEMBER_AVAILABLE(Vợ) |
 | Nạp quỹ tiền ăn 2 triệu | TRANSFER (FUND_TOPUP) | MEMBER_AVAILABLE(Vợ) | FUND(quỹ tiền ăn) |
+| Rút hết quỹ về ví (trước khi xoá quỹ) | TRANSFER (FUND_WITHDRAW) | FUND(quỹ tiền ăn) | MEMBER_AVAILABLE(người nhận) |
 | Nạp tiết kiệm 2 triệu | TRANSFER (SAVINGS_TOPUP) | MEMBER_AVAILABLE(X) | MEMBER_SAVINGS_CASH(X) |
 | Rút tiết kiệm 500k về ví | TRANSFER (SAVINGS_WITHDRAW) | MEMBER_SAVINGS_CASH(X) | MEMBER_AVAILABLE(X) |
 | Gửi tiết kiệm vào NH 10 triệu | TRANSFER (SAVINGS_TO_BANK) | MEMBER_SAVINGS_CASH(X) | MEMBER_SAVINGS_BANK(X) |
@@ -176,6 +177,7 @@ FUND
 - **Chi tiêu không dùng quỹ** = `EXPENSE` bình thường: `source = MEMBER_AVAILABLE(người mua)`.
 - **Không cần `FUND_ENTRY` riêng nữa** — lịch sử 1 quỹ = truy vấn `TRANSACTION` where `sourceRefId = fundId OR destinationRefId = fundId`.
 - **Quỹ không được âm:** Cloud Function từ chối (rollback) nếu `applyEffect` sẽ làm `FUND.balance < 0` — kiểm tra trong cùng 1 Firestore transaction để tránh race condition 2 máy ghi đồng thời (đúng yêu cầu ban đầu, vẫn giữ).
+- **Xoá quỹ chỉ được phép khi `balance = 0`.** Không tự ý "xoá và mất tiền" hay ngầm định chuyển tiền cho ai — người dùng phải chủ động **rút hết quỹ** trước bằng 1 giao dịch `TRANSFER(FUND_WITHDRAW)`: `source = FUND` → `destination = MEMBER_AVAILABLE(người nhận, tự chọn)`, y hệt cơ chế `FUND_TOPUP` nhưng đảo chiều. Khi `balance` đã về 0, `deleteFund` chỉ làm soft-delete (`isActive = false`) — không xoá cứng, lịch sử giao dịch cũ vẫn hiển thị đúng tên quỹ. Nút "Xoá quỹ" ở UI phải chặn và giải thích rõ lý do nếu `balance ≠ 0` (xem `docs/design.html` màn 15).
 
 Đối chiếu lại đúng Test 6/7/8 trong yêu cầu:
 

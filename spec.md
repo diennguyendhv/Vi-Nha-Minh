@@ -159,6 +159,8 @@ families/{familyId}/months/{yearMonth}/transactions/{txId}
 - **Chi tiêu dùng quỹ** = `EXPENSE` bình thường (vd category Sinh hoạt) nhưng `source = FUND(quỹ)` thay vì `MEMBER_AVAILABLE` — **chỉ trừ đúng 1 pool là quỹ, không đụng số dư người mua.** Đây là điểm sửa quan trọng nhất so với bản nháp đầu (bản đầu từng trừ **cả** số dư người mua **lẫn** số dư quỹ cho cùng 1 khoản chi — lỗi trừ kép, xem `docs/financial-core-v2.md` mục F-03).
 - **Chi tiêu không dùng quỹ** = `EXPENSE` bình thường, `source = MEMBER_AVAILABLE(người mua)`.
 - **Quỹ không được phép âm** (giống `MEMBER_AVAILABLE`): UI đọc `balance` quỹ trước khi cho chọn, khoá lựa chọn nếu `amountMinor` > `balance`; Cloud Function kiểm tra lại trong 1 Firestore Transaction trước khi ghi, từ chối nếu sẽ làm âm (tránh race condition 2 thiết bị ghi cùng lúc).
+- **Xoá quỹ chỉ được phép khi `balance = 0`.** Phải rút hết quỹ trước bằng giao dịch `TRANSFER(FUND_WITHDRAW)` (`source = FUND` → `destination = MEMBER_AVAILABLE`, đảo chiều của `FUND_TOPUP`), sau đó mới soft-delete (`isActive = false`) — không xoá cứng, không tự ý quy tiền còn lại cho ai. Màn Quỹ — Chi tiết (`docs/design.html` màn 15) chặn nút "Xoá quỹ" và giải thích rõ nếu `balance ≠ 0`.
+- **Màn Quỹ/Tiết kiệm chỉ để xem số dư + lịch sử, không nhập giao dịch trực tiếp.** Các nút "Nạp quỹ"/"Ghi khoản mua"/"Rút về ví chính"/"Gửi ngân hàng" đều mở màn Thêm giao dịch (`docs/design.html` màn 09) điền sẵn loại giao dịch/nguồn-đích tương ứng — chỉ có 1 nơi tạo giao dịch duy nhất trong app, tránh 2 luồng code trùng nhau cho cùng 1 việc.
 
 **Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
 
