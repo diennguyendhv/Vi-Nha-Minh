@@ -1215,11 +1215,12 @@ erDiagram
           <div class="phone-body">
             <div>
               <label class="field-label">Hạng mục <span class="hint">(cùng loại Chi, đổi được)</span></label>
-              <select class="select-input">
-                <option>Tự thưởng</option>
-                <option selected>DH</option>
-                <option>CĐ</option>
-                <option>Sinh hoạt</option>
+              <select class="select-input" id="detailCatSelect">
+                <option value="tu_thuong">Tự thưởng</option>
+                <option value="dang_hien" selected>DH</option>
+                <option value="cho_di">CĐ</option>
+                <option value="sinh_hoat">Sinh hoạt</option>
+                <option value="tra_luong_gv">Chi phí vận hành</option>
               </select>
             </div>
             <div>
@@ -2790,6 +2791,18 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     }
   }
   if(detailStepper) renderDetail();
+
+  // Đổi Hạng mục ở màn Chi tiết → trạng thái phải đổi theo ĐÚNG danh mục
+  // mới (mỗi danh mục có statuses riêng) — không giữ lại trạng thái của
+  // danh mục cũ. Danh mục mới không có statuses thì ẩn hẳn khối Trạng thái.
+  var detailCatSelect = document.getElementById('detailCatSelect');
+  if(detailCatSelect){
+    detailCatSelect.addEventListener('change', function(){
+      detailSteps = statusMap[detailCatSelect.value] || [];
+      detailCurrent = 0;
+      renderDetail();
+    });
+  }
 
   function renderMarkdown(md){
     var lines = md.split('\n');
