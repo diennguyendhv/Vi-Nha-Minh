@@ -1,10 +1,9 @@
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:vi_nha_minh/data/repositories/mock_fund_repository.dart';
-import 'package:vi_nha_minh/data/repositories/mock_transaction_repository.dart';
-import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
-import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import 'package:vi_nha_minh/data/local/app_database.dart';
+import 'package:vi_nha_minh/presentation/providers/database_provider.dart';
 
 import 'package:vi_nha_minh/main.dart';
 
@@ -13,15 +12,15 @@ void main() {
   // khiến pumpAndSettle chờ vô thời hạn không bao giờ ổn định khung hình.
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  // Widget test không nên phụ thuộc SQLite thật (path_provider không có
-  // plugin thật trong môi trường flutter test) — override sang repository
-  // giả lập trong bộ nhớ, giống cách đã dựng UI trước khi có Firebase/SQLite.
+  // Widget test không nên phụ thuộc file SQLite thật (path_provider không có
+  // plugin thật trong môi trường flutter test) — override sang 1 AppDatabase
+  // tạm trong bộ nhớ; seed mặc định (`seed_defaults.dart`) vẫn tự chạy vì nó
+  // gắn ở `MigrationStrategy.beforeOpen`, không phụ thuộc executor thật.
   ProviderContainer buildOverrides() => ProviderContainer(
     overrides: [
-      transactionRepositoryProvider.overrideWithValue(
-        MockTransactionRepository(),
+      appDatabaseProvider.overrideWithValue(
+        AppDatabase.forTesting(NativeDatabase.memory()),
       ),
-      fundRepositoryProvider.overrideWithValue(MockFundRepository()),
     ],
   );
 
@@ -36,7 +35,8 @@ void main() {
 
     expect(find.textContaining('Ví Nhà Mình'), findsOneWidget);
     expect(find.text('Trang chủ'), findsOneWidget);
+    expect(find.text('Giao dịch'), findsOneWidget);
+    expect(find.text('Danh mục'), findsOneWidget);
     expect(find.text('Tổng hợp'), findsOneWidget);
-    expect(find.text('Cài đặt'), findsOneWidget);
   });
 }

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../domain/entities/fund.dart';
 
-/// Quỹ mặc định — hiện chỉ có Quỹ tiền ăn (Giai đoạn A, phase 13-14).
-/// Cũng là dữ liệu seed, không phải logic hardcode — về sau gia đình có thể
-/// tự tạo thêm quỹ khác (quỹ du lịch, hiếu hỉ...) qua cùng cơ chế.
+/// Quỹ seed mặc định — chỉ dùng để SEED database rỗng lúc khởi tạo (xem
+/// `DefaultCategories`). Gia đình tự tạo thêm quỹ khác qua UI, không giới
+/// hạn 1 quỹ như tên file gợi ý.
 class DefaultFunds {
   DefaultFunds._();
 
@@ -17,11 +17,4 @@ class DefaultFunds {
   );
 
   static const all = <Fund>[anUong];
-
-  static Fund byId(String id) {
-    return all.firstWhere(
-      (f) => f.id == id,
-      orElse: () => const Fund(id: '', name: '', color: Color(0xFF9A9D97)),
-    );
-  }
 }

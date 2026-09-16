@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../providers/app_state_providers.dart';
-import '../fund/fund_screen.dart';
+import '../fund/fund_list_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -130,13 +130,11 @@ class SettingsScreen extends ConsumerWidget {
           child: Column(
             children: [
               _SettingsRow(
-                label: 'Quỹ tiền ăn',
+                label: 'Quỹ',
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const FundScreen()),
+                  MaterialPageRoute<void>(builder: (_) => const FundListScreen()),
                 ),
               ),
-              const Divider(height: 1, color: AppColors.divider),
-              const _SettingsRow(label: 'Quản lý danh mục'),
               const Divider(height: 1, color: AppColors.divider),
               const _SettingsRow(label: 'Ngân sách theo tháng'),
               const Divider(height: 1, color: AppColors.divider),

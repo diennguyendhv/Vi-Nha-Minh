@@ -1,48 +1,77 @@
 import 'package:drift/drift.dart';
+import 'package:flutter/material.dart';
 
-import '../../domain/entities/fund_entry.dart' as domain;
+import '../../domain/entities/fund.dart' as domain;
+import '../../domain/errors/domain_exceptions.dart';
 import '../../domain/repositories/fund_repository.dart';
+import '../../domain/repositories/transaction_repository.dart';
+import '../../domain/usecases/compute_pool_balance.dart';
 import '../local/app_database.dart';
 
-/// Lưu các khoản nạp/mua của Quỹ bằng SQLite trên máy (Giai đoạn A —
-/// local-first), thay bằng `FirestoreFundRepository` khi gia đình chuyển
-/// sang `syncMode: "cloud"`.
+/// Financial Core V2 (mục 8, F-11): Quỹ chỉ còn identity — không có
+/// `FundEntry` riêng, lịch sử/số dư đọc thẳng từ `TransactionRepository`
+/// (lọc theo `sourceRefId`/`destinationRefId == fundId`).
 class LocalFundRepository implements FundRepository {
-  LocalFundRepository(this._db);
+  LocalFundRepository(this._db, this._transactionRepository);
 
   final AppDatabase _db;
+  final TransactionRepository _transactionRepository;
 
-  domain.FundEntry _toDomain(FundEntryRow row) {
-    return domain.FundEntry(
+  domain.Fund _toDomain(FundRow row) {
+    return domain.Fund(
       id: row.id,
-      fundId: row.fundId,
-      kind: domain.FundEntryKind.values.byName(row.kind),
-      amount: row.amount,
-      date: row.date,
-      note: row.note,
+      name: row.name,
+      color: Color(row.colorValue),
+      isActive: row.isActive,
     );
   }
 
-  FundEntryRowsCompanion _toCompanion(domain.FundEntry e) {
-    return FundEntryRowsCompanion(
-      id: Value(e.id),
-      fundId: Value(e.fundId),
-      kind: Value(e.kind.name),
-      amount: Value(e.amount),
-      date: Value(e.date),
-      note: Value(e.note),
+  FundRowsCompanion _toCompanion(domain.Fund f) {
+    return FundRowsCompanion.insert(
+      id: f.id,
+      name: f.name,
+      colorValue: f.color.value,
+      isActive: Value(f.isActive),
     );
   }
 
   @override
-  Stream<List<domain.FundEntry>> watchEntries(String fundId) {
-    final query = _db.select(_db.fundEntryRows)
-      ..where((row) => row.fundId.equals(fundId));
-    return query.watch().map((rows) => rows.map(_toDomain).toList());
+  Stream<List<domain.Fund>> watchFunds() {
+    return _db
+        .select(_db.fundRows)
+        .watch()
+        .map((rows) => rows.map(_toDomain).toList());
   }
 
   @override
-  Future<void> addEntry(domain.FundEntry entry) async {
-    await _db.into(_db.fundEntryRows).insert(_toCompanion(entry));
+  Future<void> addFund(domain.Fund fund) async {
+    await _db.into(_db.fundRows).insert(_toCompanion(fund));
+  }
+
+  @override
+  Future<void> updateFund(domain.Fund fund) async {
+    await (_db.update(
+      _db.fundRows,
+    )..where((r) => r.id.equals(fund.id))).write(
+      FundRowsCompanion(
+        name: Value(fund.name),
+        colorValue: Value(fund.color.value),
+        isActive: Value(fund.isActive),
+      ),
+    );
+  }
+
+  @override
+  Future<void> softDeleteFund(String fundId) async {
+    final transactions = await _transactionRepository.watchTransactions().first;
+    final balance = computeFundBalance(fundId, transactions);
+    if (balance != 0) {
+      throw FundNotEmptyException(fundId, balance);
+    }
+    await (_db.update(
+      _db.fundRows,
+    )..where((r) => r.id.equals(fundId))).write(
+      const FundRowsCompanion(isActive: Value(false)),
+    );
   }
 }

@@ -1,6 +1,6 @@
-import '../../core/constants/default_categories.dart';
-import '../entities/category_kind.dart';
+import '../engine/financial_engine.dart';
 import '../entities/transaction.dart';
+import '../entities/transaction_type.dart';
 
 class CategoryTotal {
   const CategoryTotal({required this.categoryId, required this.total});
@@ -12,15 +12,18 @@ class CategoryTotal {
       grandTotal > 0 ? ((total / grandTotal) * 100).round() : 0;
 }
 
-/// Sums expense transactions per category, largest first. Categories with
-/// no spending this period are omitted.
+/// Tổng chi theo từng hạng mục (`type == expense`), sắp giảm dần. Hạng mục
+/// không phát sinh chi kỳ này bị bỏ qua. Chỉ đếm transaction đang hiệu lực
+/// (`isVisible`).
 List<CategoryTotal> computeExpenseBreakdown(List<Transaction> transactions) {
   final totals = <String, int>{};
   for (final t in transactions) {
-    if (DefaultCategories.byId(t.categoryId).kind != CategoryKind.expense) {
-      continue;
-    }
-    totals.update(t.categoryId, (v) => v + t.amount, ifAbsent: () => t.amount);
+    if (!isVisible(t) || t.type != TransactionType.expense) continue;
+    totals.update(
+      t.categoryId,
+      (v) => v + t.amountMinor,
+      ifAbsent: () => t.amountMinor,
+    );
   }
   final result =
       totals.entries

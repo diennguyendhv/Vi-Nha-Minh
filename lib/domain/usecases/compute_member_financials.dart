@@ -1,8 +1,6 @@
-import '../../core/constants/default_categories.dart';
-import '../entities/category_kind.dart';
 import '../entities/family_member.dart';
-import '../entities/savings_destination.dart';
 import '../entities/transaction.dart';
+import 'compute_pool_balance.dart';
 
 class MemberFinancials {
   const MemberFinancials({
@@ -20,42 +18,19 @@ class MemberFinancials {
   int get savingsTotal => savingsOnHand + savingsInBank;
 }
 
-/// Số dư & tiết kiệm riêng cho một người, đúng cơ chế cột "Người tiêu" +
-/// hai hạng mục chuyển khoản (Chồng đưa vợ / Vợ đưa chồng) trong sheet thật.
+/// Số dư & tiết kiệm riêng cho 1 người — Financial Core V2: đọc thẳng 3
+/// pool (`MEMBER_AVAILABLE`/`MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) qua
+/// Financial Engine, không còn switch theo `CategoryKind` như V1 (mọi loại
+/// giao dịch — Thu/Chi/Chuyển cho thành viên khác/Nạp tiết kiệm — đều tự
+/// động cộng/trừ đúng pool nhờ `applyEffect`).
 MemberFinancials computeMemberFinancials(
   FamilyMember member,
   List<Transaction> transactions,
 ) {
-  var balance = 0;
-  var savingsOnHand = 0;
-  var savingsInBank = 0;
-
-  for (final t in transactions) {
-    final category = DefaultCategories.byId(t.categoryId);
-    switch (category.kind) {
-      case CategoryKind.income:
-        if (t.spender == member) balance += t.amount;
-      case CategoryKind.expense:
-        if (t.spender == member) balance -= t.amount;
-      case CategoryKind.savings:
-        if (t.spender == member) {
-          balance -= t.amount;
-          if (t.savingsDestination == SavingsDestination.bank) {
-            savingsInBank += t.amount;
-          } else {
-            savingsOnHand += t.amount;
-          }
-        }
-      case CategoryKind.transfer:
-        if (category.transferFrom == member) balance -= t.amount;
-        if (category.transferTo == member) balance += t.amount;
-    }
-  }
-
   return MemberFinancials(
     member: member,
-    balance: balance,
-    savingsOnHand: savingsOnHand,
-    savingsInBank: savingsInBank,
+    balance: computeMemberAvailableBalance(member, transactions),
+    savingsOnHand: computeMemberSavingsCash(member, transactions),
+    savingsInBank: computeMemberSavingsBank(member, transactions),
   );
 }

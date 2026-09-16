@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../domain/entities/category_kind.dart';
+import '../../../domain/engine/financial_engine.dart';
+import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/transaction.dart';
+import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
+import '../../providers/category_providers.dart';
 import '../../providers/transaction_providers.dart';
-import '../add_transaction/add_transaction_sheet.dart';
+import '../settings/settings_screen.dart';
+import '../transactions/transaction_detail_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -17,19 +20,28 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
+    final categoriesAsync = ref.watch(categoriesStreamProvider);
 
-    return transactionsAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(child: Text('Lỗi tải dữ liệu: $err')),
-      data: (transactions) => _HomeContent(transactions: transactions),
+    if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    final error = transactionsAsync.error ?? categoriesAsync.error;
+    if (error != null) {
+      return Center(child: Text('Lỗi tải dữ liệu: $error'));
+    }
+
+    return _HomeContent(
+      transactions: transactionsAsync.value ?? const [],
+      categories: categoriesAsync.value ?? const [],
     );
   }
 }
 
 class _HomeContent extends StatelessWidget {
-  const _HomeContent({required this.transactions});
+  const _HomeContent({required this.transactions, required this.categories});
 
   final List<Transaction> transactions;
+  final List<Category> categories;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +50,9 @@ class _HomeContent extends StatelessWidget {
       FamilyMember.chong,
       transactions,
     );
-    final sorted = [...transactions]..sort((a, b) => b.date.compareTo(a.date));
+    final categoryById = {for (final c in categories) c.id: c};
+    final visible = transactions.where(isVisible).toList()
+      ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
     final monthLabel = 'Tháng ${DateTime.now().month}';
 
     return ListView(
@@ -74,7 +88,12 @@ class _HomeContent extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            const _AvatarBadge(),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+              ),
+              child: const _AvatarBadge(),
+            ),
           ],
         ),
         const SizedBox(height: 20),
@@ -92,7 +111,7 @@ class _HomeContent extends StatelessWidget {
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 8),
-        _TransactionList(sorted: sorted),
+        _TransactionList(sorted: visible, categoryById: categoryById),
       ],
     );
   }
@@ -157,9 +176,9 @@ class _MemberCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
-          Text(
-            'Số dư',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          const Text(
+            'Số dư còn lại',
+            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
           ),
           Text(
             Formatters.amount(financials.balance),
@@ -220,16 +239,26 @@ class _MemberCard extends StatelessWidget {
 }
 
 class _TransactionList extends StatelessWidget {
-  const _TransactionList({required this.sorted});
+  const _TransactionList({required this.sorted, required this.categoryById});
 
   final List<Transaction> sorted;
+  final Map<String, Category> categoryById;
 
   @override
   Widget build(BuildContext context) {
+    if (sorted.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Text(
+          'Chưa có giao dịch nào — bấm nút + để ghi khoản đầu tiên.',
+          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+        ),
+      );
+    }
     String? lastDateLabel;
     final children = <Widget>[];
-    for (final t in sorted) {
-      final dateLabel = Formatters.dayMonth(t.date);
+    for (final t in sorted.take(10)) {
+      final dateLabel = Formatters.dayMonth(t.transactionDate);
       if (dateLabel != lastDateLabel) {
         lastDateLabel = dateLabel;
         children.add(
@@ -247,67 +276,94 @@ class _TransactionList extends StatelessWidget {
           ),
         );
       }
-      children.add(_TransactionRow(transaction: t));
+      children.add(
+        _TransactionRow(transaction: t, category: categoryById[t.categoryId]),
+      );
     }
     return Column(children: children);
   }
 }
 
+String? _memberLabelForRefId(String? refId) {
+  if (refId == null) return null;
+  for (final m in FamilyMember.values) {
+    if (m.name == refId) return m.label;
+  }
+  return null;
+}
+
 class _TransactionRow extends StatelessWidget {
-  const _TransactionRow({required this.transaction});
+  const _TransactionRow({required this.transaction, required this.category});
 
   final Transaction transaction;
+  final Category? category;
 
   @override
   Widget build(BuildContext context) {
-    final category = DefaultCategories.byId(transaction.categoryId);
-    final isIncome = category.kind == CategoryKind.income;
-    final amountColor = isIncome ? AppColors.accent : AppColors.textPrimary;
-    final sign = transaction.amount < 0 ? '' : (isIncome ? '+ ' : '- ');
-    final amountText = '$sign${Formatters.amount(transaction.amount)}';
+    final color = category?.color ?? AppColors.textMuted;
+    final name = category?.name ?? 'Đã xoá danh mục';
+    final initial = category == null || category!.name.isEmpty
+        ? '?'
+        : category!.name.substring(0, 1).toUpperCase();
+    final isIncome = transaction.type == TransactionType.income;
+    final isTransfer = transaction.type == TransactionType.transfer;
+    final amountColor = isTransfer
+        ? AppColors.textSecondary
+        : (isIncome ? AppColors.accent : AppColors.textPrimary);
+    final sign = isTransfer ? '⇄ ' : (isIncome ? '+ ' : '- ');
+    final amountText = '$sign${Formatters.amount(transaction.amountMinor)}';
+    final participant =
+        _memberLabelForRefId(transaction.sourceRefId) ??
+        _memberLabelForRefId(transaction.destinationRefId) ??
+        '';
+    final subtitle = transaction.note.isEmpty
+        ? participant
+        : (participant.isEmpty
+              ? transaction.note
+              : '${transaction.note} · $participant');
 
     return InkWell(
-      onTap: () => showEditTransactionSheet(context, transaction),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.divider)),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => TransactionDetailScreen(transactionId: transaction.id),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: category.color,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                category.initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
+      ),
+      child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 11),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            child: Text(
+              initial,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    category.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                    ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
                   ),
+                ),
+                if (subtitle.isNotEmpty)
                   Text(
-                    transaction.note.isEmpty
-                        ? transaction.spender.label
-                        : '${transaction.note} · ${transaction.spender.label}',
+                    subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -315,19 +371,19 @@ class _TransactionRow extends StatelessWidget {
                       color: AppColors.textSecondary,
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
-            Text(
-              amountText,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13.5,
-                color: amountColor,
-              ),
+          ),
+          Text(
+            amountText,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 13.5,
+              color: amountColor,
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
       ),
     );
   }

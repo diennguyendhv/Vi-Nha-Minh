@@ -1,32 +1,123 @@
-import 'family_member.dart';
-import 'savings_destination.dart';
+import 'pool_kind.dart';
+import 'transaction_type.dart';
+import 'transfer_kind.dart';
 
+/// Entity trung tâm của Financial Core V2 (`docs/financial-core-v2.md` mục
+/// 6). Mọi chuyển động tiền đều là 1 `Transaction` với `sourceKind/RefId`
+/// (tiền lấy từ đâu) và `destinationKind/RefId` (tiền tới đâu) — 1 hàm
+/// `applyEffect` duy nhất xử lý mọi loại, không còn nhánh riêng theo
+/// category (xem `domain/engine/financial_engine.dart`).
+///
+/// `TRANSACTION` là **append-only** cho mọi field ảnh hưởng balance (`type`,
+/// `amountMinor`, `sourceKind/RefId`, `destinationKind/RefId`) — sửa/xoá
+/// không bao giờ mutate các field này trên 1 bản ghi đã tồn tại, mà tạo bản
+/// ghi mới qua `reverseTransaction`/`correctTransactionAmount` (mục 21).
 class Transaction {
   const Transaction({
     required this.id,
+    required this.type,
+    this.transferKind,
     required this.categoryId,
-    required this.amount,
-    required this.date,
-    required this.spender,
+    required this.sourceKind,
+    this.sourceRefId,
+    required this.destinationKind,
+    this.destinationRefId,
+    required this.amountMinor,
+    this.currency = 'VND',
     this.note = '',
-    this.status,
-    this.savingsDestination,
-  });
+    this.statusId,
+    this.statusUpdatedAt,
+    required this.transactionDate,
+    required this.createdAt,
+    this.reversalOfTxId,
+    this.correctsTxId,
+    this.reversedByTxId,
+    required this.clientTxId,
+    this.version = 1,
+  }) : assert(amountMinor > 0, 'amountMinor luôn phải dương (Invariant 12)');
 
   final String id;
+  final TransactionType type;
+
+  /// Chỉ khác null khi `type == TransactionType.transfer`.
+  final TransferKind? transferKind;
+
+  /// Nhãn để báo cáo/lọc — KHÔNG quyết định dòng tiền (xem `Category`).
   final String categoryId;
 
-  /// Có thể âm — sheet thật dùng số âm cho các khoản điều chỉnh/hoàn tiền
-  /// (Thu nhập) hoặc rút tiết kiệm (Tiết kiệm).
-  final int amount;
-  final DateTime date;
-  final FamilyMember spender;
+  final PoolKind sourceKind;
+
+  /// null khi `sourceKind == PoolKind.external` (tức giao dịch Thu).
+  final String? sourceRefId;
+
+  final PoolKind destinationKind;
+
+  /// null khi `destinationKind == PoolKind.external` (tức giao dịch Chi).
+  final String? destinationRefId;
+
+  /// Luôn dương — chiều +/- suy ra từ vị trí source/destination
+  /// (Invariant 12), không lưu số âm.
+  final int amountMinor;
+
+  final String currency;
   final String note;
 
-  /// Phải là một trong các giá trị của `category.statuses` khi hạng mục có
-  /// theo dõi trạng thái; null nghĩa là chưa chọn (coi như ở bước đầu tiên).
-  final String? status;
+  /// FK tới `Status.id`, nullable — KHÔNG bao giờ ảnh hưởng balance (mục
+  /// 12, Invariant 9). null nghĩa là chưa chọn (coi như ở bước đầu tiên).
+  final String? statusId;
+  final DateTime? statusUpdatedAt;
 
-  /// Chỉ có ý nghĩa khi hạng mục có kind == savings.
-  final SavingsDestination? savingsDestination;
+  /// Ngày nghiệp vụ — dùng để rollup theo tháng (khác `createdAt`).
+  final DateTime transactionDate;
+  final DateTime createdAt;
+
+  /// Transaction này là bản hoàn tác của `txId` nào (mục 21).
+  final String? reversalOfTxId;
+
+  /// Transaction này là bản thay thế/sửa cho `txId` nào (mục 21).
+  final String? correctsTxId;
+
+  /// Bản gốc bị hoàn tác bởi transaction nào — null = còn hiệu lực. Danh
+  /// sách/rollup mặc định phải lọc `reversedByTxId == null`.
+  final String? reversedByTxId;
+
+  /// Idempotency key chống double-submit (bấm Lưu 2 lần).
+  final String clientTxId;
+
+  /// Optimistic concurrency — chưa dùng ở Giai đoạn A (1 thiết bị), có sẵn
+  /// schema cho Giai đoạn B (mục 22).
+  final int version;
+
+  bool get isReversed => reversedByTxId != null;
+  bool get isReversal => reversalOfTxId != null;
+
+  Transaction copyWith({
+    String? statusId,
+    DateTime? statusUpdatedAt,
+    String? reversedByTxId,
+    int? version,
+  }) {
+    return Transaction(
+      id: id,
+      type: type,
+      transferKind: transferKind,
+      categoryId: categoryId,
+      sourceKind: sourceKind,
+      sourceRefId: sourceRefId,
+      destinationKind: destinationKind,
+      destinationRefId: destinationRefId,
+      amountMinor: amountMinor,
+      currency: currency,
+      note: note,
+      statusId: statusId ?? this.statusId,
+      statusUpdatedAt: statusUpdatedAt ?? this.statusUpdatedAt,
+      transactionDate: transactionDate,
+      createdAt: createdAt,
+      reversalOfTxId: reversalOfTxId,
+      correctsTxId: correctsTxId,
+      reversedByTxId: reversedByTxId ?? this.reversedByTxId,
+      clientTxId: clientTxId,
+      version: version ?? this.version,
+    );
+  }
 }

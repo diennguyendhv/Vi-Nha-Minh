@@ -1,88 +1,136 @@
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/category.dart';
-import '../../domain/entities/category_kind.dart';
-import '../../domain/entities/family_member.dart';
+import '../../domain/entities/status.dart';
+import '../../domain/entities/transaction_type.dart';
 
-/// Đúng 9 hạng mục thật trong sheet "Quản lý tài chính 2026" (trang Ghi
-/// chép) — không phải danh sách Ăn uống/Di chuyển đã đoán ở bản nháp đầu.
+/// Đúng bảng hạng mục seed trong `spec.md` (Financial Core V2) — chỉ dùng
+/// để SEED database rỗng lúc khởi tạo (`data/local/seed_defaults.dart`).
+/// Đây KHÔNG còn là nguồn sự thật cho UI (khác V1) — UI đọc danh mục qua
+/// `CategoryRepository`/`categoriesStreamProvider`, vì danh mục giờ là dữ
+/// liệu người dùng CRUD được, không phải hằng số cứng.
 class DefaultCategories {
   DefaultCategories._();
 
+  static const soDuBanDau = Category(
+    id: 'so_du_ban_dau',
+    name: 'Số dư ban đầu',
+    color: Color(0xFF2F8F4F),
+    type: TransactionType.income,
+    excludeFromTotals: true,
+  );
   static const thuNhap = Category(
     id: 'thu_nhap',
     name: 'Thu nhập',
-    color: Color(0xFF2F8F4F),
-    kind: CategoryKind.income,
+    color: Color(0xFF12805C),
+    type: TransactionType.income,
   );
   static const sinhHoat = Category(
     id: 'sinh_hoat',
     name: 'Sinh hoạt',
     color: Color(0xFF3E6FB0),
-    kind: CategoryKind.expense,
+    type: TransactionType.expense,
   );
   static const dauTu = Category(
     id: 'dau_tu',
     name: 'Đầu tư',
     color: Color(0xFFC9A23E),
-    kind: CategoryKind.expense,
+    type: TransactionType.expense,
   );
   static const tuThuong = Category(
     id: 'tu_thuong',
     name: 'Tự thưởng',
     color: Color(0xFFC14F7A),
-    kind: CategoryKind.expense,
+    type: TransactionType.expense,
   );
   static const choDi = Category(
     id: 'cho_di',
     name: 'Cho đi',
     color: Color(0xFF8A4FB0),
-    kind: CategoryKind.expense,
-    statuses: ['Chưa chuẩn bị', 'Đã chuẩn bị', 'Đã gửi'],
-  );
-  static const tietKiem = Category(
-    id: 'tiet_kiem',
-    name: 'Tiết kiệm',
-    color: Color(0xFF12805C),
-    kind: CategoryKind.savings,
+    type: TransactionType.expense,
+    statsEnabled: true,
+    statuses: [
+      Status(
+        id: 'cho_di_chua_chuan_bi',
+        categoryId: 'cho_di',
+        name: 'Chưa chuẩn bị',
+        sortOrder: 0,
+      ),
+      Status(
+        id: 'cho_di_da_chuan_bi',
+        categoryId: 'cho_di',
+        name: 'Đã chuẩn bị',
+        sortOrder: 1,
+      ),
+      Status(
+        id: 'cho_di_da_gui',
+        categoryId: 'cho_di',
+        name: 'Đã gửi',
+        sortOrder: 2,
+      ),
+    ],
   );
   static const dangHien = Category(
     id: 'dang_hien',
     name: 'Dâng hiến',
     color: Color(0xFF3E86B0),
-    kind: CategoryKind.expense,
-    statuses: ['Chưa chuẩn bị', 'Đã chuẩn bị', 'Đã dâng'],
+    type: TransactionType.expense,
+    statsEnabled: true,
+    statuses: [
+      Status(
+        id: 'dang_hien_chua_chuan_bi',
+        categoryId: 'dang_hien',
+        name: 'Chưa chuẩn bị',
+        sortOrder: 0,
+      ),
+      Status(
+        id: 'dang_hien_da_chuan_bi',
+        categoryId: 'dang_hien',
+        name: 'Đã chuẩn bị',
+        sortOrder: 1,
+      ),
+      Status(
+        id: 'dang_hien_da_dang',
+        categoryId: 'dang_hien',
+        name: 'Đã dâng',
+        sortOrder: 2,
+      ),
+    ],
   );
-  static const chongDuaVo = Category(
-    id: 'chong_dua_vo',
-    name: 'Chồng đưa vợ',
+
+  /// 3 danh mục `type == transfer` — hệ thống quản lý, không tự tạo/xoá qua
+  /// UI (`spec.md` bảng seed).
+  static const chuyenTienThanhVien = Category(
+    id: 'chuyen_tien_thanh_vien',
+    name: 'Chuyển tiền cho thành viên khác',
     color: Color(0xFF6FA8D8),
-    kind: CategoryKind.transfer,
-    transferFrom: FamilyMember.chong,
-    transferTo: FamilyMember.vo,
+    type: TransactionType.transfer,
   );
-  static const voDuaChong = Category(
-    id: 'vo_dua_chong',
-    name: 'Vợ đưa chồng',
+  static const napQuy = Category(
+    id: 'nap_quy',
+    name: 'Nạp quỹ',
     color: Color(0xFFD8836F),
-    kind: CategoryKind.transfer,
-    transferFrom: FamilyMember.vo,
-    transferTo: FamilyMember.chong,
+    type: TransactionType.transfer,
+  );
+  static const tietKiem = Category(
+    id: 'tiet_kiem',
+    name: 'Tiết kiệm',
+    color: Color(0xFF8FA3B3),
+    type: TransactionType.transfer,
   );
 
   static const all = <Category>[
+    soDuBanDau,
     thuNhap,
     sinhHoat,
     dauTu,
     tuThuong,
     choDi,
-    tietKiem,
     dangHien,
-    chongDuaVo,
-    voDuaChong,
+    chuyenTienThanhVien,
+    napQuy,
+    tietKiem,
   ];
-
-  static const expense = <Category>[sinhHoat, dauTu, tuThuong, choDi, dangHien];
 
   static const quickNotes = <String>[
     'Chợ',
@@ -91,16 +139,4 @@ class DefaultCategories {
     'Hoá đơn',
     'Khác',
   ];
-
-  static Category byId(String id) {
-    return all.firstWhere(
-      (c) => c.id == id,
-      orElse: () => const Category(
-        id: '',
-        name: '',
-        color: Color(0xFF9A9D97),
-        kind: CategoryKind.expense,
-      ),
-    );
-  }
 }
