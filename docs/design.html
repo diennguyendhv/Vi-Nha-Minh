@@ -1184,15 +1184,9 @@ erDiagram
           <div class="phone-notch"></div>
           <div class="phone-head">Chi tiết giao dịch <span class="sub">10/09 · Vợ</span></div>
           <div class="phone-body">
-            <div>
-              <label class="field-label">Hạng mục</label>
-              <div class="chip-grid" id="detailCatGrid">
-                <button class="cat-chip" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
-                <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
-                <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
-                <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
-                <button class="cat-chip active" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
-              </div>
+            <div class="settings-row" style="border-top:none;padding-top:0">
+              <span class="l">Hạng mục <span class="hint">(không sửa được)</span></span>
+              <span class="r"><span class="type-badge chi" style="background:var(--amber-soft);color:var(--amber-dark)">Dâng hiến</span></span>
             </div>
             <div>
               <label class="field-label">Số tiền</label>
@@ -1211,7 +1205,7 @@ erDiagram
             <button class="danger-link">Xoá giao dịch</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">11 · CHI TIẾT & ĐỔI TRẠNG THÁI</div><p>Bấm vào bất kỳ dòng lịch sử nào (màn 10, 13, 15, 16...) đều mở đúng màn này — sửa được cả danh mục, số tiền, ghi chú lẫn trạng thái, không chỉ trạng thái. Đổi danh mục ở đây cũng đổi luôn bộ bước trạng thái bên dưới. Sửa số tiền/danh mục đi qua reversal ledger (<code>docs/financial-core-v2.md</code> mục 21) — không ghi đè bản gốc.</p></div>
+        <div class="screen-caption"><div class="tag">11 · CHI TIẾT & ĐỔI TRẠNG THÁI</div><p>Bấm vào bất kỳ dòng lịch sử nào (màn 10, 13, 15, 16...) đều mở đúng màn này — nhưng chỉ <b>Số tiền</b>, <b>Ghi chú</b>, <b>Trạng thái</b> sửa được tại chỗ. Hạng mục và người ghi cố định từ lúc tạo — nhập sai thì xoá giao dịch và ghi lại từ màn 09, tránh phải xử lý reversal phức tạp khi đổi cả loại giao dịch (source/destination khác nhau). Sửa số tiền vẫn đi qua reversal ledger (<code>docs/financial-core-v2.md</code> mục 21); đổi trạng thái thì không, vì không đụng balance.</p></div>
       </div>
 
     </div>
@@ -1767,6 +1761,8 @@ Tỷ lệ tiết kiệm tháng   = (Total Income − Total External Expense) / T
 
 **`TRANSACTION` là append-only cho mọi field ảnh hưởng balance** (`type`, `amountMinor`, `sourceKind`/`sourceRefId`, `destinationKind`/`destinationRefId`) — không bao giờ `UPDATE` thẳng các field này lên 1 bản ghi đã tồn tại, và không dùng `deletedAt` để xoá transaction (khác với Category/Status/Fund/Member ở mục 18, vẫn soft-delete bình thường).
 
+**Quyết định phạm vi UI (đã chốt, thu hẹp so với bản đầu):** màn "Chi tiết giao dịch" chỉ cho sửa **`amountMinor`** và **`statusId`** tại chỗ. `categoryId`, `type`, `transferKind`, `sourceKind/RefId`, `destinationKind/RefId` — tức "loại giao dịch" và "ai/ở đâu" — **không sửa được qua UI này**. Nhập sai hạng mục hoặc sai người thì **xoá giao dịch rồi ghi lại từ đầu** qua màn Thêm giao dịch, thay vì "sửa" nó thành 1 loại khác. Lý do: đổi category có thể kéo theo đổi cả `type`/`source`/`destination` (vd từ Expense sang Transfer) — Financial Engine xử lý được (mục 19, Test 11) nhưng phức tạp hơn hẳn so với chỉ đổi 1 con số, và không cần thiết cho MVP. Domain layer (`updateTransaction`) vẫn có thể giữ khả năng tổng quát đổi mọi field (không đóng cửa hoàn toàn), chỉ riêng UI hiện tại không expose ra ngoài.
+
 - **`reverseTransaction(txId)`** — Cloud Function tạo 1 transaction mới: `sourceKind`/`sourceRefId` và `destinationKind`/`destinationRefId` **đảo ngược** so với bản gốc, cùng `amountMinor`, `reversalOfTxId = txId`; đồng thời set `reversedByTxId` lên bản gốc. Bản gốc **không bị xoá**, vẫn nằm trong DB với nhãn "đã hoàn tác". `applyEffect` của bản reversal tự động triệt tiêu đúng hiệu ứng cũ vì source/destination đảo chiều.
 - **`deleteTransaction(txId)`** (người dùng bấm "Xoá giao dịch") = gọi `reverseTransaction(txId)`. Không có xoá thật ở tầng dữ liệu.
 - **`updateTransaction(txId, newFields)`** (sửa số tiền/loại giao dịch/nguồn-đích) = `reverseTransaction(txId)` **rồi** `createTransaction(newFields, correctsTxId: txId)`. 1 lần sửa tạo ra 3 bản ghi (gốc, hoàn tác, thay thế); UI chỉ hiện bản mới nhất theo mặc định (lọc `reversedByTxId IS NULL`), có thể bấm xem lịch sử sửa để thấy cả chuỗi.
@@ -2060,7 +2056,7 @@ Toàn bộ tính năng ghi chép cá nhân (giao dịch + Quỹ tiền ăn) ch�
 7. **Luồng khởi động Local, không bắt đăng nhập** — Code: 3 màn theo đúng `docs/design.html` (Chào mừng → Đăng nhập/Bỏ qua → Chọn Cá nhân hoặc Gia đình), mặc định vào thẳng `syncMode: "local"` dù chọn Gia đình (chỉ thật sự cần đăng nhập khi bấm mời ở B). Chạy: cài app mới hoàn toàn, dùng thử. Test: ghi chép đầy đủ tính năng mà không cần tài khoản Google, không cần mạng.
 8. **Nối sheet Thêm giao dịch ghi vào Local** — Code: gọi `LocalTransactionRepository` thay mock. Chạy: thêm 1 giao dịch thật. Test: xuất hiện đúng trong danh sách, còn nguyên sau khi khởi động lại app.
 9. **Danh sách giao dịch theo ngày + chuyển xem tháng khác (đọc từ Local)** — Code: query local DB theo tháng. Chạy: thêm giao dịch nhiều tháng, chuyển qua lại. Test: nhóm đúng theo ngày, đúng tháng đang xem.
-10. **Sửa/Xoá giao dịch qua reversal ledger** — Code: `updateTransaction`/`deleteTransaction` use case theo đúng cơ chế append-only ở `docs/financial-core-v2.md` mục 21 — sửa/xoá không mutate/xoá bản ghi gốc, mà tạo bản `reversalOfTxId`/`correctsTxId` mới, đánh dấu `reversedByTxId` lên bản gốc. Chạy: sửa số tiền 1 giao dịch, rồi xoá 1 giao dịch khác. Test: local DB có đủ 3 bản ghi cho 1 lần sửa (gốc, hoàn tác, thay thế); UI danh sách chỉ hiện bản mới nhất (`reversedByTxId IS NULL`); balance cuối cùng đúng.
+10. **Sửa/Xoá giao dịch qua reversal ledger** — Code: `updateTransaction`/`deleteTransaction` use case theo đúng cơ chế append-only ở `docs/financial-core-v2.md` mục 21 — sửa/xoá không mutate/xoá bản ghi gốc, mà tạo bản `reversalOfTxId`/`correctsTxId` mới, đánh dấu `reversedByTxId` lên bản gốc. **Màn "Chi tiết giao dịch" (`docs/design.html` màn 11) chỉ cho sửa `amountMinor` và `statusId`** — không cho đổi `categoryId`/`type`/`source`/`destination`; nhập sai hạng mục hoặc người ghi thì xoá rồi ghi lại từ màn Thêm giao dịch, tránh phải xử lý reversal phức tạp khi đổi cả loại giao dịch. Chạy: sửa số tiền 1 giao dịch, đổi trạng thái 1 giao dịch khác, rồi xoá 1 giao dịch. Test: sửa số tiền tạo đủ 3 bản ghi (gốc, hoàn tác, thay thế) và balance cuối đúng; đổi trạng thái **không** tạo bản ghi reversal nào (update thẳng `statusId`/`statusUpdatedAt`); UI danh sách chỉ hiện bản mới nhất (`reversedByTxId IS NULL`).
 11. **Đổi trạng thái cho giao dịch đã ghi** — Code: `UpdateTransactionStatus` use case + màn "Chi tiết & đổi trạng thái" (`docs/design.html` màn 11) — statusId sửa được sau khi tạo, ghi `statusUpdatedAt`, không cố định lúc ghi. Chạy: tạo giao dịch Dâng hiến "Chưa chuẩn bị", mai mở lại đổi "Đã chuẩn bị" rồi "Đã dâng". Test: statusId/statusUpdatedAt cập nhật đúng, danh sách/tổng hợp phản ánh ngay.
 12. **Quản lý Danh mục & Trạng thái trên Local** — Code: `LocalCategoryRepository`/`LocalStatusRepository` + màn "Danh mục — Danh sách/Chỉnh sửa" (`docs/design.html` màn 06-07, cần vẽ lại theo model V2 trước khi code phase này): xem/thêm/sửa/xoá danh mục (chọn `type`: Thu/Chi/Chuyển), thêm/sửa/xoá/sắp xếp từng bước trạng thái con, toggle `statsEnabled`. Chạy: tạo 1 danh mục mới + 2 bước trạng thái tự đặt tên. Test: danh mục mới xuất hiện đúng ở màn Thêm giao dịch, trạng thái tự sinh chip theo đúng thứ tự đã sắp xếp — không sửa code khi thêm danh mục mới, đúng nguyên tắc `CLAUDE.md` mục 9.
 13. **Validate input khi ghi thật** — Code: số tiền > 0, bắt buộc chọn hạng mục + người ghi. Chạy: thử bấm Lưu khi thiếu dữ liệu. Test: nút Lưu khoá đúng.
@@ -2585,7 +2581,6 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
   var detailStepper = document.getElementById('detailStepper');
   var detailNote = document.getElementById('detailStatusNote');
   var detailStatusBlock = document.getElementById('detailStatusBlock');
-  var detailCatGrid = document.getElementById('detailCatGrid');
   var detailSteps = statusMap.dang_hien;
   var detailCurrent = 1;
   function renderDetail(){
@@ -2607,17 +2602,6 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     });
   }
   if(detailStepper) renderDetail();
-  if(detailCatGrid){
-    detailCatGrid.querySelectorAll('.cat-chip').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        detailCatGrid.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
-        detailSteps = statusMap[btn.dataset.cat] || [];
-        detailCurrent = 0;
-        renderDetail();
-      });
-    });
-  }
 
   function renderMarkdown(md){
     var lines = md.split('\n');
