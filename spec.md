@@ -27,23 +27,25 @@ Ba điểm này được đưa vào làm một phần bắt buộc trong thiết
 
 **Mô hình dữ liệu Firestore (đối chiếu trực tiếp với sheet "Quản lý tài chính 2026" thật — trang Ghi chép + Tổng hợp). Bản vẽ đầy đủ (sơ đồ use case, ERD, 18 màn hình mô phỏng) đã chốt tại [`docs/design.html`](docs/design.html) — phần dưới đây là bản tóm tắt kỹ thuật khớp với file đó, mọi thay đổi schema về sau phải cập nhật đồng thời cả hai nơi.**
 
-**Phân loại gốc: mọi danh mục chỉ thuộc Thu hoặc Chi — không còn `kind` nhiều giá trị như bản nháp đầu.** Tiết kiệm và 2 hạng mục chuyển khoản (Chồng đưa vợ/Vợ đưa chồng) đều là danh mục thuộc **Chi**, không có loại riêng — Tiết kiệm được đánh dấu bằng cờ `isSaving`, chuyển khoản được đánh dấu bằng `transferToUid`. Đây là thay đổi so với bản nháp đầu (không còn `kind: "income"|"expense"|"savings"|"transfer"`).
+**Mô hình tài chính V2 (thay thế hoàn toàn bản nháp Thu/Chi ban đầu) — chi tiết đầy đủ + lý do + test case ở [`docs/financial-core-v2.md`](docs/financial-core-v2.md), đọc file đó trước khi code Financial Engine.**
 
-Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật trong sheet):
+**3 loại giao dịch, không phải 2:** `INCOME` (tiền từ bên ngoài vào), `EXPENSE` (tiền rời khỏi gia đình thật sự), `TRANSFER` (tiền chỉ đổi chỗ giữa 2 "pool" trong cùng hệ thống — không làm Tổng tài sản đổi). Bản nháp đầu từng gộp Tiết kiệm/Quỹ/Chuyển khoản nội bộ vào chung "Chi" — **sai**, vì tài sản gia đình không hề giảm khi vợ chồng chuyển tiền cho nhau hay nạp tiền vào quỹ/tiết kiệm; gộp vào Chi làm phình Tổng chi giả tạo. Mỗi giao dịch có `sourceKind`/`sourceRefId` (tiền lấy từ đâu) và `destinationKind`/`destinationRefId` (tiền tới đâu) — 1 trong 2 đầu là `EXTERNAL` thì đó là Thu hoặc Chi; cả 2 đầu đều ở trong hệ thống thì đó là Transfer. `Category` chỉ còn là **nhãn để nhóm báo cáo**, không quyết định tiền chạy đi đâu.
 
-| id | Tên hiển thị | Thu/Chi | isSaving | transferToUid | Có `statuses`? |
-|---|---|---|---|---|---|
-| `thu_nhap` | Thu nhập | Thu | — | — | không |
-| `sinh_hoat` | Sinh hoạt | Chi | false | — | tự thêm được (không mặc định) |
-| `dau_tu` | Đầu tư | Chi | false | — | không |
-| `tu_thuong` | Tự thưởng | Chi | false | — | không |
-| `cho_di` | Cho đi | Chi | false | — | **có, 3 bước mặc định** |
-| `tiet_kiem` | Tiết kiệm | Chi | **true** | — | không (dùng `savingsAction` riêng, xem bên dưới) |
-| `dang_hien` | Dâng hiến | Chi | false | — | **có, 3 bước mặc định** |
-| `chong_dua_vo` | Chồng đưa vợ | Chi | false | uid của Vợ | không |
-| `vo_dua_chong` | Vợ đưa chồng | Chi | false | uid của Chồng | không |
+Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật trong sheet, đã bỏ 2 hạng mục "Chồng đưa vợ"/"Vợ đưa chồng" cứng — xem lý do ở `docs/financial-core-v2.md` mục 26):
 
-Cách một giao dịch ảnh hưởng đến số dư: category thuộc **Thu** → cộng vào số dư người ghi; category thuộc **Chi** → trừ khỏi số dư người ghi (kể cả `isSaving` và transfer); riêng `isSaving` còn cộng/trừ vào `savingsOnHand`/`savingsInBank` theo `savingsAction`; riêng category có `transferToUid` thì Cloud Function cộng thêm số tiền đó vào số dư của `transferToUid` (không hardcode theo tên "Chồng đưa vợ" — đọc từ field).
+| id | Tên hiển thị | `type` | Có `statuses`? |
+|---|---|---|---|
+| `thu_nhap` | Thu nhập | INCOME | không |
+| `sinh_hoat` | Sinh hoạt | EXPENSE | tự thêm được (không mặc định) |
+| `dau_tu` | Đầu tư | EXPENSE | không |
+| `tu_thuong` | Tự thưởng | EXPENSE | không |
+| `cho_di` | Cho đi | EXPENSE | **có, 3 bước mặc định** |
+| `dang_hien` | Dâng hiến | EXPENSE | **có, 3 bước mặc định** |
+| `chuyen_tien_thanh_vien` | Chuyển tiền cho thành viên khác | TRANSFER | không — khi chọn, UI hỏi thêm **người nhận** (danh sách thành viên), chạy đúng với bất kỳ số thành viên nào, không cần 1 category riêng cho từng cặp người |
+| `nap_quy` | Nạp quỹ | TRANSFER | không — dùng chung cho mọi quỹ, xem `fund` bên dưới |
+| `tiet_kiem` | Tiết kiệm | TRANSFER | không — dùng chung cho cả nạp/rút/gửi ngân hàng, phân biệt bằng `transferKind` |
+
+Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nhất cho mọi loại**: nếu `sourceKind ≠ EXTERNAL` thì trừ `amountMinor` khỏi pool nguồn; nếu `destinationKind ≠ EXTERNAL` thì cộng `amountMinor` vào pool đích. Không có nhánh if/else riêng theo category — xem code mẫu ở `docs/financial-core-v2.md` mục 6.
 
 **Trạng thái (`statuses`) là bảng con CRUD được, áp dụng cho mọi danh mục, không riêng Cho đi/Dâng hiến:** `families/{familyId}/categories/{categoryId}/statuses/{statusId}` gồm `name` (tự đặt) và `sortOrder` (tự sắp xếp) — thay cho mảng cứng `statuses: string[]` ở bản nháp đầu, để người dùng xem/thêm/sửa/xoá/sắp xếp từng bước qua UI (màn "Danh mục — Chỉnh sửa"). Giao dịch tham chiếu `statusId` (không phải chuỗi tự do), sửa được sau khi tạo (`statusUpdatedAt` ghi lại lần đổi gần nhất) — ví dụ Dâng hiến hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", không cố định lúc ghi.
 
@@ -70,49 +72,62 @@ families/{familyId}
   ownerUid, createdAt, memberIds: [uid1, uid2, ...]
 
 families/{familyId}/members/{uid}
-  displayName, roleLabel (chuỗi tự do, gia đình tự đặt), joinedAt, isOwner
+  displayName, roleLabel (chuỗi tự do, gia đình tự đặt), joinedAt, isOwner, isActive (soft delete)
 
 families/{familyId}/invites/{inviteId}
   code (6-8 ký tự ngẫu nhiên), suggestedRoleLabel,
   createdBy, createdAt, expiresAt, maxUses, usedCount
 
 families/{familyId}/categories/{categoryId}
-  name, color, typeId ("thu" | "chi"),
-  isSaving (bool, chi ap dung khi typeId = "chi"),
-  transferToUid (uid?, chi danh muc chuyen khoan),
+  name, color, type ("INCOME" | "EXPENSE" | "TRANSFER"),
   statsEnabled (bool, hien o Tong hop trang thai),
-  isDefault
+  isDefault, isActive (soft delete)
 
 families/{familyId}/categories/{categoryId}/statuses/{statusId}
-  name (tu dat), sortOrder (int)
+  name (tu dat), sortOrder (int), isActive (soft delete)
+
+families/{familyId}/funds/{fundId}
+  name, color, isActive (soft delete),
+  balance   // derived, cache boi Cloud Function
 
 families/{familyId}/transactions/{txId}
-  categoryId, statusId (FK, null neu danh muc khong co statuses),
-  statusUpdatedAt (timestamp, moi lan doi trang thai),
-  amount, note, spenderUid, date,
-  fundId (FK?, co neu tich 1 Quy khi ghi giao dich),
-  savingsDestination / savingsAction (chi khi category isSaving — xem muc Quy/Tiet kiem),
-  createdBy, createdAt
+  type ("INCOME" | "EXPENSE" | "TRANSFER")
+  transferKind (null tru khi type=TRANSFER: "MEMBER_TO_MEMBER" | "FUND_TOPUP" |
+                "SAVINGS_TOPUP" | "SAVINGS_WITHDRAW" | "SAVINGS_TO_BANK")
+  categoryId, statusId (FK, null neu danh muc khong co statuses), statusUpdatedAt,
+  sourceKind / sourceRefId          ("MEMBER_AVAILABLE"|"MEMBER_SAVINGS_CASH"|
+                                      "MEMBER_SAVINGS_BANK"|"FUND"|"EXTERNAL", + uid/fundId)
+  destinationKind / destinationRefId (cung enum voi sourceKind)
+  amountMinor (int, luon duong), currency ("VND"),
+  note, transactionDate (ngay nghiep vu), spenderUid,
+  createdAt, createdBy, clientTxId (chong double-submit), version,
+  reversalOfTxId / correctsTxId / reversedByTxId (null neu con hieu luc — xem Financial Engine)
 
 families/{familyId}/memberBalances/{uid}
-  balance,               // Số dư hiện tại của người này
-  savingsOnHand,         // Tiết kiệm hiện tại (chưa gửi ngân hàng)
-  savingsInBank          // Tiết kiệm đã gửi ngân hàng
+  availableBalance,      // Tien co the chi cua nguoi nay (khong duoc am)
+  savingsCash,           // Tiet kiem hien tai, chua gui ngan hang (khong duoc am)
+  savingsBank            // Tiet kiem da gui ngan hang (khong duoc am)
 
 families/{familyId}/budgets/{yearMonth}
-  categoryLimits: { categoryId: amount }
+  categoryLimits: { categoryId: amountMinor }   // chi cong don giao dich type=EXPENSE
 ```
 
-`memberBalances` là số liệu dẫn xuất (derived) — tính lại từ toàn bộ `transactions` của người đó; có thể cache bằng Cloud Function cập nhật mỗi khi có giao dịch mới để tránh phải cộng dồn hàng nghìn dòng ở client mỗi lần mở app (tham khảo số dòng thật trong sheet: hơn 1700 dòng chỉ riêng 8 tháng đầu năm).
+`memberBalances`/`funds/{id}.balance` là số liệu dẫn xuất (derived) — tính lại từ toàn bộ `transactions` chưa bị `reversedByTxId`; cache bằng Cloud Function cập nhật mỗi khi có giao dịch mới, phải luôn rebuild lại được 100% từ `transactions` gốc (tham khảo số dòng thật trong sheet: hơn 1700 dòng chỉ riêng 8 tháng đầu năm).
 
-**Công thức cân đối bắt buộc đúng ở mọi domain logic tính tổng hợp:**
+**Công thức tài chính (3 tổng tách biệt — thay hẳn công thức "Tổng thu = Tổng chi + Tiết kiệm" ở bản nháp đầu, vốn tự mâu thuẫn vì gộp cả Transfer vào Chi):**
 
 ```
-Tổng thu = Tổng chi + Số tiền còn lại
-Tổng chi = Chi phí + Tiết kiệm
+Total Income          = Σ amountMinor (type = INCOME)
+Total External Expense = Σ amountMinor (type = EXPENSE)
+Total Transfer Volume  = Σ amountMinor (type = TRANSFER)   // chỉ để hiển thị dòng tiền, KHÔNG cộng vào Thu/Chi
+
+Tổng tài sản (cuối kỳ) = Tổng tài sản (đầu kỳ) + Total Income − Total External Expense
+                          // Transfer tự cân bằng nội bộ, không xuất hiện trong công thức này
+
+Tỷ lệ tiết kiệm tháng = (Total Income − Total External Expense) / Total Income
 ```
 
-Vì Tiết kiệm chỉ là 1 `category` thuộc Chi (`isSaving = true`), phương trình trên luôn đúng bằng cộng dồn số học đơn giản (`totalIncome - totalSpending - totalSaving = remaining`) — không cần nhánh logic riêng cho tiết kiệm ở bất kỳ use case tổng hợp nào trong `domain/`.
+Vì `Total External Expense` giờ không còn lẫn Tiết kiệm/Quỹ/chuyển khoản nội bộ, công thức luôn đúng bằng cộng dồn số học đơn giản — không cần nhánh logic riêng cho tiết kiệm ở bất kỳ use case tổng hợp nào trong `domain/`.
 
 **Chia dữ liệu theo tháng + bảng tổng hợp tính sẵn — quyết định kiến trúc quan trọng cho việc mở rộng nhiều người dùng, nhiều năm:**
 
@@ -120,18 +135,16 @@ Một collection `transactions` phẳng, cộng dồn mãi mãi, có hai vấn �
 
 ```
 families/{familyId}/months/{yearMonth}              // yearMonth dạng "2026-09"
-  totalIncome,
-  totalSpending,        // Chi phí thường (khong tinh cac category isSaving)
-  totalSaving,          // Cong don cac category isSaving trong thang
-  // totalIncome = (totalSpending + totalSaving) + remaining — xem cong thuc can bang ben duoi
+  totalIncome,           // Sigma type=INCOME
+  totalExpense,          // Sigma type=EXPENSE (KHONG con lan Tiet kiem/Quy/chuyen khoan)
+  totalTransfer,         // Sigma type=TRANSFER, chi de hien thi dong tien, khong cong vao Thu/Chi
   categoryTotals: { categoryId: amount },
-  memberTotals: { uid: { income, expense, savingsOnHand, savingsInBank } },
+  memberTotals: { uid: { income, expense } },
   statusTotals: { statusId: amount, ... }   // khoa theo statusId thuc te cua tung category, khong hardcode ten buoc
 
 families/{familyId}/months/{yearMonth}/transactions/{txId}
-  categoryId, statusId, statusUpdatedAt, fundId,
-  amount, note, spenderUid, date, savingsDestination / savingsAction,
-  createdBy, createdAt
+  // giong het shape families/{familyId}/transactions/{txId} o tren, chi khac vi tri luu
+  // (phan trang theo thang de realtime listener luon nho, xem giai thich ben duoi)
 ```
 
 - **Realtime listener chỉ mở cho tháng đang xem** (`months/{currentYearMonth}/transactions`) — dữ liệu luôn nhỏ và nhanh dù sổ đã dùng 5 năm, vì tháng cũ không còn bị "nghe" nữa.
@@ -140,32 +153,24 @@ families/{familyId}/months/{yearMonth}/transactions/{txId}
 - `memberBalances/{uid}` (số dư/tiết kiệm trọn đời) cũng được Cloud Function này cập nhật cùng lúc, cùng cơ chế increment.
 - Cấu trúc này scale tốt cho nhiều gia đình cùng lúc vì `familyId` đã là ranh giới tenant tự nhiên — chi phí/tốc độ của gia đình A không phụ thuộc gia đình B dùng bao lâu hay bao nhiêu dữ liệu.
 
-**Quỹ (envelope budgeting) — tạo được nhiều cái, không còn cố định 1 "Quỹ tiền ăn" duy nhất.** Gia đình tự đặt tên tuỳ ý (Quỹ tiền ăn, Quỹ sinh hoạt, quỹ du lịch...), không giới hạn số lượng:
+**Quỹ (envelope budgeting) — tạo được nhiều cái, không còn cố định 1 "Quỹ tiền ăn" duy nhất.** Gia đình tự đặt tên tuỳ ý (Quỹ tiền ăn, Quỹ sinh hoạt, quỹ du lịch...), không giới hạn số lượng. Quỹ là 1 "pool" tiền như bất kỳ pool nào khác (`sourceKind`/`destinationKind = FUND`) — **không có subcollection `entries` riêng nữa**: lịch sử 1 quỹ = truy vấn `transactions` where `sourceRefId = fundId OR destinationRefId = fundId` (xem index cần tạo ở `docs/financial-core-v2.md` mục 14).
 
-```
-families/{familyId}/funds/{fundId}
-  name, color, createdAt,
-  balance                          // derived, cache boi Cloud Function
+- **Nạp quỹ** = `TRANSFER(FUND_TOPUP)`, category "Nạp quỹ": `source = MEMBER_AVAILABLE(người nạp)`, `destination = FUND(quỹ)`.
+- **Chi tiêu dùng quỹ** = `EXPENSE` bình thường (vd category Sinh hoạt) nhưng `source = FUND(quỹ)` thay vì `MEMBER_AVAILABLE` — **chỉ trừ đúng 1 pool là quỹ, không đụng số dư người mua.** Đây là điểm sửa quan trọng nhất so với bản nháp đầu (bản đầu từng trừ **cả** số dư người mua **lẫn** số dư quỹ cho cùng 1 khoản chi — lỗi trừ kép, xem `docs/financial-core-v2.md` mục F-03).
+- **Chi tiêu không dùng quỹ** = `EXPENSE` bình thường, `source = MEMBER_AVAILABLE(người mua)`.
+- **Quỹ không được phép âm** (giống `MEMBER_AVAILABLE`): UI đọc `balance` quỹ trước khi cho chọn, khoá lựa chọn nếu `amountMinor` > `balance`; Cloud Function kiểm tra lại trong 1 Firestore Transaction trước khi ghi, từ chối nếu sẽ làm âm (tránh race condition 2 thiết bị ghi cùng lúc).
 
-families/{familyId}/funds/{fundId}/entries/{entryId}
-  kind ("topUp" | "purchase"),     // nap tien vao quy | mua gi do tu quy
-  linkedTxId (FK -> transactions), // giao dich that da tru chi phi nguoi tao
-  amount, note, date, createdBy
-```
+**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
 
-**Quỹ nối thẳng vào giao dịch thật, không phải sổ tách biệt hoàn toàn như bản nháp đầu:**
+- `SAVINGS_TOPUP` — nạp tiết kiệm: `source = MEMBER_AVAILABLE` → `destination = MEMBER_SAVINGS_CASH`.
+- `SAVINGS_WITHDRAW` — rút về ví chính (màn "Tiết kiệm — Nhập giao dịch"): `source = MEMBER_SAVINGS_CASH` → `destination = MEMBER_AVAILABLE`.
+- `SAVINGS_TO_BANK` — gửi ngân hàng: `source = MEMBER_SAVINGS_CASH` → `destination = MEMBER_SAVINGS_BANK`.
 
-- **Nạp quỹ** = một giao dịch Chi thật (categoryId trỏ tới category "Nạp quỹ [tên quỹ]", hoặc field `fundId` + `fundAction: "topUp"` trên transaction) — trừ số dư người nạp **và** tạo `FUND_ENTRY(kind: topUp)` tăng `balance` của quỹ, hai việc xảy ra cùng lúc từ 1 hành động.
-- **Chi tiêu tích 1 quỹ** = khi Thêm giao dịch, người dùng **tuỳ chọn** chọn 1 quỹ (hoặc "Không dùng quỹ") ở field `fundId` trên transaction — nếu chọn, giao dịch vẫn trừ số dư người mua như bình thường (theo `categoryId` đã chọn, vd Sinh hoạt), **đồng thời** tạo `FUND_ENTRY(kind: purchase, linkedTxId)` giảm `balance` của quỹ đó. Chi phí luôn tính cho người mua/người nhập giao dịch, không phải người đã nạp quỹ trước đó.
-- **Quỹ không được phép âm:** UI phải đọc `balance` hiện tại của quỹ trước khi cho phép chọn — nếu `amount` giao dịch > `balance` quỹ, khoá lựa chọn quỹ đó (không chỉ validate ở client, Cloud Function ghi `FUND_ENTRY` cũng phải kiểm tra lại và từ chối nếu sẽ làm `balance` âm, tránh race condition 2 thiết bị ghi cùng lúc).
+Cả 3 đều **không đổi Tổng tài sản**, chỉ đổi chỗ tiền đang nằm — qua 1 form chung: chọn loại hình, nhập số tiền + ghi chú, `transactionDate`/`createdAt` hệ thống tự gán.
 
-**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ.** Giao dịch dưới category `isSaving = true` mang thêm field `savingsAction`:
+**Chuyển tiền cho thành viên khác** (thay 2 category cứng "Chồng đưa vợ"/"Vợ đưa chồng" ở bản nháp đầu) = `TRANSFER(MEMBER_TO_MEMBER)`, category "Chuyển tiền cho thành viên khác": `source = MEMBER_AVAILABLE(người gửi, mặc định là người đang thao tác)` → `destination = MEMBER_AVAILABLE(người nhận, chọn từ danh sách thành viên)`. Chạy đúng với bất kỳ số lượng thành viên nào ngay từ Giai đoạn A, không cần refactor lại khi gia đình mời thêm người thứ 3.
 
-- `"topUp"` — nạp tiết kiệm, tăng `savingsOnHand`.
-- `"withdrawToBalance"` — rút về ví chính (màn "Tiết kiệm — Nhập giao dịch"), giảm `savingsOnHand` **và** cộng lại vào `balance` chi tiêu của người đó — tiền rời khỏi tiết kiệm thật sự.
-- `"moveToBank"` — gửi ngân hàng, giảm `savingsOnHand` và tăng `savingsInBank` tương ứng, không đụng `balance` chính (chỉ đổi chỗ tiền đang nằm, tổng tiết kiệm không đổi).
-
-Cả 3 hành động đều qua 1 form chung: chọn loại hình, nhập số tiền + ghi chú, `date`/`createdAt` hệ thống tự gán — người dùng không nhập tay ngày tháng.
+**Sửa/xoá giao dịch dùng reversal ledger, không sửa/xoá cứng:** `transactions` là append-only cho mọi field ảnh hưởng số dư — sửa hoặc xoá đều tạo thêm bản ghi mới (`reversalOfTxId`/`correctsTxId`), bản gốc chỉ được đánh dấu `reversedByTxId`, không bao giờ bị mutate hay xoá thật. Chi tiết cơ chế + lý do ở `docs/financial-core-v2.md` mục 21.
 
 **Quy tắc bảo mật Firestore (rút gọn):**
 
@@ -194,14 +199,14 @@ Toàn bộ tính năng ghi chép cá nhân (giao dịch + Quỹ tiền ăn) ch�
 7. **Luồng khởi động Local, không bắt đăng nhập** — Code: 3 màn theo đúng `docs/design.html` (Chào mừng → Đăng nhập/Bỏ qua → Chọn Cá nhân hoặc Gia đình), mặc định vào thẳng `syncMode: "local"` dù chọn Gia đình (chỉ thật sự cần đăng nhập khi bấm mời ở B). Chạy: cài app mới hoàn toàn, dùng thử. Test: ghi chép đầy đủ tính năng mà không cần tài khoản Google, không cần mạng.
 8. **Nối sheet Thêm giao dịch ghi vào Local** — Code: gọi `LocalTransactionRepository` thay mock. Chạy: thêm 1 giao dịch thật. Test: xuất hiện đúng trong danh sách, còn nguyên sau khi khởi động lại app.
 9. **Danh sách giao dịch theo ngày + chuyển xem tháng khác (đọc từ Local)** — Code: query local DB theo tháng. Chạy: thêm giao dịch nhiều tháng, chuyển qua lại. Test: nhóm đúng theo ngày, đúng tháng đang xem.
-10. **Sửa/Xoá giao dịch** — Code: `EditTransaction`/`DeleteTransaction` use case. Chạy: sửa và xoá thử. Test: local DB cập nhật đúng, UI phản ánh ngay.
+10. **Sửa/Xoá giao dịch qua reversal ledger** — Code: `updateTransaction`/`deleteTransaction` use case theo đúng cơ chế append-only ở `docs/financial-core-v2.md` mục 21 — sửa/xoá không mutate/xoá bản ghi gốc, mà tạo bản `reversalOfTxId`/`correctsTxId` mới, đánh dấu `reversedByTxId` lên bản gốc. Chạy: sửa số tiền 1 giao dịch, rồi xoá 1 giao dịch khác. Test: local DB có đủ 3 bản ghi cho 1 lần sửa (gốc, hoàn tác, thay thế); UI danh sách chỉ hiện bản mới nhất (`reversedByTxId IS NULL`); balance cuối cùng đúng.
 11. **Đổi trạng thái cho giao dịch đã ghi** — Code: `UpdateTransactionStatus` use case + màn "Chi tiết & đổi trạng thái" (`docs/design.html` màn 11) — statusId sửa được sau khi tạo, ghi `statusUpdatedAt`, không cố định lúc ghi. Chạy: tạo giao dịch Dâng hiến "Chưa chuẩn bị", mai mở lại đổi "Đã chuẩn bị" rồi "Đã dâng". Test: statusId/statusUpdatedAt cập nhật đúng, danh sách/tổng hợp phản ánh ngay.
-12. **Quản lý Danh mục & Trạng thái trên Local** — Code: `LocalCategoryRepository`/`LocalStatusRepository` + màn "Danh mục — Danh sách/Chỉnh sửa" (`docs/design.html` màn 06-07): xem/thêm/sửa/xoá danh mục (chọn Thu/Chi, đánh dấu Tiết kiệm), thêm/sửa/xoá/sắp xếp từng bước trạng thái con, toggle `statsEnabled`. Chạy: tạo 1 danh mục mới + 2 bước trạng thái tự đặt tên. Test: danh mục mới xuất hiện đúng ở màn Thêm giao dịch, trạng thái tự sinh chip theo đúng thứ tự đã sắp xếp — không sửa code khi thêm danh mục mới, đúng nguyên tắc `CLAUDE.md` mục 9.
+12. **Quản lý Danh mục & Trạng thái trên Local** — Code: `LocalCategoryRepository`/`LocalStatusRepository` + màn "Danh mục — Danh sách/Chỉnh sửa" (`docs/design.html` màn 06-07, cần vẽ lại theo model V2 trước khi code phase này): xem/thêm/sửa/xoá danh mục (chọn `type`: Thu/Chi/Chuyển), thêm/sửa/xoá/sắp xếp từng bước trạng thái con, toggle `statsEnabled`. Chạy: tạo 1 danh mục mới + 2 bước trạng thái tự đặt tên. Test: danh mục mới xuất hiện đúng ở màn Thêm giao dịch, trạng thái tự sinh chip theo đúng thứ tự đã sắp xếp — không sửa code khi thêm danh mục mới, đúng nguyên tắc `CLAUDE.md` mục 9.
 13. **Validate input khi ghi thật** — Code: số tiền > 0, bắt buộc chọn hạng mục + người ghi. Chạy: thử bấm Lưu khi thiếu dữ liệu. Test: nút Lưu khoá đúng.
 14. **`syncMode: "local" | "cloud"`, mặc định `"local"`** — Code: field lưu cục bộ (SharedPreferences hoặc trong chính local DB). Chạy: kiểm tra giá trị khi tạo mới. Test: mọi tài khoản mới đều `"local"`, chưa đụng gì tới Firestore.
 15. **`LocalFundRepository`, tạo được nhiều quỹ** — Code: implement `FundRepository` bằng local storage, hỗ trợ tạo nhiều `funds` tự đặt tên (không còn 1 quỹ cố định). Chạy: tạo 2 quỹ (Quỹ tiền ăn, Quỹ sinh hoạt), nạp/mua thử mỗi quỹ. Test: số dư từng quỹ độc lập, đúng, hoạt động hoàn toàn offline.
 16. **Màn hình Danh sách Quỹ + tạo quỹ mới trên Local** — Code: nối UI "Quỹ — Danh sách" (`docs/design.html` màn 14) với `LocalFundRepository`. Chạy: dùng thử tạo quỹ, nạp + ghi mua trên máy thật. Test: số dư quỹ đúng như unit test `computeFundBalance` đã có.
-17. **Giao dịch liên kết Quỹ (`fundId`) + chặn quỹ âm** — Code: màn Thêm giao dịch thêm phần chọn quỹ (tuỳ chọn, có "Không dùng quỹ"), hiển thị số dư quỹ ngay tại chỗ; khoá lựa chọn nếu `amount` > số dư quỹ, báo lỗi rõ nếu cố chọn. Chạy: nhập số tiền lớn hơn số dư 1 quỹ, thử chọn quỹ đó. Test: không cho chọn, thông điệp lỗi đúng; chọn quỹ đủ tiền thì trừ đúng cả số dư người mua lẫn số dư quỹ.
+17. **Chi tiêu nguồn là Quỹ (`source = FUND`) + chặn quỹ âm** — Code: màn Thêm giao dịch thêm phần chọn nguồn tiền (mặc định `MEMBER_AVAILABLE`, tuỳ chọn đổi sang 1 quỹ cụ thể), hiển thị số dư quỹ ngay tại chỗ; khoá lựa chọn nếu `amountMinor` > số dư quỹ, báo lỗi rõ nếu cố chọn. Chạy: nhập số tiền lớn hơn số dư 1 quỹ, thử chọn quỹ đó. Test: không cho chọn, thông điệp lỗi đúng; chọn quỹ đủ tiền thì **chỉ** trừ số dư quỹ — số dư người mua giữ nguyên, không trừ kép.
 18. **Mốc kiểm tra: dùng đầy đủ ghi chép + Danh mục/Trạng thái tự quản lý + Quỹ liên tục nhiều ngày, hoàn toàn không cần Firebase** — Chạy: dùng thử thật vài ngày. Test: không phát sinh lỗi nào đòi hỏi mạng/Firebase cho việc ghi chép cá nhân.
 
 ### Giai đoạn B — Firebase & đồng bộ khi có người thứ 2 tham gia (17 phase, đánh số 19-35)
@@ -213,7 +218,7 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 21. **`flutterfire configure` + `Firebase.initializeApp()` (chỉ init khi thật sự cần)** — Code: sinh `firebase_options.dart`, chỉ gọi init khi người dùng bấm "Mời người khác" lần đầu, không init ngay lúc mở app ở chế độ local. Chạy: bấm nút Mời. Test: Firebase khởi tạo đúng lúc cần, không tải SDK không cần thiết khi đang dùng local.
 22. **Bật Cloud Firestore (Native mode)** — thao tác Console. Chạy: mở tab Firestore. Test: database trống đã tồn tại, đúng khu vực.
 23. **Bật Firebase Authentication (Google Sign-In), kích hoạt khi cần mời** — Code: cấu hình OAuth client ID Android (SHA-1); màn hình đăng nhập (`docs/design.html` màn 02) chỉ hiện khi bấm "Mời người khác" hoặc "Chuyển sang Gia đình". Chạy: bấm Mời lần đầu trên máy thật. Test: được yêu cầu đăng nhập đúng lúc, `FirebaseAuth.instance.currentUser` đúng sau đó.
-24. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`uid`, `roleLabel` tự do), cập nhật `compute_member_financials`/`transferToUid`. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát.
+24. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`uid`, `roleLabel` tự do), cập nhật use case tính `availableBalance`/`savingsCash`/`savingsBank` và picker "người nhận" ở luồng Chuyển tiền cho thành viên khác. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát.
 25. **Viết Security Rules bản đầu** (`families/{familyId}` chỉ `memberIds` đọc/ghi) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
 26. **Test rule bằng Firebase Emulator Suite** — Code: test rule (`@firebase/rules-unit-testing`). Chạy: `firebase emulators:exec`. Test: tài khoản ngoài family bị chặn đọc/ghi — rủi ro nghiêm trọng nhất của app, không được bỏ qua.
 27. **Sinh mã mời có hạn dùng** — Code: `GenerateInvite` use case (mã ngẫu nhiên 6-8 ký tự, `expiresAt`, `maxUses`). Chạy: tạo thử 1 mã. Test: document `invites/{id}` đúng, mã không đoán được theo mẫu tuần tự.
@@ -228,23 +233,23 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 
 ### Giai đoạn C — Tài khoản riêng từng thành viên, Danh mục/Quỹ trên Cloud & Tiết kiệm (12 phase, đánh số 36-47)
 
-36. **Cloud Function cập nhật `memberBalances`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()`, đọc `transferToUid` từ chính category thay vì hardcode tên hạng mục. Chạy: `firebase deploy --only functions`, thêm giao dịch thử. Test: `memberBalances/{uid}` đúng sau nhiều loại giao dịch (thu/chi/tiết kiệm/chuyển khoản).
+36. **Cloud Function `applyEffect` cập nhật `memberBalances`/`funds.balance`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()` theo đúng `sourceKind/RefId` và `destinationKind/RefId` của giao dịch (1 hàm chung cho cả Income/Expense/Transfer, xem `docs/financial-core-v2.md` mục 6). Chạy: `firebase deploy --only functions`, thêm giao dịch thử đủ 3 loại. Test: `memberBalances/{uid}` đúng sau Income/Expense/Transfer, không pool nào bị âm.
 37. **Nối 2 thẻ thành viên đọc `memberBalances` thật** — Code: đổi nguồn dữ liệu Trang chủ. Chạy: `flutter run`. Test: số hiển thị khớp Cloud Function tính.
-38. **Unit test Cloud Function xử lý chuyển khoản 2 chiều** — Code: test bằng `firebase-functions-test`, dựa trên `transferToUid` tổng quát (không hardcode "Chồng đưa vợ"). Chạy: `npm test`. Test: mọi cặp category chuyển khoản đổi đúng dấu ở cả 2 phía.
+38. **Unit test Cloud Function xử lý chuyển tiền cho thành viên khác** — Code: test bằng `firebase-functions-test`, dựa trên `sourceRefId`/`destinationRefId` tự do (không hardcode "Chồng đưa vợ"). Chạy: `npm test`. Test: chuyển giữa bất kỳ cặp thành viên nào đổi đúng dấu ở cả 2 phía, Tổng tài sản không đổi.
 39. **`FirestoreCategoryRepository` + `FirestoreStatusRepository`** — Code: implement, thay `LocalCategoryRepository`/`LocalStatusRepository` khi `syncMode: "cloud"`, ghi vào `families/{id}/categories` và `categories/{id}/statuses`. Chạy: thêm/sửa/xoá 1 danh mục trên máy A. Test: máy B thấy thay đổi realtime, đúng schema.
-40. **`FirestoreFundRepository`, hỗ trợ nhiều quỹ trên Cloud** — Code: implement, ghi vào `families/{id}/funds/{fundId}/entries`. Chạy: tạo 2 quỹ, gọi thử `addEntry()` cho từng quỹ. Test: document đúng path, không lẫn quỹ.
-41. **Giao dịch liên kết Quỹ trên Firestore (`fundId`) + Cloud Function chặn quỹ âm phía server** — Code: Cloud Function kiểm tra lại `balance` quỹ trước khi ghi `FUND_ENTRY`, từ chối (rollback transaction) nếu sẽ âm — không chỉ tin validate ở client vì 2 máy có thể ghi đồng thời. Chạy: giả lập 2 giao dịch cùng lúc từ 2 máy làm quỹ âm. Test: 1 trong 2 bị từ chối đúng, `balance` quỹ không bao giờ âm.
-42. **Màn hình Danh sách Quỹ + Chi tiết quỹ với dữ liệu thật** — Code: `presentation/features/fund/`, hiển thị số dư + danh sách khoản cho từng quỹ. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng mua, khớp `computeFundBalance` đã unit test.
-43. **Form nạp tiền vào quỹ (Firestore thật)** — Code: UI + `addEntry(kind: topUp)`, đồng thời tạo giao dịch Chi trừ số dư người nạp. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, số dư người nạp giảm đúng, entry hiện trong danh sách.
-44. **Form ghi khoản chi tích quỹ (Firestore thật)** — Code: UI + `addEntry(kind: purchase, linkedTxId)`, chặn chọn quỹ nếu `amount` > số dư quỹ. Chạy: ghi thử "đi chợ 150.000đ" tích quỹ. Test: số dư quỹ giảm đúng, số dư người mua giảm đúng qua giao dịch liên kết — không tạo thêm dòng trùng.
-45. **Cloud Function cache `balance` lên `funds/{fundId}`** — Code: `onWrite` entries → increment. Chạy: deploy + test qua vài entry. Test: field `balance` khớp tổng tính tay.
-46. **Nối tách tiết kiệm hiện tại/ngân hàng với dữ liệu thật** — Code: đổi nguồn `savingsOnHand`/`savingsInBank` sang Cloud Function tính theo `savingsAction`. Chạy: thêm giao dịch Tiết kiệm `moveToBank`. Test: đúng cột tăng, cột còn lại không đổi, `balance` chính không đổi.
-47. **Màn hình Tiết kiệm — Quản lý + Nhập giao dịch** (`docs/design.html` màn 16-17) — Code: `presentation/features/savings/`, 2 nút "Rút về ví chính"/"Gửi ngân hàng" mở form chung (loại hình, số tiền, ghi chú, `createdAt` tự động). Chạy: rút thử 500.000 về ví chính, gửi thử 10.000.000 vào NH. Test: `withdrawToBalance` cộng đúng vào `balance` chính; `moveToBank` chỉ đổi chỗ giữa `savingsOnHand`/`savingsInBank`, tổng tiết kiệm không đổi.
+40. **`FirestoreFundRepository`, hỗ trợ nhiều quỹ trên Cloud** — Code: implement, tạo/đọc `families/{id}/funds/{fundId}`. Chạy: tạo 2 quỹ. Test: document đúng path, không lẫn quỹ.
+41. **Giao dịch nguồn/đích là Quỹ trên Firestore + Cloud Function chặn quỹ âm phía server** — Code: Cloud Function kiểm tra lại `balance` quỹ (và `availableBalance` người mua) trong cùng 1 Firestore Transaction trước khi `applyEffect`, từ chối nếu sẽ làm bất kỳ pool nào âm — không chỉ tin validate ở client vì 2 máy có thể ghi đồng thời. Chạy: giả lập 2 giao dịch cùng lúc từ 2 máy làm quỹ âm. Test: 1 trong 2 bị từ chối đúng, không pool nào bao giờ âm.
+42. **Màn hình Danh sách Quỹ + Chi tiết quỹ với dữ liệu thật** — Code: `presentation/features/fund/`, hiển thị số dư + lịch sử (lọc `transactions` theo `sourceRefId`/`destinationRefId = fundId`) cho từng quỹ. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng chi từ quỹ, khớp `computeFundBalance` đã unit test.
+43. **Form nạp tiền vào quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `TRANSFER(FUND_TOPUP)`: `source = MEMBER_AVAILABLE` → `destination = FUND`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, số dư người nạp giảm đúng, Tổng tài sản không đổi.
+44. **Form ghi khoản chi tích quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `EXPENSE` với `source = FUND` (thay vì `MEMBER_AVAILABLE`), chặn chọn quỹ nếu `amountMinor` > số dư quỹ. Chạy: ghi thử "đi chợ 150.000đ" tích quỹ. Test: **chỉ** số dư quỹ giảm đúng — số dư người mua giữ nguyên (không trừ kép, xem test case 7 ở `docs/financial-core-v2.md`).
+45. **Cloud Function cache `balance` lên `funds/{fundId}`** — đã gộp chung vào phase 36 (`applyEffect` cập nhật mọi pool cùng lúc) — Chạy/Test: xác nhận lại `balance` quỹ khớp tổng tính tay sau nhiều giao dịch liên tiếp.
+46. **Nối tách tiết kiệm hiện tại/ngân hàng với dữ liệu thật** — Code: đổi nguồn `savingsCash`/`savingsBank` sang Cloud Function tính theo `transferKind` (`SAVINGS_TOPUP`/`SAVINGS_WITHDRAW`/`SAVINGS_TO_BANK`). Chạy: thêm giao dịch Tiết kiệm `SAVINGS_TO_BANK`. Test: đúng cột tăng, cột còn lại không đổi, `availableBalance` không đổi.
+47. **Màn hình Tiết kiệm — Quản lý + Nhập giao dịch** (`docs/design.html` màn 16-17) — Code: `presentation/features/savings/`, 2 nút "Rút về ví chính"/"Gửi ngân hàng" mở form chung tạo giao dịch `TRANSFER` với `transferKind` tương ứng (loại hình, số tiền, ghi chú, `transactionDate`/`createdAt` tự động). Chạy: rút thử 500.000 về ví chính, gửi thử 10.000.000 vào NH. Test: `SAVINGS_WITHDRAW` cộng đúng vào `availableBalance`; `SAVINGS_TO_BANK` chỉ đổi chỗ giữa `savingsCash`/`savingsBank`, Tổng tài sản không đổi.
 
 ### Giai đoạn D — Trạng thái & Tổng hợp tháng (9 phase, đánh số 48-56)
 
 48. **Nối chọn trạng thái ghi thật** — Code: đã có UI generic theo `category.statuses`, đổi sang Firestore thật, ghi `statusId` (không phải chuỗi tự do). Chạy: thêm giao dịch Cho đi chọn "Đã chuẩn bị". Test: field `statusId` đúng trong document.
-49. **Cloud Function tính rollup `months/{yearMonth}`** — Code: `onWrite` transactions → increment `categoryTotals`/`memberTotals`/`statusTotals` (khoá theo `statusId`), tách `totalSpending`/`totalSaving`. Chạy: deploy, thêm giao dịch đa dạng hạng mục/trạng thái/tiết kiệm. Test: rollup doc khớp phép tính tay, `totalIncome = totalSpending + totalSaving + remaining`.
+49. **Cloud Function tính rollup `months/{yearMonth}`** — Code: `onWrite` transactions → increment `categoryTotals`/`memberTotals`/`statusTotals` (khoá theo `statusId`), tách riêng `totalIncome`/`totalExpense`/`totalTransfer` theo `type`. Chạy: deploy, thêm giao dịch đa dạng Income/Expense/Transfer/trạng thái. Test: rollup doc khớp phép tính tay — `totalTransfer` không được cộng vào `totalExpense`.
 50. **Nối màn hình Tổng hợp đọc rollup doc** — Code: đổi provider từ stream toàn bộ transactions sang đọc 1 document. Chạy: mở màn hình Tổng hợp. Test: số liệu khớp trước/sau khi đổi nguồn — đây là điểm mấu chốt giúp app nhanh dù dùng nhiều năm.
 51. **Biểu đồ tròn theo hạng mục với dữ liệu thật** — Code: đổi nguồn data cho `fl_chart` đã dựng. Chạy: xem với >5 hạng mục có giao dịch. Test: % cộng lại đúng 100%.
 52. **Card trạng thái tự sinh theo `category.statuses`, chỉ hiện danh mục có `statsEnabled = true`** — Code: đổi nguồn data, UI generic đã có sẵn không cần sửa, thêm điều kiện lọc `statsEnabled`. Chạy: bật/tắt `statsEnabled` cho vài danh mục. Test: chỉ danh mục bật mới hiện card ở Tổng hợp; tổng từng bước khớp rollup doc.
