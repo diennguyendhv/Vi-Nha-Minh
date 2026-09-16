@@ -43,9 +43,12 @@ class DefaultCategories {
     color: Color(0xFFC14F7A),
     type: TransactionType.expense,
   );
+  /// Tên hiển thị viết tắt (mã hoá) — "Cho đi" nguyên bản nhạy cảm, dùng
+  /// "CĐ" để người ngoài nhìn màn hình không đoán ra ngay. Id nội bộ
+  /// (`cho_di`) giữ nguyên, không đổi — chỉ đổi `name` hiển thị.
   static const choDi = Category(
     id: 'cho_di',
-    name: 'Cho đi',
+    name: 'CĐ',
     color: Color(0xFF8A4FB0),
     type: TransactionType.expense,
     statsEnabled: true,
@@ -53,26 +56,28 @@ class DefaultCategories {
       Status(
         id: 'cho_di_chua_chuan_bi',
         categoryId: 'cho_di',
-        name: 'Chưa chuẩn bị',
+        name: 'CCB',
         sortOrder: 0,
       ),
       Status(
         id: 'cho_di_da_chuan_bi',
         categoryId: 'cho_di',
-        name: 'Đã chuẩn bị',
+        name: 'ĐCB',
         sortOrder: 1,
       ),
       Status(
         id: 'cho_di_da_gui',
         categoryId: 'cho_di',
-        name: 'Đã gửi',
+        name: 'ĐG',
         sortOrder: 2,
       ),
     ],
   );
+
+  /// Tương tự `choDi` — "Dâng hiến" viết tắt "DH", id nội bộ giữ nguyên.
   static const dangHien = Category(
     id: 'dang_hien',
-    name: 'Dâng hiến',
+    name: 'DH',
     color: Color(0xFF3E86B0),
     type: TransactionType.expense,
     statsEnabled: true,
@@ -80,19 +85,19 @@ class DefaultCategories {
       Status(
         id: 'dang_hien_chua_chuan_bi',
         categoryId: 'dang_hien',
-        name: 'Chưa chuẩn bị',
+        name: 'CCB',
         sortOrder: 0,
       ),
       Status(
         id: 'dang_hien_da_chuan_bi',
         categoryId: 'dang_hien',
-        name: 'Đã chuẩn bị',
+        name: 'ĐCB',
         sortOrder: 1,
       ),
       Status(
         id: 'dang_hien_da_dang',
         categoryId: 'dang_hien',
-        name: 'Đã dâng',
+        name: 'ĐD',
         sortOrder: 2,
       ),
     ],
