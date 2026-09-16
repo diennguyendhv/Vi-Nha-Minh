@@ -1074,6 +1074,7 @@ erDiagram
                   <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
                   <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
                   <button class="cat-chip" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
+                  <button class="cat-chip" data-cat="tra_luong_gv" style="--c:var(--slate-light)">Trả lương giáo viên</button>
                 </div>
               </div>
               <div>
@@ -1109,7 +1110,12 @@ erDiagram
             <div id="panelThu" hidden>
               <div>
                 <label class="field-label">Hạng mục</label>
-                <div class="chip-grid"><button class="cat-chip active" style="--c:var(--jade)">Thu nhập</button></div>
+                <div class="chip-grid" id="catGridThu">
+                  <button class="cat-chip active" data-cat="thu_nhap" style="--c:var(--jade)">Thu nhập</button>
+                  <button class="cat-chip" data-cat="hoc_phi" style="--c:var(--jade-deep)">Học phí</button>
+                  <button class="cat-chip" data-cat="so_du_ban_dau" style="--c:var(--jade-soft)">Số dư ban đầu</button>
+                </div>
+                <p class="fund-warn" id="hocPhiHint" hidden style="color:var(--jade-deep);background:var(--jade-soft)">Danh mục này đã liên kết Chi "Trả lương giáo viên" — sau khi lưu, nhớ ghi thêm 1 giao dịch Chi riêng cho phần phải trả, app sẽ tự tính Thu nhập ròng.</p>
               </div>
               <div><label class="field-label">Số tiền</label><div class="amount-input">16.000.000 <span>đ</span></div></div>
               <div><label class="field-label">Người nhận</label><div class="person-toggle"><button>Vợ</button><button class="active">Chồng</button></div></div>
@@ -1148,7 +1154,7 @@ erDiagram
             <button class="btn-primary">Lưu giao dịch</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">09 · THÊM GIAO DỊCH</div><p>Bấm "Thu/Chi/Chuyển" để đổi hẳn bộ field. Ở "Chi": bấm "Quỹ sinh hoạt" (chỉ còn 100.000đ &lt; 200.000đ đang nhập) để thấy cảnh báo — không trừ số dư Vợ, chỉ quỹ mới bị chặn (đúng model V2, không trừ kép). Đây là <b>nơi tạo giao dịch duy nhất</b> trong app — nút "Nạp quỹ"/"Ghi khoản mua" (màn 15) và "Rút về ví chính"/"Gửi ngân hàng" (màn 16) đều mở lại đúng màn này, chỉ khác giá trị điền sẵn, không phải form riêng.</p></div>
+        <div class="screen-caption"><div class="tag">09 · THÊM GIAO DỊCH</div><p>Bấm "Thu/Chi/Chuyển" để đổi hẳn bộ field. Ở "Chi": bấm "Quỹ sinh hoạt" (chỉ còn 100.000đ &lt; 200.000đ đang nhập) để thấy cảnh báo — không trừ số dư Vợ, chỉ quỹ mới bị chặn (đúng model V2, không trừ kép). Đây là <b>nơi tạo giao dịch duy nhất</b> trong app — nút "Nạp quỹ"/"Ghi khoản mua" (màn 15) và "Rút về ví chính"/"Gửi ngân hàng" (màn 16) đều mở lại đúng màn này, chỉ khác giá trị điền sẵn, không phải form riêng. Ở "Thu": bấm chip "Học phí" để thấy gợi ý nhắc ghi thêm giao dịch Chi "Trả lương giáo viên" — đúng danh mục đã liên kết qua <code>linkedExpenseCategoryId</code> (màn 07); chip đó nằm sẵn trong danh sách Chi ở bảng bên cạnh, tự có stepper "Chưa gửi/Đã gửi" khi chọn.</p></div>
       </div>
 
       <!-- SCREEN 3: TRANSACTION LIST -->
@@ -2359,6 +2365,7 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     sinh_hoat: ['Đã lên kế hoạch','Đã chi'],
     cho_di: ['Chưa chuẩn bị','Đã chuẩn bị','Đã gửi'],
     dang_hien: ['Chưa chuẩn bị','Đã chuẩn bị','Đã dâng'],
+    tra_luong_gv: ['Chưa gửi','Đã gửi'],
     chong_dua_vo: [], vo_dua_chong: []
   };
   var stepper = document.getElementById('statusStepper');
@@ -2383,6 +2390,18 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     });
   }
   renderStepper('sinh_hoat', 1);
+
+  var gridThu = document.getElementById('catGridThu');
+  var hocPhiHint = document.getElementById('hocPhiHint');
+  if(gridThu){
+    gridThu.querySelectorAll('.cat-chip').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        gridThu.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        if(hocPhiHint) hocPhiHint.hidden = (btn.dataset.cat !== 'hoc_phi');
+      });
+    });
+  }
 
   var txTypeSeg = document.getElementById('txTypeSeg');
   var panelChi = document.getElementById('panelChi');
