@@ -33,17 +33,22 @@ Ba điểm này được đưa vào làm một phần bắt buộc trong thiết
 
 Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật trong sheet, đã bỏ 2 hạng mục "Chồng đưa vợ"/"Vợ đưa chồng" cứng — xem lý do ở `docs/financial-core-v2.md` mục 26):
 
-| id | Tên hiển thị | `type` | Có `statuses`? |
-|---|---|---|---|
-| `thu_nhap` | Thu nhập | INCOME | không |
-| `sinh_hoat` | Sinh hoạt | EXPENSE | tự thêm được (không mặc định) |
-| `dau_tu` | Đầu tư | EXPENSE | không |
-| `tu_thuong` | Tự thưởng | EXPENSE | không |
-| `cho_di` | Cho đi | EXPENSE | **có, 3 bước mặc định** |
-| `dang_hien` | Dâng hiến | EXPENSE | **có, 3 bước mặc định** |
-| `chuyen_tien_thanh_vien` | Chuyển tiền cho thành viên khác | TRANSFER | không — khi chọn, UI hỏi thêm **người nhận** (danh sách thành viên), chạy đúng với bất kỳ số thành viên nào, không cần 1 category riêng cho từng cặp người |
-| `nap_quy` | Nạp quỹ | TRANSFER | không — dùng chung cho mọi quỹ, xem `fund` bên dưới |
-| `tiet_kiem` | Tiết kiệm | TRANSFER | không — dùng chung cho cả nạp/rút/gửi ngân hàng, phân biệt bằng `transferKind` |
+| id | Tên hiển thị | `type` | `excludeFromTotals`? | Có `statuses`? |
+|---|---|---|---|---|
+| `so_du_ban_dau` | Số dư ban đầu | INCOME | **có** — không tính vào `totalIncome` | không |
+| `thu_nhap` | Thu nhập | INCOME | không | không |
+| `sinh_hoat` | Sinh hoạt | EXPENSE | không | tự thêm được (không mặc định) |
+| `dau_tu` | Đầu tư | EXPENSE | không | không |
+| `tu_thuong` | Tự thưởng | EXPENSE | không | không |
+| `cho_di` | Cho đi | EXPENSE | không | **có, 3 bước mặc định** |
+| `dang_hien` | Dâng hiến | EXPENSE | không | **có, 3 bước mặc định** |
+| `chuyen_tien_thanh_vien` | Chuyển tiền cho thành viên khác | TRANSFER | không | không — khi chọn, UI hỏi thêm **người nhận** (danh sách thành viên), chạy đúng với bất kỳ số thành viên nào, không cần 1 category riêng cho từng cặp người |
+| `nap_quy` | Nạp quỹ | TRANSFER | không | không — dùng chung cho mọi quỹ, xem `fund` bên dưới |
+| `tiet_kiem` | Tiết kiệm | TRANSFER | không | không — dùng chung cho cả nạp/rút/gửi ngân hàng, phân biệt bằng `transferKind` |
+
+**`Số dư ban đầu`** — dùng để nhập số tiền đã có sẵn khi bắt đầu dùng app (tiền mặt đang cầm, số dư trong ví...), **không phải tiền kiếm được trong kỳ**. Vẫn là 1 giao dịch `INCOME` bình thường (source=EXTERNAL, cộng đúng vào `availableBalance` qua Financial Engine như mọi INCOME khác) — chỉ khác ở cờ **`excludeFromTotals` (bool) trên `CATEGORY`**: Cloud Function tính rollup `months/{yearMonth}.totalIncome` **bỏ qua** mọi giao dịch thuộc category có `excludeFromTotals=true`, để báo cáo thu nhập theo tháng chỉ phản ánh tiền thật sự kiếm được, không bị phồng lên bởi khoản seed ban đầu. Cờ này là thuộc tính chung của `CATEGORY` (không hardcode riêng cho "Số dư ban đầu") — gia đình khác có thể tự đánh dấu `excludeFromTotals` cho category tự tạo nếu có nhu cầu tương tự.
+
+**Mẫu "tiền hộ người khác" (thu nhập có phần phải trả lại) — dùng Category + Status có sẵn, không cần cơ chế mới:** ví dụ thu học phí dạy kèm 2.000.000đ nhưng phải trả 1.000.000đ tiền công cho giáo viên thuê ngoài (không phải thành viên gia đình) — **không nhập số âm vào Thu nhập** (vi phạm `amountMinor` luôn dương, xem Invariant 12 ở `docs/financial-core-v2.md`). Thay vào đó ghi **2 giao dịch riêng**: 1 `INCOME` "Học phí" +2.000.000đ, và 1 `EXPENSE` dưới category tự tạo (vd "Trả tiền dạy kèm") có `statuses: ["Chưa gửi", "Đã gửi"]` −1.000.000đ — đúng cơ chế trạng thái đã có cho Cho đi/Dâng hiến, để biết còn nợ ai bao nhiêu chưa trả. Số dư ròng vẫn tăng đúng 1.000.000đ; `Tổng thu`/`Tổng chi` hiện đúng cả 2 chiều tiền thay vì gộp tắt thành 1 số net, minh bạch hơn khi xem lại báo cáo.
 
 Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nhất cho mọi loại**: nếu `sourceKind ≠ EXTERNAL` thì trừ `amountMinor` khỏi pool nguồn; nếu `destinationKind ≠ EXTERNAL` thì cộng `amountMinor` vào pool đích. Không có nhánh if/else riêng theo category — xem code mẫu ở `docs/financial-core-v2.md` mục 6.
 
@@ -81,6 +86,7 @@ families/{familyId}/invites/{inviteId}
 families/{familyId}/categories/{categoryId}
   name, color, type ("INCOME" | "EXPENSE" | "TRANSFER"),
   statsEnabled (bool, hien o Tong hop trang thai),
+  excludeFromTotals (bool, bo qua khi tinh totalIncome/totalExpense o rollup, mac dinh false),
   isDefault, isActive (soft delete)
 
 families/{familyId}/categories/{categoryId}/statuses/{statusId}
@@ -137,8 +143,8 @@ Một collection `transactions` phẳng, cộng dồn mãi mãi, có hai vấn �
 
 ```
 families/{familyId}/months/{yearMonth}              // yearMonth dạng "2026-09"
-  totalIncome,           // Sigma type=INCOME
-  totalExpense,          // Sigma type=EXPENSE (KHONG con lan Tiet kiem/Quy/chuyen khoan)
+  totalIncome,           // Sigma type=INCOME, bo qua category co excludeFromTotals=true (vd So du ban dau)
+  totalExpense,          // Sigma type=EXPENSE (KHONG con lan Tiet kiem/Quy/chuyen khoan), cung bo qua excludeFromTotals
   totalTransfer,         // Sigma type=TRANSFER, chi de hien thi dong tien, khong cong vao Thu/Chi
   categoryTotals: { categoryId: amount },
   memberTotals: { uid: { income, expense } },

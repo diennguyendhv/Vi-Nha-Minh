@@ -219,10 +219,14 @@ CATEGORY
   categoryId PK, familyId FK, name, color,
   type ("INCOME" | "EXPENSE" | "TRANSFER"),
   isDefault, isActive (soft delete),
-  statsEnabled (giu nguyen tu V1 — bat/tat hien o man Tong hop trang thai)
+  statsEnabled (giu nguyen tu V1 — bat/tat hien o man Tong hop trang thai),
+  excludeFromTotals (bool, mac dinh false — bo qua khi tinh totalIncome/totalExpense o rollup,
+                      van cong/tru availableBalance binh thuong qua applyEffect)
 ```
 
 Bỏ hẳn `isSaving` và `transferToUid` khỏi Category (F-04) — 2 field này từng bắt Category "diễn" luôn vai trò của Transaction, sai nguyên tắc ở mục 14 trong yêu cầu. Category giờ **chỉ là nhãn + type để nhóm báo cáo**, không quyết định pool nào bị trừ/cộng.
+
+**`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo. Xem `spec.md` mục hạng mục seed để có ví dụ thứ 2: mẫu "thu hộ — phải trả lại" (thu học phí nhưng phải trả công giáo viên thuê ngoài) dùng 2 giao dịch (1 Income + 1 Expense có `statuses`), **không dùng số âm trên Income** (vi phạm Invariant 12).
 
 `STATUS` (subcollection của Category) giữ nguyên như V1: `statusId, categoryId, name, sortOrder` — không đổi.
 
@@ -301,7 +305,7 @@ Giữ nguyên phần lớn 9 nhóm. Thay đổi cụ thể:
 ## 17. Financial Formulas (thay thế hoàn toàn công thức cũ)
 
 ```
-Total Income          = Σ amountMinor  (type = INCOME)
+Total Income          = Σ amountMinor  (type = INCOME, bo qua category.excludeFromTotals = true)
 Total External Expense = Σ amountMinor  (type = EXPENSE)
 Total Transfer Volume  = Σ amountMinor  (type = TRANSFER)   // chỉ để hiển thị, KHÔNG cộng vào Income/Expense
 
@@ -411,6 +415,8 @@ Test 1-9 trong yêu cầu giữ nguyên, đều PASS với model V2 (đã kiểm
 - **Test 13 — Xoá giao dịch Income:** Income 10 triệu bị xoá → Member Available giảm đúng 10 triệu, Total Assets giảm đúng 10 triệu.
 - **Test 14 — Ngân sách không bị Transfer ảnh hưởng:** Budget "Sinh hoạt" = 3 triệu, đã chi (Expense) 2 triệu, sau đó Nạp tiết kiệm (Transfer) 5 triệu → Budget "Sinh hoạt" vẫn báo đã dùng 2/3 triệu, không nhảy lên do Transfer.
 - **Test 15 — Rebuild:** Xoá toàn bộ `MEMBER_BALANCE`/`FUND.balance` cache, chạy lại `applyEffect` cho mọi `TRANSACTION` chưa xoá theo đúng thứ tự thời gian → kết quả phải khớp 100% với cache trước khi xoá.
+- **Test 16 — `excludeFromTotals`:** Ghi `INCOME` "Số dư ban đầu" 5.000.000đ (category `excludeFromTotals=true`), rồi ghi `INCOME` "Lương" 10.000.000đ (category thường). `availableBalance` phải tăng đúng 15.000.000đ (cả 2 đều qua `applyEffect`); `months/{yearMonth}.totalIncome` chỉ được tính 10.000.000đ (bỏ qua dòng "Số dư ban đầu").
+- **Test 17 — "Thu hộ, phải trả lại":** Ghi `INCOME` "Học phí" +2.000.000đ và `EXPENSE` "Trả tiền dạy kèm" (category có `statuses`) −1.000.000đ, status ban đầu "Chưa gửi". `availableBalance` tăng đúng 1.000.000đ ròng; `totalIncome` vẫn ghi nhận đủ 2.000.000đ và `totalExpense` ghi nhận đủ 1.000.000đ (không gộp tắt thành số net); sau khi đổi status sang "Đã gửi", balance không đổi thêm (đúng Invariant 9 — status không đụng Financial Engine).
 
 ---
 
