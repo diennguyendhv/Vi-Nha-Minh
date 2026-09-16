@@ -444,7 +444,7 @@ footer{padding:36px 0 60px;color:var(--ink-soft);font-size:.78rem;display:flex;j
       <a href="#usecase">Use case</a>
       <a href="#schema">Cơ sở dữ liệu</a>
       <a href="#giao-dien">Giao diện</a>
-      <a href="#confirm">Cần chốt</a>
+      <a href="#confirm">Trạng thái</a>
     </nav>
   </div>
 </header>
@@ -460,12 +460,12 @@ footer{padding:36px 0 60px;color:var(--ink-soft);font-size:.78rem;display:flex;j
       <a class="deliv-card" href="#usecase">
         <div class="deliv-num">01 — chức năng</div>
         <h3>Sơ đồ Use Case</h3>
-        <p>1 tác nhân, 9 nhóm tính năng, 35 use case — từ khởi động, danh mục/trạng thái, quỹ/tiết kiệm đến xuất báo cáo.</p>
+        <p>1 tác nhân, 9 nhóm tính năng, 37 use case — Chuyển tiền/Quỹ/Tiết kiệm tách khỏi Chi, đúng model V2.</p>
       </a>
       <a class="deliv-card" href="#schema">
         <div class="deliv-num">02 — dữ liệu</div>
         <h3>Cơ sở dữ liệu</h3>
-        <p>12 "bảng" — thêm TRANSACTION_TYPE (Thu/Chi) và STATUS làm bảng riêng, có CRUD thật thay vì hằng số cứng.</p>
+        <p>10 "bảng" — TRANSACTION có source/destination, gộp luôn vai trò FUND_ENTRY; CATEGORY chỉ còn là nhãn.</p>
       </a>
       <a class="deliv-card" href="#giao-dien">
         <div class="deliv-num">03 — giao diện</div>
@@ -478,7 +478,7 @@ footer{padding:36px 0 60px;color:var(--ink-soft);font-size:.78rem;display:flex;j
   <section class="block" id="usecase">
     <div class="block-head">
       <h2>Sơ đồ Use Case</h2>
-      <p>Tác nhân duy nhất là <b>Chủ sổ / Thành viên gia đình</b> — quyền gần như ngang nhau (đúng nguyên tắc "mọi vai trò là dữ liệu tự đặt" ở <code>CLAUDE.md</code> mục 9), chỉ khác ở việc ai được tạo/thu hồi lời mời. Nhóm theo 6 mảng tính năng bám sát Giai đoạn A–F trong <code>spec.md</code>, chưa liệt kê hết 68 phase kỹ thuật.</p>
+      <p>Tác nhân duy nhất là <b>Chủ sổ / Thành viên gia đình</b> — quyền gần như ngang nhau (đúng nguyên tắc "mọi vai trò là dữ liệu tự đặt" ở <code>CLAUDE.md</code> mục 9), chỉ khác ở việc ai được tạo/thu hồi lời mời. Nhóm theo 9 mảng tính năng bám sát Giai đoạn A–F trong <code>spec.md</code> (76 phase kỹ thuật), chưa liệt kê hết từng phase.</p>
     </div>
     <div class="diagram-card">
       <div class="diagram-scroll">
@@ -520,22 +520,24 @@ flowchart LR
 
   subgraph G3["Giao dịch"]
     direction TB
-    U17(["Thêm giao dịch"]):::usecase
-    U18(["Sửa hoặc xoá giao dịch"]):::usecase
+    U17(["Thêm giao dịch: chọn Thu, Chi, hoặc Chuyển"]):::usecase
+    U18(["Sửa hoặc xoá giao dịch, qua reversal ledger"]):::usecase
     U19(["Xem theo ngày / chuyển tháng"]):::usecase
     U20(["Gắn trạng thái cho giao dịch"]):::usecase
+    U20c(["Chuyển tiền cho thành viên khác, chọn người nhận"]):::usecase
   end
 
   subgraph G4["Quỹ, tạo được nhiều cái"]
     direction TB
     U20b(["Tạo quỹ mới, đặt tên tự do"]):::usecase
-    U21(["Nạp tiền vào quỹ, tự trừ chi phí người nạp"]):::usecase
-    U22(["Tích 1 quỹ khi ghi khoản chi, chặn nếu quỹ không đủ"]):::usecase
+    U21(["Nạp tiền vào quỹ (Chuyển, tự trừ số dư người nạp)"]):::usecase
+    U22(["Chọn Quỹ làm nguồn tiền khi ghi khoản chi, chặn nếu quỹ không đủ"]):::usecase
     U23(["Xem số dư và lịch sử từng quỹ"]):::usecase
   end
 
   subgraph G4b["Tiết kiệm"]
     direction TB
+    U23a(["Nạp tiết kiệm"]):::usecase
     U23b(["Rút tiết kiệm về ví chính"]):::usecase
     U23c(["Gửi tiết kiệm vào ngân hàng"]):::usecase
   end
@@ -578,8 +580,9 @@ flowchart LR
   U17 -.->|"sinh trạng thái nếu danh mục có statuses"| U20
   U17 -->|"tích ô Quỹ tiền ăn"| U22
   U20b -.->|"trước khi nạp/dùng"| U21
-  U21 -.->|"đồng thời là 1 giao dịch Chi"| U17
-  U22 -.->|"trừ luôn vào số dư quỹ"| U23
+  U21 -.->|"1 giao dịch Chuyển, không phải Chi"| U17
+  U20c -.->|"1 giao dịch Chuyển"| U17
+  U22 -.->|"chỉ trừ quỹ, không trừ số dư người mua"| U23
   U24 -.->|"so với categoryTotals"| U25
   U24 -.->|"so % ngày đã qua trong tháng"| U26
   U27 -.->|"cộng dồn 12 tháng"| U29
@@ -595,13 +598,13 @@ flowchart LR
   <section class="block" id="schema">
     <div class="block-head">
       <h2>Cơ sở dữ liệu</h2>
-      <p>Backend thật là <b>Cloud Firestore</b> (NoSQL, dạng document lồng nhau theo <code>families/{familyId}/...</code> — xem nguyên bản trong <code>spec.md</code>). Sơ đồ dưới đây vẽ lại đúng các collection đó dưới dạng "bảng" có khoá chính/khoá ngoại, cộng thêm 2 bảng mới theo yêu cầu — <code>TRANSACTION_TYPE</code> (Thu/Chi) và <code>STATUS</code> — để danh mục và trạng thái đều xem/thêm/sửa/xoá được thay vì là hằng số cứng.</p>
+      <p>Backend thật là <b>Cloud Firestore</b> (NoSQL, dạng document lồng nhau theo <code>families/{familyId}/...</code> — xem nguyên bản trong <code>spec.md</code>). Sơ đồ dưới đây vẽ lại đúng các collection đó dưới dạng "bảng" có khoá chính/khoá ngoại. <b>Bản V2</b> (thay bản Thu/Chi nháp đầu, chi tiết ở <a href="financial-core-v2.md"><code>docs/financial-core-v2.md</code></a>): <code>CATEGORY</code> chỉ còn là nhãn (<code>type</code>: INCOME/EXPENSE/TRANSFER), dòng tiền thật nằm trên <code>TRANSACTION</code> qua cặp <code>source</code>/<code>destination</code> — gộp luôn vai trò của bảng "quỹ entries" cũ, không cần bảng <code>FUND_ENTRY</code> riêng nữa.</p>
     </div>
 
     <div class="equation-card">
-      <div class="eq-row"><span class="eq-term">Tổng thu</span><span class="eq-op">=</span><span class="eq-term">Tổng chi</span><span class="eq-op">+</span><span class="eq-term highlight">Số tiền còn lại</span></div>
-      <div class="eq-row sub"><span class="eq-term">Tổng chi</span><span class="eq-op">=</span><span class="eq-term">Chi phí</span><span class="eq-op">+</span><span class="eq-term">Tiết kiệm</span></div>
-      <p>Tiết kiệm không còn là một "loại" (<code>kind</code>) riêng như bản trước — nó chỉ là một <b>CATEGORY thuộc nhóm Chi</b>, đánh dấu bằng <code>isSaving = true</code>. Nhờ vậy phương trình cân đối luôn đúng bằng cộng dồn số học đơn giản (<code>totalIncome</code> trừ <code>totalSpending</code> trừ <code>totalSaving</code> ở <code>MONTH_SUMMARY</code>), không cần logic riêng cho tiết kiệm.</p>
+      <div class="eq-row"><span class="eq-term highlight">Total Income</span><span class="eq-op">≠</span><span class="eq-term">Total External Expense</span><span class="eq-op">+</span><span class="eq-term">Total Transfer</span></div>
+      <div class="eq-row sub"><span class="eq-term">Tổng tài sản (cuối kỳ)</span><span class="eq-op">=</span><span class="eq-term">Tổng tài sản (đầu kỳ)</span><span class="eq-op">+</span><span class="eq-term highlight">Income</span><span class="eq-op">−</span><span class="eq-term highlight">Expense</span></div>
+      <p><b>V2 — sửa lỗi tài chính của bản trước:</b> Tiết kiệm, Quỹ, chuyển khoản giữa thành viên đều là <code>TRANSFER</code> (tiền chỉ đổi chỗ giữa 2 "pool" trong hệ thống), <b>không phải Chi</b> — bản trước từng gộp chung làm Tổng chi bị thổi phồng giả tạo. 3 tổng (Income/External Expense/Transfer) tách biệt hoàn toàn; Transfer không bao giờ cộng vào Income/Expense. Chi tiết + 15 test case chống double-count: <a href="financial-core-v2.md"><code>docs/financial-core-v2.md</code></a>.</p>
     </div>
 
     <div class="diagram-card">
@@ -610,25 +613,18 @@ flowchart LR
 erDiagram
   FAMILY ||--o{ MEMBER : "co thanh vien"
   FAMILY ||--o{ INVITE : "phat hanh loi moi"
-  FAMILY ||--o{ CATEGORY : "dinh nghia danh muc"
+  FAMILY ||--o{ CATEGORY : "dinh nghia nhan phan loai"
   FAMILY ||--o{ MONTH_SUMMARY : "co du lieu theo thang"
   FAMILY ||--o{ FUND : "co quy"
   FAMILY ||--o{ BUDGET : "dat ngan sach theo thang"
-  TRANSACTION_TYPE ||--o{ CATEGORY : "phan loai Thu hoac Chi"
   CATEGORY ||--o{ STATUS : "co cac buoc trang thai, tu them"
-  MONTH_SUMMARY ||--o{ TRANSACTION_ENTRY : "chua giao dich"
-  CATEGORY ||--o{ TRANSACTION_ENTRY : "phan loai"
-  STATUS ||--o{ TRANSACTION_ENTRY : "gan trang thai, doi duoc sau khi tao"
-  MEMBER ||--o{ TRANSACTION_ENTRY : "ghi boi"
-  MEMBER ||--|| MEMBER_BALANCE : "co so du luy ke"
-  FUND ||--o{ FUND_ENTRY : "chua khoan nap / mua"
-  MEMBER ||--o{ FUND_ENTRY : "tao"
-  FUND ||--o{ TRANSACTION_ENTRY : "duoc tich khi ghi giao dich"
+  MONTH_SUMMARY ||--o{ TRANSACTION : "chua giao dich"
+  CATEGORY ||--o{ TRANSACTION : "gan nhan (khong quyet dinh dong tien)"
+  STATUS ||--o{ TRANSACTION : "gan trang thai, doi duoc sau khi tao"
+  MEMBER ||--o{ TRANSACTION : "la nguon hoac dich (available/savings)"
+  MEMBER ||--|| MEMBER_BALANCE : "co 3 pool: available/savingsCash/savingsBank"
+  FUND ||--o{ TRANSACTION : "la nguon hoac dich"
 
-  TRANSACTION_TYPE {
-    string typeId PK "thu hoac chi"
-    string name
-  }
   FAMILY {
     string familyId PK
     string name
@@ -643,6 +639,7 @@ erDiagram
     string displayName
     string roleLabel "tu do, gia dinh tu dat"
     boolean isOwner
+    boolean isActive "soft delete"
     timestamp joinedAt
   }
   INVITE {
@@ -657,68 +654,70 @@ erDiagram
   CATEGORY {
     string categoryId PK
     string familyId FK
-    string typeId FK "Thu hoac Chi"
+    string type "INCOME hoac EXPENSE hoac TRANSFER"
     string name
     string color
-    boolean isSaving "chi ap dung khi typeId la Chi"
-    string transferToUid FK "chi danh muc chuyen khoan"
     boolean isDefault
-    boolean statsEnabled "bat/tat hien o Tong hop trang thai, mac dinh tat"
+    boolean isActive "soft delete"
+    boolean statsEnabled "bat/tat hien o Tong hop trang thai"
   }
   STATUS {
     string statusId PK
     string categoryId FK
     string name
     int sortOrder
+    boolean isActive "soft delete"
   }
   MONTH_SUMMARY {
     string yearMonth PK "vi du 2026-09"
     string familyId FK
-    number totalIncome
-    number totalSpending "chi phi, khong tinh tiet kiem"
-    number totalSaving "cong don cac category isSaving"
+    number totalIncome "Sigma type=INCOME"
+    number totalExpense "Sigma type=EXPENSE, KHONG lan Transfer"
+    number totalTransfer "Sigma type=TRANSFER, chi de hien thi"
     map categoryTotals
     map statusTotals
   }
-  TRANSACTION_ENTRY {
+  TRANSACTION {
     string txId PK
     string yearMonth FK
-    string categoryId FK
-    string statusId FK "sua duoc sau khi tao, null neu danh muc khong co trang thai"
-    timestamp statusUpdatedAt "moi lan doi trang thai"
-    string spenderUid FK
-    string fundId FK "co neu tich Quy tien an"
-    number amount
+    string type "INCOME hoac EXPENSE hoac TRANSFER"
+    string transferKind "null tru MEMBER_TO_MEMBER/FUND_TOPUP/SAVINGS_xxx"
+    string categoryId FK "nhan de bao cao, KHONG quyet dinh dong tien"
+    string statusId FK "sua duoc sau khi tao"
+    timestamp statusUpdatedAt
+    string sourceKind "MEMBER_AVAILABLE/SAVINGS_CASH/SAVINGS_BANK/FUND/EXTERNAL"
+    string sourceRefId FK "uid hoac fundId, null neu EXTERNAL"
+    string destinationKind "cung enum voi sourceKind"
+    string destinationRefId FK "null neu EXTERNAL"
+    int amountMinor "luon duong"
+    string currency "VND"
     string note
-    date date
-    string savingsDestination "chi khi category isSaving: hien tai / da gui NH"
+    date transactionDate "ngay nghiep vu, dung de rollup"
+    timestamp createdAt
+    string createdBy FK
+    string clientTxId "chong double submit"
+    int version
+    string reversalOfTxId FK "ban nay hoan tac ban nao"
+    string correctsTxId FK "ban nay thay the ban nao"
+    string reversedByTxId FK "null = con hieu luc"
   }
   MEMBER_BALANCE {
     string uid PK
-    number balance
-    number savingsOnHand
-    number savingsInBank
+    number availableBalance "khong duoc am"
+    number savingsCash "khong duoc am"
+    number savingsBank "khong duoc am"
   }
   FUND {
     string fundId PK
     string familyId FK
     string name
-    number balance "derived tu entries"
-  }
-  FUND_ENTRY {
-    string entryId PK
-    string fundId FK
-    string createdBy FK
-    string linkedTxId FK "giao dich da tru chi phi nguoi tao"
-    string kind "topUp hoac purchase"
-    number amount
-    string note
-    date date
+    boolean isActive "soft delete"
+    number balance "derived, khong duoc am"
   }
   BUDGET {
     string yearMonth PK
     string familyId FK
-    map categoryLimits
+    map categoryLimits "chi cong don giao dich type=EXPENSE"
   }
 </pre>
       </div>
@@ -730,16 +729,20 @@ erDiagram
         <p>Xem/thêm/sửa/xoá đầy đủ, áp dụng cho <b>mọi</b> danh mục chứ không riêng Cho đi/Dâng hiến — kể cả Sinh hoạt cũng tự thêm được bước trạng thái riêng. <code>statusId</code> trên giao dịch sửa được sau khi tạo, không cố định lúc ghi. Cờ <code>statsEnabled</code> trên từng danh mục quyết định có hiện ở Tổng hợp trạng thái hay không — nhiều danh mục có <code>statuses</code> nhưng không phải cái nào cũng cần lên báo cáo.</p>
       </div>
       <div class="note-card">
-        <h4>TRANSACTION_TYPE là gốc của mọi phân loại</h4>
-        <p>Mọi danh mục chỉ thuộc Thu hoặc Chi — không còn <code>kind</code> riêng cho tiết kiệm/chuyển khoản. Tiết kiệm và "Chồng đưa vợ/Vợ đưa chồng" đều là danh mục thuộc Chi.</p>
+        <h4>3 loại giao dịch, không phải 2</h4>
+        <p><code>type</code> = INCOME/EXPENSE/TRANSFER. Tiết kiệm, Quỹ, chuyển khoản giữa thành viên đều là <b>TRANSFER</b> — tiền chỉ đổi chỗ giữa 2 pool, Tổng tài sản không đổi. Gộp chung vào Chi (như bản nháp đầu) làm phình Tổng chi giả tạo.</p>
       </div>
       <div class="note-card">
-        <h4>FUND nối thẳng vào TRANSACTION_ENTRY</h4>
-        <p>Nạp quỹ và khoản chi tích "Quỹ tiền ăn" đều là <b>một giao dịch thật</b> — trừ số dư người thực hiện như bình thường — kèm <code>fundId</code>, tự sinh <code>FUND_ENTRY</code> liên kết. Không tích thì không đụng gì tới quỹ.</p>
+        <h4>Quỹ chỉ là 1 "pool" như Available Balance</h4>
+        <p>Không còn bảng FUND_ENTRY riêng — lịch sử quỹ = lọc <code>TRANSACTION</code> theo <code>sourceRefId</code>/<code>destinationRefId</code>. Chi từ quỹ (<code>source=FUND</code>) chỉ trừ đúng 1 pool — <b>không trừ thêm số dư người mua</b> (bản nháp đầu từng trừ cả 2, lỗi trừ kép đã sửa).</p>
       </div>
       <div class="note-card">
-        <h4>MEMBER_BALANCE là dữ liệu dẫn xuất</h4>
-        <p>Không phải nguồn sự thật — tính lại từ toàn bộ TRANSACTION_ENTRY của người đó, cache bằng Cloud Function để tránh cộng dồn hàng nghìn dòng ở client mỗi lần mở app.</p>
+        <h4>Sửa/xoá dùng reversal ledger</h4>
+        <p><code>TRANSACTION</code> là append-only — sửa/xoá không mutate/xoá bản gốc, mà tạo bản ghi mới (<code>reversalOfTxId</code>/<code>correctsTxId</code>), đánh dấu <code>reversedByTxId</code> lên bản gốc. Lịch sử không bao giờ mất.</p>
+      </div>
+      <div class="note-card">
+        <h4>MEMBER_BALANCE là dữ liệu dẫn xuất, không được âm</h4>
+        <p>Không phải nguồn sự thật — tính lại từ toàn bộ TRANSACTION của người đó, cache bằng Cloud Function. Cả 3 pool (<code>availableBalance</code>/<code>savingsCash</code>/<code>savingsBank</code>) đều không được phép âm.</p>
       </div>
       <div class="note-card">
         <h4>Local-first trước khi có FAMILY thật</h4>
@@ -881,10 +884,11 @@ erDiagram
             <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">Cho đi</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
             <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">Dâng hiến</div><div class="m">3 trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Đánh dấu Tiết kiệm</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chồng đưa vợ</div><div class="m">Chuyển khoản nội bộ</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Vợ đưa chồng</div><div class="m">Chuyển khoản nội bộ</div></div><span class="chev">›</span></div>
-            <button class="btn-outline" style="margin-top:4px">+ Thêm danh mục</button>
+            <div class="cat-group-label">Chuyển <span style="font-weight:400;text-transform:none;letter-spacing:0">· hệ thống, không tự tạo/xoá được</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chuyển tiền cho thành viên khác</div><div class="m">Chọn người nhận khi ghi</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Nạp / Rút / Gửi ngân hàng</div></div><span class="chev">›</span></div>
+            <div class="cat-row"><span class="dot" style="background:var(--jade-deep)"></span><div class="info"><div class="n">Nạp quỹ</div><div class="m">Dùng chung cho mọi quỹ</div></div><span class="chev">›</span></div>
+            <button class="btn-outline" style="margin-top:4px">+ Thêm danh mục Thu/Chi</button>
             <div class="bottom-nav">
               <div class="tab"><span class="ic"></span>Trang chủ</div>
               <div class="tab"><span class="ic"></span>Giao dịch</div>
@@ -894,7 +898,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>Nhóm theo Thu/Chi. Sinh hoạt cũng có trạng thái tự thêm — không riêng gì Cho đi/Dâng hiến.</p></div>
+        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>3 nhóm: Thu, Chi (tự tạo được), Chuyển (cố định, do hệ thống quản lý — không còn 2 danh mục cứng "Chồng đưa vợ/Vợ đưa chồng"). Sinh hoạt cũng có trạng thái tự thêm — không riêng gì Cho đi/Dâng hiến.</p></div>
       </div>
       <div class="screen-col">
         <div class="phone"><div class="phone-screen">
@@ -906,15 +910,11 @@ erDiagram
               <div class="text-input" style="color:var(--ink)">Cho đi</div>
             </div>
             <div>
-              <label class="field-label">Phân loại</label>
+              <label class="field-label">Phân loại <span class="hint">(Chuyển do hệ thống quản lý, không tự tạo được)</span></label>
               <div class="segmented" id="typeSeg">
                 <button data-t="thu">Thu</button>
                 <button class="active" data-t="chi">Chi</button>
               </div>
-            </div>
-            <div class="toggle-row" id="savingRow">
-              <span class="lbl">Đánh dấu là Tiết kiệm</span>
-              <button class="switch" id="savingSwitch"></button>
             </div>
             <div>
               <label class="field-label">Màu</label>
@@ -946,7 +946,7 @@ erDiagram
             <button class="danger-link">Xoá danh mục này</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Bấm + để thêm bước trạng thái, × để xoá. Công tắc "Thống kê" quyết định danh mục này có hiện ở màn Tổng hợp trạng thái (13) hay không — nhiều danh mục có trạng thái nhưng không phải cái nào cũng cần xem thường xuyên.</p></div>
+        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Chỉ tạo được danh mục Thu/Chi — "Chuyển" (Tiết kiệm, Quỹ, chuyển tiền thành viên) là danh mục hệ thống, quản lý qua các màn riêng. Bấm + để thêm bước trạng thái, × để xoá; công tắc "Thống kê" quyết định có hiện ở màn Tổng hợp trạng thái (13) hay không.</p></div>
       </div>
     </div>
 
@@ -1020,55 +1020,98 @@ erDiagram
           <div class="phone-head">Thêm giao dịch</div>
           <div class="phone-body">
             <div>
-              <label class="field-label">Hạng mục</label>
-              <div class="cat-group-label" style="margin-top:6px">Thu</div>
-              <div class="chip-grid">
-                <button class="cat-chip" data-cat="thu_nhap" style="--c:var(--jade)">Thu nhập</button>
-              </div>
-              <div class="cat-group-label" style="margin-top:6px">Chi</div>
-              <div class="chip-grid" id="catGrid">
-                <button class="cat-chip active" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
-                <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
-                <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
-                <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
-                <button class="cat-chip" data-cat="tiet_kiem" style="--c:var(--slate-light)">Tiết kiệm</button>
-                <button class="cat-chip" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
-                <button class="cat-chip" data-cat="chong_dua_vo" style="--c:var(--grey-transfer)">Chồng đưa vợ</button>
-                <button class="cat-chip" data-cat="vo_dua_chong" style="--c:var(--grey-transfer)">Vợ đưa chồng</button>
+              <label class="field-label">Loại giao dịch</label>
+              <div class="segmented" id="txTypeSeg">
+                <button data-tt="thu">Thu</button>
+                <button class="active" data-tt="chi">Chi</button>
+                <button data-tt="chuyen">Chuyển</button>
               </div>
             </div>
-            <div>
-              <label class="field-label">Số tiền</label>
-              <div class="amount-input">200.000 <span>đ</span></div>
-            </div>
-            <div>
-              <label class="field-label">Người ghi</label>
-              <div class="person-toggle">
-                <button class="active">Vợ</button>
-                <button>Chồng</button>
+
+            <div id="panelChi">
+              <div>
+                <label class="field-label">Hạng mục</label>
+                <div class="chip-grid" id="catGrid">
+                  <button class="cat-chip active" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
+                  <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
+                  <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
+                  <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">Cho đi</button>
+                  <button class="cat-chip" data-cat="dang_hien" style="--c:var(--amber-dark)">Dâng hiến</button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Số tiền</label>
+                <div class="amount-input">200.000 <span>đ</span></div>
+              </div>
+              <div>
+                <label class="field-label">Người chi</label>
+                <div class="person-toggle">
+                  <button class="active">Vợ</button>
+                  <button>Chồng</button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Ghi chú</label>
+                <div class="text-input">Mua đồ ăn</div>
+              </div>
+              <div>
+                <label class="field-label">Nguồn tiền <span class="hint">(mặc định ví chính, đổi sang 1 Quỹ nếu muốn)</span></label>
+                <div class="fund-pick-row">
+                  <button class="fund-pick" data-bal="none">Ví của Vợ</button>
+                  <button class="fund-pick active" data-bal="1850000">Quỹ tiền ăn <span class="b">còn 1.850.000đ</span></button>
+                  <button class="fund-pick" data-bal="100000">Quỹ sinh hoạt <span class="b">còn 100.000đ</span></button>
+                </div>
+                <p class="fund-warn" id="fundWarn" hidden></p>
+              </div>
+              <div class="status-stepper" id="statusStepper" hidden>
+                <label class="field-label">Trạng thái <span class="hint">category.statuses</span></label>
+                <div class="stepper-track" id="stepperTrack"></div>
               </div>
             </div>
-            <div>
-              <label class="field-label">Ghi chú</label>
-              <div class="text-input">Mua đồ ăn</div>
-            </div>
-            <div>
-              <label class="field-label">Dùng quỹ <span class="hint">(tuỳ chọn — trừ luôn cả số dư và quỹ)</span></label>
-              <div class="fund-pick-row">
-                <button class="fund-pick" data-bal="none">Không dùng quỹ</button>
-                <button class="fund-pick active" data-bal="1850000">Quỹ tiền ăn <span class="b">còn 1.850.000đ</span></button>
-                <button class="fund-pick" data-bal="100000">Quỹ sinh hoạt <span class="b">còn 100.000đ</span></button>
+
+            <div id="panelThu" hidden>
+              <div>
+                <label class="field-label">Hạng mục</label>
+                <div class="chip-grid"><button class="cat-chip active" style="--c:var(--jade)">Thu nhập</button></div>
               </div>
-              <p class="fund-warn" id="fundWarn" hidden></p>
+              <div><label class="field-label">Số tiền</label><div class="amount-input">16.000.000 <span>đ</span></div></div>
+              <div><label class="field-label">Người nhận</label><div class="person-toggle"><button>Vợ</button><button class="active">Chồng</button></div></div>
+              <div><label class="field-label">Ghi chú</label><div class="text-input">Lương tháng 9</div></div>
             </div>
-            <div class="status-stepper" id="statusStepper" hidden>
-              <label class="field-label">Trạng thái <span class="hint">category.statuses</span></label>
-              <div class="stepper-track" id="stepperTrack"></div>
+
+            <div id="panelChuyen" hidden>
+              <div>
+                <label class="field-label">Loại chuyển</label>
+                <div class="segmented" id="transferKindSeg">
+                  <button class="active" data-tk="member">Thành viên khác</button>
+                  <button data-tk="fund">Nạp quỹ</button>
+                  <button data-tk="savings">Tiết kiệm</button>
+                </div>
+              </div>
+              <div id="transferMemberFields">
+                <label class="field-label">Người gửi → người nhận</label>
+                <div class="person-toggle"><button class="active">Vợ gửi</button><button>Chồng gửi</button></div>
+                <div class="person-toggle" style="margin-top:6px"><button>Vợ nhận</button><button class="active">Chồng nhận</button></div>
+              </div>
+              <div id="transferFundFields" hidden>
+                <label class="field-label">Quỹ đích</label>
+                <div class="fund-pick-row">
+                  <button class="fund-pick active">Quỹ tiền ăn</button>
+                  <button class="fund-pick">Quỹ sinh hoạt</button>
+                </div>
+              </div>
+              <div id="transferSavingsFields" hidden>
+                <label class="field-label">Hành động</label>
+                <div class="segmented"><button class="active">Nạp</button><button>Rút về ví</button><button>Gửi NH</button></div>
+              </div>
+              <div style="margin-top:12px"><label class="field-label">Số tiền</label><div class="amount-input">3.000.000 <span>đ</span></div></div>
+              <div><label class="field-label">Ghi chú</label><div class="text-input">Đưa tiền chợ tháng này</div></div>
             </div>
+
             <button class="btn-primary">Lưu giao dịch</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">09 · THÊM GIAO DỊCH</div><p>Bấm "Quỹ sinh hoạt" (chỉ còn 100.000đ, nhỏ hơn 200.000đ đang nhập) để thấy cảnh báo âm quỹ — không cho chọn. "Quỹ tiền ăn" đủ tiền nên chọn được bình thường.</p></div>
+        <div class="screen-caption"><div class="tag">09 · THÊM GIAO DỊCH</div><p>Bấm "Thu/Chi/Chuyển" để đổi hẳn bộ field. Ở "Chi": bấm "Quỹ sinh hoạt" (chỉ còn 100.000đ &lt; 200.000đ đang nhập) để thấy cảnh báo — không trừ số dư Vợ, chỉ quỹ mới bị chặn (đúng model V2, không trừ kép).</p></div>
       </div>
 
       <!-- SCREEN 3: TRANSACTION LIST -->
@@ -1235,7 +1278,7 @@ erDiagram
               <button class="btn-primary" style="margin-top:0">Ghi khoản mua</button>
             </div>
             <div>
-              <div class="section-label">Lịch sử <span style="font-weight:400;text-transform:none;letter-spacing:0">· mỗi dòng cũng đã trừ số dư người thực hiện</span></div>
+              <div class="section-label">Lịch sử <span style="font-weight:400;text-transform:none;letter-spacing:0">· nạp thì trừ người nạp, mua thì chỉ trừ quỹ</span></div>
               <div class="fund-entry"><div><div class="n">Nạp quỹ</div><div class="d">01/09 · Vợ</div></div><div class="tx-amt pos">+2.000.000</div></div>
               <div class="fund-entry"><div><div class="n">Đi chợ cuối tuần</div><div class="d">07/09 · Vợ</div></div><div class="tx-amt neg">-150.000</div></div>
               <div class="fund-entry"><div><div class="n">Thịt bò, rau</div><div class="d">12/09 · Chồng</div></div><div class="tx-amt neg">-95.000</div></div>
@@ -1243,7 +1286,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">15 · QUỸ TIỀN ĂN — CHI TIẾT</div><p>Nạp quỹ và mua có tích quỹ đều là giao dịch thật, trừ luôn số dư người thực hiện (xem màn 09) — quỹ không còn là sổ tách biệt hoàn toàn.</p></div>
+        <div class="screen-caption"><div class="tag">15 · QUỸ TIỀN ĂN — CHI TIẾT</div><p>Nạp quỹ = 1 giao dịch Chuyển (trừ người nạp, cộng quỹ). Mua từ quỹ = 1 giao dịch Chi có nguồn tiền là quỹ này (xem màn 09) — chỉ trừ quỹ, không trừ thêm số dư người mua.</p></div>
       </div>
 
       <div class="screen-col">
@@ -1281,6 +1324,7 @@ erDiagram
             <div>
               <label class="field-label">Loại hình</label>
               <div class="segmented" id="savingsTypeSeg">
+                <button data-t="nap">Nạp tiết kiệm</button>
                 <button class="active" data-t="rut">Rút về ví chính</button>
                 <button data-t="gui">Gửi ngân hàng</button>
               </div>
@@ -1297,7 +1341,7 @@ erDiagram
             <button class="btn-primary">Lưu giao dịch</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">17 · TIẾT KIỆM — NHẬP GIAO DỊCH</div><p>Mở khi bấm "Rút về ví chính" hoặc "Gửi ngân hàng" ở màn 16 — nhập số tiền, ghi chú; ngày tháng hệ thống tự lưu (<code>createdAt</code>), không cho sửa tay.</p></div>
+        <div class="screen-caption"><div class="tag">17 · TIẾT KIỆM — NHẬP GIAO DỊCH</div><p>3 loại hình = 3 <code>transferKind</code> (SAVINGS_TOPUP/WITHDRAW/TO_BANK), đều là Chuyển — không phải Thu/Chi. Nhập số tiền, ghi chú; ngày tháng hệ thống tự lưu (<code>transactionDate</code>/<code>createdAt</code>), không cho sửa tay.</p></div>
       </div>
 
       <!-- SCREEN 6: INVITE -->
@@ -1326,21 +1370,17 @@ erDiagram
 
   <section class="block" id="confirm">
     <div class="confirm">
-      <div class="eyebrow">Trước khi bắt đầu code</div>
-      <h2>Cần bạn chốt những điểm này</h2>
+      <div class="eyebrow">Trạng thái hiện tại</div>
+      <h2>Đã chốt Financial Core V2 — sẵn sàng code</h2>
       <ol>
-        <li><b>Phạm vi use case</b> — 9 nhóm/35 use case (mới thêm Khởi động, Danh mục & Trạng thái, chuyển đổi trạng thái, tạo nhiều Quỹ, Tiết kiệm) đã đủ cho Giai đoạn A–D chưa?</li>
-        <li><b>Công thức Tổng thu = Tổng chi + Số tiền còn lại</b> (Tổng chi = Chi phí + Tiết kiệm) — đúng cách bạn muốn tính chưa? Tiết kiệm chỉ là 1 category thuộc Chi, có ổn không?</li>
-        <li><b>Quỹ tiền ăn trừ kép</b> — nạp quỹ và khoản chi tích 1 quỹ (màn 09, có thể chọn "Không dùng quỹ") đều trừ cả số dư người thực hiện lẫn số dư quỹ; không tích thì chỉ trừ số dư như bình thường (màn 15). Đúng luồng bạn mô tả chưa?</li>
-        <li><b>Danh mục & Trạng thái CRUD</b> — màn 06/07 cho xem/thêm/sửa/xoá danh mục và từng bước trạng thái (kể cả Sinh hoạt) — đúng ý chưa?</li>
-        <li><b>Đổi trạng thái sau khi ghi</b> — màn 11 cho bấm lại để chuyển trạng thái một giao dịch đã có (không cố định lúc tạo) — đủ chưa hay cần thêm gì (vd nhắc trạng thái "già")?</li>
-        <li><b>Luồng khởi động & Gia đình/Cá nhân</b> — Chào mừng → Đăng nhập/Bỏ qua → Chọn loại sổ (màn 01-03), cộng màn Gia đình (04) và Cá nhân (05) — có bước nào thừa/thiếu?</li>
-        <li><b>Quỹ tạo được nhiều cái + chặn âm quỹ</b> — màn 14 (danh sách quỹ) và màn 09 (thử bấm "Quỹ sinh hoạt" để thấy cảnh báo) — đúng luồng bạn mô tả chưa?</li>
-        <li><b>Tiết kiệm quản lý riêng</b> — màn 16-17: rút về ví chính / gửi ngân hàng qua màn nhập giao dịch riêng (số tiền + ghi chú, ngày tự động), ví dụ khớp đúng số bạn đưa (11tr → rút 500k, gửi NH 10tr, còn 500k hiện tại) — đúng chưa?</li>
-        <li><b>Thống kê theo trạng thái</b> — màn 13: xem tổng tiền + danh sách giao dịch theo từng bước (Chưa chuẩn bị/Đã chuẩn bị/Đã gửi) để đối chiếu cuối tháng — đủ chưa hay cần thêm cột nào?</li>
-        <li><b>Giao diện đổi hướng fintech</b> — nền xanh dương, thẻ trắng, lưới icon phẳng, thanh tab dưới kiểu Zalopay — đây có phải đúng hướng bạn muốn, hay cần chỉnh màu/kiểu chữ gì thêm?</li>
+        <li><b>3 loại giao dịch (Thu/Chi/Chuyển)</b> thay cho model Thu/Chi cũ — Tiết kiệm, Quỹ, chuyển tiền thành viên đều là Chuyển, không phải Chi. Chi tiết + audit đầy đủ: <code>docs/financial-core-v2.md</code>.</li>
+        <li><b>Lỗi trừ kép ở Quỹ đã sửa</b> — chi tiêu dùng quỹ (màn 09) chỉ trừ số dư quỹ, không đụng số dư người mua.</li>
+        <li><b>Công thức 3 tổng tách biệt</b> (Income/External Expense/Transfer) thay công thức "Tổng thu = Tổng chi + Tiết kiệm" cũ.</li>
+        <li><b>Sửa/xoá giao dịch dùng reversal ledger</b> — append-only, không mutate/xoá cứng bản gốc.</li>
+        <li><b>Chuyển tiền thành viên gộp thành 1 luồng chọn người nhận</b> (màn 09, loại "Chuyển") — bỏ 2 danh mục cứng "Chồng đưa vợ"/"Vợ đưa chồng".</li>
+        <li><b>Danh mục & Trạng thái CRUD</b> (màn 06/07), <b>đổi trạng thái sau khi ghi</b> (màn 11), <b>Quỹ tạo nhiều cái + chặn âm</b> (màn 09/14/15), <b>Tiết kiệm quản lý riêng</b> (màn 16/17), <b>thống kê theo trạng thái</b> (màn 13), <b>luồng khởi động</b> (màn 01-05) — giữ nguyên như đã chốt trước đó, không đổi so với Financial Core V2.</li>
       </ol>
-      <div class="cta">Trả lời trong chat — OK từng mục hoặc góp ý cần sửa gì. Sau khi chốt, mình bắt đầu code theo đúng bản vẽ này, bắt đầu từ phase còn lại của Giai đoạn A.</div>
+      <div class="cta">18 màn hình đã cập nhật khớp Financial Core V2. Bắt đầu code Giai đoạn A theo đúng <code>spec.md</code> + <code>docs/financial-core-v2.md</code>.</div>
     </div>
   </section>
 
@@ -1385,6 +1425,59 @@ erDiagram
   }
   renderStepper('sinh_hoat', 1);
 
+  var txTypeSeg = document.getElementById('txTypeSeg');
+  var panelChi = document.getElementById('panelChi');
+  var panelThu = document.getElementById('panelThu');
+  var panelChuyen = document.getElementById('panelChuyen');
+  if(txTypeSeg){
+    txTypeSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        txTypeSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        var tt = btn.dataset.tt;
+        panelChi.hidden = (tt !== 'chi');
+        panelThu.hidden = (tt !== 'thu');
+        panelChuyen.hidden = (tt !== 'chuyen');
+      });
+    });
+  }
+
+  var transferKindSeg = document.getElementById('transferKindSeg');
+  var transferMemberFields = document.getElementById('transferMemberFields');
+  var transferFundFields = document.getElementById('transferFundFields');
+  var transferSavingsFields = document.getElementById('transferSavingsFields');
+  if(transferKindSeg){
+    transferKindSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        transferKindSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        var tk = btn.dataset.tk;
+        transferMemberFields.hidden = (tk !== 'member');
+        transferFundFields.hidden = (tk !== 'fund');
+        transferSavingsFields.hidden = (tk !== 'savings');
+      });
+    });
+  }
+
+  document.querySelectorAll('.segmented').forEach(function(group){
+    if(group.id) return; // nhung nhom co id da duoc gan hanh vi rieng o tren
+    group.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        group.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+    });
+  });
+
+  document.querySelectorAll('.person-toggle').forEach(function(group){
+    group.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        group.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+      });
+    });
+  });
+
   var demoAmount = 200000;
   var fundWarn = document.getElementById('fundWarn');
   document.querySelectorAll('.fund-pick').forEach(function(btn){
@@ -1425,13 +1518,11 @@ erDiagram
   }
 
   var typeSeg = document.getElementById('typeSeg');
-  var savingRow = document.getElementById('savingRow');
   if(typeSeg){
     typeSeg.querySelectorAll('button').forEach(function(btn){
       btn.addEventListener('click', function(){
         typeSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
         btn.classList.add('active');
-        if(savingRow) savingRow.hidden = (btn.dataset.t === 'thu');
       });
     });
   }
