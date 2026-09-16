@@ -202,7 +202,7 @@ Tiết kiệm **không còn là Category kiểu Chi** (sửa F-02). Toàn bộ t
 - **Rút tiết kiệm về ví:** `MEMBER_SAVINGS_CASH -X` → `MEMBER_AVAILABLE +X`.
 - **Gửi ngân hàng:** `MEMBER_SAVINGS_CASH -X` → `MEMBER_SAVINGS_BANK +X`.
 
-Cả 3 đều KHÔNG đổi Total Assets, đúng ví dụ mục 5/8/9 trong yêu cầu. Màn hình "Tiết kiệm — Nhập giao dịch" (đã có ở `docs/design.html` màn 17) giữ nguyên UI, chỉ đổi bản chất transaction phía sau từ "category isSaving + savingsAction" sang "TRANSFER + transferKind".
+Cả 3 đều KHÔNG đổi Total Assets, đúng ví dụ mục 5/8/9 trong yêu cầu. Không có màn nhập riêng cho tiết kiệm — cả 3 hành động đều mở lại chính màn Thêm giao dịch (`docs/design.html` màn 09, loại "Chuyển" → "Tiết kiệm"), tránh 2 luồng code trùng nhau cho cùng 1 việc (đã gộp lại sau khi phát hiện trùng UI với màn 09).
 
 ---
 
