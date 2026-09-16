@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_net_income.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/transaction_providers.dart';
 import 'category_edit_screen.dart';
 
 /// Màn "Danh mục — Danh sách" (`docs/design.html` màn 06) — 3 nhóm Thu/Chi
@@ -15,6 +18,8 @@ class CategoryListScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
+    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final categoryById = {for (final c in categories) c.id: c};
     final active = categories.where((c) => c.isActive).toList();
     final income = active.where((c) => c.type == TransactionType.income).toList();
     final expense = active.where((c) => c.type == TransactionType.expense).toList();
@@ -26,7 +31,16 @@ class CategoryListScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           const _GroupLabel('Thu'),
-          for (final c in income) _CategoryRow(category: c, editable: true),
+          for (final c in income)
+            _CategoryRow(
+              category: c,
+              editable: true,
+              netIncome: computeNetIncome(
+                c,
+                categoryById[c.linkedExpenseCategoryId],
+                transactions,
+              ),
+            ),
           const SizedBox(height: 12),
           const _GroupLabel('Chi'),
           for (final c in expense) _CategoryRow(category: c, editable: true),
@@ -69,10 +83,19 @@ class _GroupLabel extends StatelessWidget {
 }
 
 class _CategoryRow extends StatelessWidget {
-  const _CategoryRow({required this.category, required this.editable});
+  const _CategoryRow({
+    required this.category,
+    required this.editable,
+    this.netIncome,
+  });
 
   final Category category;
   final bool editable;
+
+  /// "Thu nhập ròng" (mục 17 financial-core-v2.md) — chỉ khác null khi
+  /// category này có `linkedExpenseCategoryId`. Số hiển thị thêm, không
+  /// đổi cách tính Tổng thu/Tổng chi.
+  final int? netIncome;
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +107,9 @@ class _CategoryRow extends StatelessWidget {
     }
     if (category.statsEnabled) subtitleParts.add('Thống kê: bật');
     if (category.excludeFromTotals) subtitleParts.add('Không tính vào Tổng thu');
+    if (netIncome != null) {
+      subtitleParts.add('Ròng ${Formatters.amount(netIncome!)}');
+    }
 
     return ListTile(
       contentPadding: EdgeInsets.zero,

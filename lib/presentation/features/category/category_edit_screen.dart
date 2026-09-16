@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_net_income.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/status_providers.dart';
+import '../../providers/transaction_providers.dart';
 
 const _swatches = <Color>[
   Color(0xFFE8A23E),
@@ -142,6 +145,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   @override
   Widget build(BuildContext context) {
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
+    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
 
     if (!_isNew && !_initialized) {
       for (final c in categories) {
@@ -212,6 +216,34 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
                   ),
               ],
             ),
+            if (_linkedExpenseCategoryId != null) ...[
+              const SizedBox(height: 10),
+              Builder(
+                builder: (context) {
+                  final linked = expenseCategoriesForLink.firstWhere(
+                    (c) => c.id == _linkedExpenseCategoryId,
+                  );
+                  final draft = Category(
+                    id: _categoryId,
+                    name: _nameController.text,
+                    color: _color,
+                    type: TransactionType.income,
+                  );
+                  final net = computeNetIncome(draft, linked, transactions) ?? 0;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Thu nhập ròng hiện tại: ${Formatters.amount(net)}',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                    ),
+                  );
+                },
+              ),
+            ],
             const SizedBox(height: 12),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
