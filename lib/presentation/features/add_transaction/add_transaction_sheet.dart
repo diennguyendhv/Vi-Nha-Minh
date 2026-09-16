@@ -819,18 +819,43 @@ class _CategoryChipGrid extends StatelessWidget {
         style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
       );
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: categories
+    final validSelectedId = categories.any((c) => c.id == selectedId) ? selectedId : null;
+    return DropdownButtonFormField<String>(
+      value: validSelectedId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(),
+      ),
+      hint: const Text('Chọn hạng mục'),
+      items: categories
           .map(
-            (c) => _CategoryChip(
-              category: c,
-              selected: c.id == selectedId,
-              onTap: () => onTap(c),
+            (c) => DropdownMenuItem(
+              value: c.id,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: c.color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(c.name),
+                ],
+              ),
             ),
           )
           .toList(),
+      onChanged: (id) {
+        for (final c in categories) {
+          if (c.id == id) {
+            onTap(c);
+            return;
+          }
+        }
+      },
     );
   }
 }
@@ -854,19 +879,38 @@ class _AssetTypeChipGrid extends StatelessWidget {
         style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
       );
     }
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: assetTypes
+    final validSelectedId = assetTypes.any((a) => a.id == selectedId) ? selectedId : null;
+    return DropdownButtonFormField<String>(
+      value: validSelectedId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(),
+      ),
+      hint: const Text('Chọn loại tài sản'),
+      items: assetTypes
           .map(
-            (a) => _ChoiceChip(
-              label: a.name,
-              selected: a.id == selectedId,
-              accent: a.color,
-              onTap: () => onTap(a.id),
+            (a) => DropdownMenuItem(
+              value: a.id,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(color: a.color, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(a.name),
+                ],
+              ),
             ),
           )
           .toList(),
+      onChanged: (id) {
+        if (id != null) onTap(id);
+      },
     );
   }
 }
@@ -884,19 +928,23 @@ class _StatusChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: category.statuses
-          .map(
-            (s) => _ChoiceChip(
-              label: s.name,
-              selected: s.id == selectedId,
-              accent: category.color,
-              onTap: () => onTap(s.id),
-            ),
-          )
+    final validSelectedId =
+        category.statuses.any((s) => s.id == selectedId) ? selectedId : null;
+    return DropdownButtonFormField<String>(
+      value: validSelectedId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(),
+      ),
+      hint: const Text('Chọn trạng thái'),
+      items: category.statuses
+          .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
           .toList(),
+      onChanged: (id) {
+        if (id != null) onTap(id);
+      },
     );
   }
 }
@@ -919,167 +967,39 @@ class _FundPickRow extends StatelessWidget {
   final List<Transaction> transactions;
   final ValueChanged<String?> onSelect;
 
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        if (walletLabel != null)
-          _FundPickChip(
-            label: walletLabel!,
-            selected: selectedFundId == null,
-            balanceLabel: null,
-            disabled: false,
-            onTap: () => onSelect(null),
+  List<DropdownMenuItem<String?>> _buildItems() {
+    final items = <DropdownMenuItem<String?>>[
+      if (walletLabel != null) DropdownMenuItem(value: null, child: Text(walletLabel!)),
+    ];
+    for (final f in funds) {
+      final balance = computeFundBalance(f.id, transactions);
+      final insufficient = amount > 0 && amount > balance;
+      items.add(
+        DropdownMenuItem(
+          value: f.id,
+          enabled: !insufficient,
+          child: Text(
+            '${f.name} — ${insufficient ? 'không đủ, ' : ''}còn ${Formatters.amount(balance)}',
+            style: TextStyle(color: insufficient ? AppColors.textMuted : null),
           ),
-        for (final f in funds)
-          Builder(
-            builder: (context) {
-              final balance = computeFundBalance(f.id, transactions);
-              final insufficient = amount > 0 && amount > balance;
-              return _FundPickChip(
-                label: f.name,
-                selected: selectedFundId == f.id,
-                balanceLabel: 'còn ${Formatters.amount(balance)}',
-                disabled: insufficient,
-                onTap: insufficient ? null : () => onSelect(f.id),
-              );
-            },
-          ),
-      ],
-    );
+        ),
+      );
+    }
+    return items;
   }
-}
-
-class _FundPickChip extends StatelessWidget {
-  const _FundPickChip({
-    required this.label,
-    required this.selected,
-    required this.balanceLabel,
-    required this.disabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final String? balanceLabel;
-  final bool disabled;
-  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = disabled
-        ? AppColors.textMuted
-        : (selected ? AppColors.accent : const Color(0xFF4B4F49));
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.accent.withValues(alpha: 0.12)
-              : AppColors.chipBackground,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? AppColors.accent : Colors.transparent,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color),
-            ),
-            if (balanceLabel != null)
-              Text(
-                balanceLabel!,
-                style: TextStyle(fontSize: 11, color: color),
-              ),
-          ],
-        ),
+    return DropdownButtonFormField<String?>(
+      value: selectedFundId,
+      isExpanded: true,
+      decoration: const InputDecoration(
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(),
       ),
-    );
-  }
-}
-
-class _ChoiceChip extends StatelessWidget {
-  const _ChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.accent,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final Color accent;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected
-              ? accent.withValues(alpha: 0.14)
-              : AppColors.chipBackground,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? accent : Colors.transparent),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? accent : const Color(0xFF4B4F49),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({
-    required this.category,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Category category;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected
-              ? category.color.withValues(alpha: 0.14)
-              : AppColors.chipBackground,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? category.color : Colors.transparent,
-            width: 1.5,
-          ),
-        ),
-        child: Text(
-          category.name,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w700,
-            color: selected ? category.color : const Color(0xFF4B4F49),
-          ),
-        ),
-      ),
+      items: _buildItems(),
+      onChanged: onSelect,
     );
   }
 }

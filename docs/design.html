@@ -237,6 +237,14 @@ section.block{padding:52px 0;border-top:1px solid var(--line);}
   background:var(--paper-sunken);border-radius:8px;padding:8px 10px;margin-top:4px;
   font-size:.75rem;color:var(--ink-soft);
 }
+.select-input{
+  width:100%;background:var(--paper-raised);border-radius:9px;border:1.4px solid var(--line);
+  padding:9px 10px;margin-top:6px;font-family:inherit;font-size:.75rem;font-weight:600;color:var(--ink);
+  appearance:none;-webkit-appearance:none;
+  background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%237A7F76'%3E%3Cpath d='M5.5 7.5l4.5 4.5 4.5-4.5' stroke='%237A7F76' stroke-width='1.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:16px;
+}
+.select-input:focus{outline:none;border-color:var(--jade);}
 .fund-pick-row{display:flex;flex-direction:column;gap:6px;margin-top:6px;}
 .fund-pick{display:flex;justify-content:space-between;align-items:center;font-family:inherit;font-size:.74rem;font-weight:500;
   padding:8px 10px;border-radius:9px;border:1.4px solid var(--line);background:var(--paper-raised);color:var(--ink);cursor:pointer;}
@@ -948,10 +956,10 @@ erDiagram
             </div>
             <div id="linkedExpenseField" hidden>
               <label class="field-label">Danh mục chi liên kết <span class="hint">tuỳ chọn, để tính Thu nhập ròng</span></label>
-              <div class="fund-pick-row">
-                <button class="fund-pick active">Không liên kết</button>
-                <button class="fund-pick">Chi phí vận hành</button>
-              </div>
+              <select class="select-input">
+                <option selected>Không liên kết</option>
+                <option>Chi phí vận hành</option>
+              </select>
             </div>
             <div>
               <label class="field-label">Màu</label>
@@ -1071,14 +1079,14 @@ erDiagram
             <div id="panelChi">
               <div>
                 <label class="field-label">Hạng mục</label>
-                <div class="chip-grid" id="catGrid">
-                  <button class="cat-chip active" data-cat="sinh_hoat" style="--c:var(--ink-soft)">Sinh hoạt</button>
-                  <button class="cat-chip" data-cat="dau_tu" style="--c:var(--slate)">Đầu tư</button>
-                  <button class="cat-chip" data-cat="tu_thuong" style="--c:var(--rust)">Tự thưởng</button>
-                  <button class="cat-chip" data-cat="cho_di" style="--c:var(--amber)">CĐ</button>
-                  <button class="cat-chip" data-cat="dang_hien" style="--c:var(--amber-dark)">DH</button>
-                  <button class="cat-chip" data-cat="tra_luong_gv" style="--c:var(--slate-light)">Chi phí vận hành</button>
-                </div>
+                <select class="select-input" id="catGrid">
+                  <option value="sinh_hoat" selected>Sinh hoạt</option>
+                  <option value="dau_tu">Đầu tư</option>
+                  <option value="tu_thuong">Tự thưởng</option>
+                  <option value="cho_di">CĐ</option>
+                  <option value="dang_hien">DH</option>
+                  <option value="tra_luong_gv">Chi phí vận hành</option>
+                </select>
               </div>
               <div>
                 <label class="field-label">Số tiền</label>
@@ -1097,11 +1105,11 @@ erDiagram
               </div>
               <div>
                 <label class="field-label">Nguồn tiền <span class="hint">(mặc định ví chính, đổi sang 1 Quỹ nếu muốn)</span></label>
-                <div class="fund-pick-row">
-                  <button class="fund-pick" data-bal="none">Ví của Vợ</button>
-                  <button class="fund-pick active" data-bal="1850000">Quỹ tiền ăn <span class="b">còn 1.850.000đ</span></button>
-                  <button class="fund-pick" data-bal="100000">Quỹ sinh hoạt <span class="b">còn 100.000đ</span></button>
-                </div>
+                <select class="select-input" id="fundSourceSelect">
+                  <option value="none" data-bal="none">Ví của Vợ</option>
+                  <option value="an_uong" data-bal="1850000" selected>Quỹ tiền ăn — còn 1.850.000đ</option>
+                  <option value="sinh_hoat_fund" data-bal="100000">Quỹ sinh hoạt — còn 100.000đ</option>
+                </select>
                 <p class="fund-warn" id="fundWarn" hidden></p>
               </div>
               <div class="status-stepper" id="statusStepper" hidden>
@@ -1113,11 +1121,11 @@ erDiagram
             <div id="panelThu" hidden>
               <div>
                 <label class="field-label">Hạng mục</label>
-                <div class="chip-grid" id="catGridThu">
-                  <button class="cat-chip active" data-cat="thu_nhap" style="--c:var(--jade)">Thu nhập</button>
-                  <button class="cat-chip" data-cat="hoc_phi" style="--c:var(--jade-deep)">Doanh thu</button>
-                  <button class="cat-chip" data-cat="so_du_ban_dau" style="--c:var(--jade-soft)">Số dư ban đầu</button>
-                </div>
+                <select class="select-input" id="catGridThu">
+                  <option value="thu_nhap" selected>Thu nhập</option>
+                  <option value="hoc_phi">Doanh thu</option>
+                  <option value="so_du_ban_dau">Số dư ban đầu</option>
+                </select>
                 <p class="fund-warn" id="hocPhiHint" hidden style="color:var(--jade-deep);background:var(--jade-soft)">Danh mục này đã liên kết Chi "Chi phí vận hành" — sau khi lưu, nhớ ghi thêm 1 giao dịch Chi riêng cho phần phải trả, app sẽ tự tính Thu nhập ròng.</p>
               </div>
               <div><label class="field-label">Số tiền</label><div class="amount-input">16.000.000 <span>đ</span></div></div>
@@ -1141,10 +1149,10 @@ erDiagram
               </div>
               <div id="transferFundFields" hidden>
                 <label class="field-label">Quỹ đích</label>
-                <div class="fund-pick-row">
-                  <button class="fund-pick active">Quỹ tiền ăn</button>
-                  <button class="fund-pick">Quỹ sinh hoạt</button>
-                </div>
+                <select class="select-input">
+                  <option selected>Quỹ tiền ăn</option>
+                  <option>Quỹ sinh hoạt</option>
+                </select>
               </div>
               <div id="transferSavingsFields" hidden>
                 <label class="field-label">Hành động</label>
@@ -1207,12 +1215,12 @@ erDiagram
           <div class="phone-body">
             <div>
               <label class="field-label">Hạng mục <span class="hint">(cùng loại Chi, đổi được)</span></label>
-              <div class="chip-grid">
-                <button class="cat-chip" style="--c:var(--rust)">Tự thưởng</button>
-                <button class="cat-chip active" style="--c:var(--amber-dark)">DH</button>
-                <button class="cat-chip" style="--c:var(--amber)">CĐ</button>
-                <button class="cat-chip" style="--c:var(--ink-soft)">Sinh hoạt</button>
-              </div>
+              <select class="select-input">
+                <option>Tự thưởng</option>
+                <option selected>DH</option>
+                <option>CĐ</option>
+                <option>Sinh hoạt</option>
+              </select>
             </div>
             <div>
               <label class="field-label">Số tiền</label>
@@ -2413,18 +2421,14 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     if(!steps.length){ if(stepper) stepper.hidden = true; return; }
     if(!stepper) return;
     stepper.hidden = false;
-    track.innerHTML = steps.map(function(s,i){
-      return '<div class="step'+(i===currentIdx?' current':'')+'"><span class="dot"></span>'+s+'</div>';
-    }).join('');
+    track.innerHTML = '<select class="select-input">' + steps.map(function(s,i){
+      return '<option'+(i===currentIdx?' selected':'')+'>'+s+'</option>';
+    }).join('') + '</select>';
   }
   var grid = document.getElementById('catGrid');
   if(grid){
-    grid.querySelectorAll('.cat-chip').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        grid.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
-        renderStepper(btn.dataset.cat, 1);
-      });
+    grid.addEventListener('change', function(){
+      renderStepper(grid.value, 1);
     });
   }
   renderStepper('sinh_hoat', 1);
@@ -2432,12 +2436,8 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
   var gridThu = document.getElementById('catGridThu');
   var hocPhiHint = document.getElementById('hocPhiHint');
   if(gridThu){
-    gridThu.querySelectorAll('.cat-chip').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        gridThu.querySelectorAll('.cat-chip').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
-        if(hocPhiHint) hocPhiHint.hidden = (btn.dataset.cat !== 'hoc_phi');
-      });
+    gridThu.addEventListener('change', function(){
+      if(hocPhiHint) hocPhiHint.hidden = (gridThu.value !== 'hoc_phi');
     });
   }
 
@@ -2496,27 +2496,26 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 
   var demoAmount = 200000;
   var fundWarn = document.getElementById('fundWarn');
-  document.querySelectorAll('.fund-pick').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      if(btn.dataset.bal === 'none'){
+  var fundSourceSelect = document.getElementById('fundSourceSelect');
+  if(fundSourceSelect){
+    fundSourceSelect.addEventListener('change', function(){
+      var opt = fundSourceSelect.options[fundSourceSelect.selectedIndex];
+      var bal = opt.dataset.bal;
+      if(bal === 'none' || !bal){
         if(fundWarn) fundWarn.hidden = true;
-        document.querySelectorAll('.fund-pick').forEach(function(b){ b.classList.remove('active'); });
-        btn.classList.add('active');
         return;
       }
-      var bal = parseInt(btn.dataset.bal, 10);
-      if(bal < demoAmount){
+      var balNum = parseInt(bal, 10);
+      if(balNum < demoAmount){
         if(fundWarn){
           fundWarn.hidden = false;
-          fundWarn.textContent = 'Vượt số dư quỹ — quỹ này còn ' + bal.toLocaleString('vi-VN') + 'đ, không thể trừ âm.';
+          fundWarn.textContent = 'Vượt số dư quỹ — quỹ này còn ' + balNum.toLocaleString('vi-VN') + 'đ, không thể trừ âm.';
         }
         return;
       }
       if(fundWarn) fundWarn.hidden = true;
-      document.querySelectorAll('.fund-pick').forEach(function(b){ b.classList.remove('active'); });
-      btn.classList.add('active');
     });
-  });
+  }
 
   document.querySelectorAll('.switch').forEach(function(sw){
     if(sw.id === 'fundToggle') return;
@@ -2779,16 +2778,16 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
       return;
     }
     if(detailStatusBlock) detailStatusBlock.hidden = false;
-    detailStepper.innerHTML = detailSteps.map(function(s,i){
-      return '<div class="step'+(i===detailCurrent?' current':'')+'" data-i="'+i+'" style="cursor:pointer"><span class="dot"></span>'+s+'</div>';
-    }).join('');
-    detailStepper.querySelectorAll('.step').forEach(function(el){
-      el.addEventListener('click', function(){
-        detailCurrent = parseInt(el.dataset.i, 10);
-        renderDetail();
+    detailStepper.innerHTML = '<select class="select-input">' + detailSteps.map(function(s,i){
+      return '<option'+(i===detailCurrent?' selected':'')+'>'+s+'</option>';
+    }).join('') + '</select>';
+    var detailSelect = detailStepper.querySelector('select');
+    if(detailSelect){
+      detailSelect.addEventListener('change', function(){
+        detailCurrent = detailSelect.selectedIndex;
         if(detailNote) detailNote.textContent = 'Cập nhật lần cuối: hôm nay · ' + detailSteps[detailCurrent];
       });
-    });
+    }
   }
   if(detailStepper) renderDetail();
 

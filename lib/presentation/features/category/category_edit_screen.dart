@@ -199,22 +199,16 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
               style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Không liên kết'),
-                  selected: _linkedExpenseCategoryId == null,
-                  onSelected: (_) => setState(() => _linkedExpenseCategoryId = null),
-                ),
+            DropdownButtonFormField<String?>(
+              value: _linkedExpenseCategoryId,
+              isExpanded: true,
+              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              items: [
+                const DropdownMenuItem(value: null, child: Text('Không liên kết')),
                 for (final c in expenseCategoriesForLink)
-                  ChoiceChip(
-                    label: Text(c.name),
-                    selected: _linkedExpenseCategoryId == c.id,
-                    onSelected: (_) => setState(() => _linkedExpenseCategoryId = c.id),
-                  ),
+                  DropdownMenuItem(value: c.id, child: Text(c.name)),
               ],
+              onChanged: (id) => setState(() => _linkedExpenseCategoryId = id),
             ),
             if (_linkedExpenseCategoryId != null) ...[
               const SizedBox(height: 10),

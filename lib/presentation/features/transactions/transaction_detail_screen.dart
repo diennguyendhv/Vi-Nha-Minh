@@ -179,24 +179,29 @@ class _TransactionDetailScreenState
           ),
           const SizedBox(height: 8),
           if (canEditCategory)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: sameTypeCategories
-                  .map(
-                    (c) => ChoiceChip(
-                      label: Text(c.name),
-                      selected: c.id == _categoryId,
-                      onSelected: (_) => setState(() {
-                        _categoryId = c.id;
-                        // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ.
-                        if (!c.hasStatus || c.statuses.every((s) => s.id != _statusId)) {
-                          _statusId = c.hasStatus ? c.statuses.first.id : null;
-                        }
-                      }),
-                    ),
-                  )
+            DropdownButtonFormField<String>(
+              value: sameTypeCategories.any((c) => c.id == _categoryId) ? _categoryId : null,
+              isExpanded: true,
+              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              items: sameTypeCategories
+                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
                   .toList(),
+              onChanged: (id) {
+                if (id == null) return;
+                setState(() {
+                  _categoryId = id;
+                  Category? newCategory;
+                  for (final c in sameTypeCategories) {
+                    if (c.id == id) newCategory = c;
+                  }
+                  // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ.
+                  if (newCategory != null &&
+                      (!newCategory.hasStatus ||
+                          newCategory.statuses.every((s) => s.id != _statusId))) {
+                    _statusId = newCategory.hasStatus ? newCategory.statuses.first.id : null;
+                  }
+                });
+              },
             )
           else
             _ReadOnlyRow(label: 'Danh mục hệ thống, không sửa được', value: selectedCategory?.name ?? '—'),
@@ -258,18 +263,16 @@ class _TransactionDetailScreenState
               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: selectedCategory.statuses.map((s) {
-                final selected = s.id == _statusId ||
-                    (_statusId == null && s.id == selectedCategory!.statuses.first.id);
-                return ChoiceChip(
-                  label: Text(s.name),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _statusId = s.id),
-                );
-              }).toList(),
+            DropdownButtonFormField<String>(
+              value: _statusId ?? selectedCategory.statuses.first.id,
+              isExpanded: true,
+              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              items: selectedCategory.statuses
+                  .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+                  .toList(),
+              onChanged: (id) {
+                if (id != null) setState(() => _statusId = id);
+              },
             ),
             if (transaction.statusUpdatedAt != null)
               Padding(
