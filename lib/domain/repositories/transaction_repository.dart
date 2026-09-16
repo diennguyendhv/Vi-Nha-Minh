@@ -1,10 +1,9 @@
 import '../entities/transaction.dart';
 
 /// `Transaction` là **append-only** cho mọi field ảnh hưởng balance (mục 21
-/// — Phương án B, reversal ledger đầy đủ). Không có `updateTransaction`
-/// hay `deleteTransaction` tự do nữa: 3 method dưới đây là toàn bộ cách hợp
-/// lệ để "sửa"/"xoá" một giao dịch, khớp đúng phạm vi UI đã chốt (chỉ sửa
-/// `amountMinor` và `statusId`).
+/// — Phương án B, reversal ledger đầy đủ). Không có `deleteTransaction` tự
+/// do: `reverseTransaction`/`updateTransaction` dưới đây là toàn bộ cách
+/// hợp lệ để "sửa"/"xoá" một giao dịch.
 abstract class TransactionRepository {
   /// Trả về TOÀN BỘ transaction (kể cả bản đã bị hoàn tác/bản reversal nội
   /// bộ) — cần đủ để tính balance đúng (`computeAllPoolBalances` cộng dồn
@@ -21,11 +20,24 @@ abstract class TransactionRepository {
   /// đảo ngược), đánh dấu `reversedByTxId` lên bản gốc — KHÔNG xoá cứng.
   Future<void> reverseTransaction(String transactionId);
 
-  /// Sửa số tiền: hoàn tác bản gốc + tạo bản thay thế (`correctsTxId`).
-  /// Ném [InsufficientBalanceException] nếu số tiền mới sẽ làm pool âm.
-  Future<void> correctTransactionAmount(String transactionId, int newAmountMinor);
-
-  /// Đổi trạng thái — update thẳng field, KHÔNG qua reversal (status không
-  /// bao giờ ảnh hưởng balance, Invariant 9).
-  Future<void> updateTransactionStatus(String transactionId, String? statusId);
+  /// Sửa 1 giao dịch — bỏ trống field nào thì giữ nguyên giá trị cũ.
+  ///
+  /// [amountMinor] và [memberRefId] (người tiêu — map vào `sourceRefId`
+  /// nếu là EXPENSE nguồn ví, hoặc `destinationRefId` nếu là INCOME; không
+  /// áp dụng khi Chi dùng nguồn Quỹ hoặc khi giao dịch là TRANSFER) là 2
+  /// field ẢNH HƯỞNG BALANCE — đổi 1 trong 2 sẽ tự động đi qua reversal
+  /// ledger (mục 21, tạo thêm 2 bản ghi). [categoryId]/[note]/
+  /// [transactionDate]/[statusId] không ảnh hưởng balance nên được update
+  /// thẳng tại chỗ, không tạo bản ghi mới.
+  ///
+  /// Ném [InsufficientBalanceException] nếu giá trị mới sẽ làm 1 pool âm.
+  Future<void> updateTransaction(
+    String transactionId, {
+    int? amountMinor,
+    String? categoryId,
+    String? note,
+    String? memberRefId,
+    DateTime? transactionDate,
+    String? statusId,
+  });
 }

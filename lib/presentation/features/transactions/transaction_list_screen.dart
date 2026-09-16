@@ -44,6 +44,11 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
         .toList()
       ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
+    // STT theo đúng thứ tự thời gian ghi trong tháng (cũ nhất = 1), dù danh
+    // sách hiển thị mới nhất lên đầu — khớp cách đánh số 1 sổ ghi chép thật.
+    final chronological = [...inMonth]..sort((a, b) => a.transactionDate.compareTo(b.transactionDate));
+    final sttById = {for (var i = 0; i < chronological.length; i++) chronological[i].id: i + 1};
+
     final grouped = <DateTime, List<Transaction>>{};
     for (final t in inMonth) {
       final day = DateTime(
@@ -123,6 +128,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               _TransactionTile(
                                 transaction: t,
                                 category: categoryById[t.categoryId],
+                                stt: sttById[t.id],
                               ),
                           ],
                         ),
@@ -145,10 +151,14 @@ int _signedAmount(Transaction t) {
 }
 
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.transaction, required this.category});
+  const _TransactionTile({required this.transaction, required this.category, this.stt});
 
   final Transaction transaction;
   final Category? category;
+
+  /// Số thứ tự theo thời gian ghi trong tháng — chỉ để hiển thị, không
+  /// lưu vào `Transaction` (tính lại mỗi lần render từ danh sách hiện có).
+  final int? stt;
 
   @override
   Widget build(BuildContext context) {
@@ -166,7 +176,7 @@ class _TransactionTile extends StatelessWidget {
           style: const TextStyle(color: Colors.white, fontSize: 12),
         ),
       ),
-      title: Text(category?.name ?? 'Đã xoá danh mục'),
+      title: Text('${stt != null ? '$stt. ' : ''}${category?.name ?? 'Đã xoá danh mục'}'),
       subtitle: transaction.note.isEmpty ? null : Text(transaction.note),
       trailing: Text(
         '$sign ${Formatters.amount(transaction.amountMinor)}',

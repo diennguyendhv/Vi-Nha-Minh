@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../domain/engine/financial_engine.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
-import '../../../domain/entities/pool_kind.dart';
-import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/usecases/compute_expense_breakdown.dart';
+import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_member_outflow_breakdown.dart';
+import '../../../domain/usecases/compute_net_income.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
 import '../../../domain/usecases/compute_status_breakdown.dart';
 import '../../../domain/usecases/compute_three_totals.dart';
@@ -49,20 +49,13 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     final now = DateTime.now();
     final totals = computeThreeTotals(transactions, categories, month: now);
     final availableBalance = computeMemberAvailableBalance(_member, transactions);
+    final memberIncome = computeMemberIncomeTotal(_member, transactions, month: now);
 
-    final memberExpenses = transactions
-        .where(
-          (t) =>
-              isVisible(t) &&
-              t.type == TransactionType.expense &&
-              t.sourceKind == PoolKind.memberAvailable &&
-              t.sourceRefId == _member.name &&
-              t.transactionDate.year == now.year &&
-              t.transactionDate.month == now.month,
-        )
-        .toList();
-    final breakdown = computeExpenseBreakdown(memberExpenses);
-    final totalMemberExpense = breakdown.fold<int>(0, (s, c) => s + c.total);
+    // Gộp cả EXPENSE lẫn TRANSFER mà thành viên đang xem là nguồn — 1 bảng
+    // duy nhất cho Đầu tư/Tự thưởng/CĐ/DH/Tiết kiệm/Chuyển tiền thành viên
+    // khác/Nạp quỹ, đúng như sheet gốc liệt kê chung (spec.md).
+    final breakdown = computeMemberOutflowBreakdown(_member, transactions, month: now);
+    final totalMemberOutflow = breakdown.fold<int>(0, (s, c) => s + c.total);
 
     final statsCategories = categories.where((c) => c.statsEnabled).toList();
 
@@ -80,22 +73,28 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _StatStrip(label: 'Tổng thu', value: totals.totalIncome)),
+            Expanded(child: _StatStrip(label: 'Tổng thu nhà', value: totals.totalIncome)),
             const SizedBox(width: 8),
-            Expanded(child: _StatStrip(label: 'Tổng chi', value: totals.totalExpense)),
+            Expanded(child: _StatStrip(label: 'Tổng chi nhà', value: totals.totalExpense)),
             const SizedBox(width: 8),
             Expanded(child: _StatStrip(label: 'Chuyển khoản', value: totals.totalTransfer)),
           ],
         ),
+        const SizedBox(height: 8),
+        _StatStrip(label: 'Thu nhập của ${_member.label} tháng ${now.month}', value: memberIncome),
         const SizedBox(height: 22),
         Text(
-          'Chi tiêu của ${_member.label} tháng ${now.month}',
+          'Chi tiêu & chuyển đi của ${_member.label} tháng ${now.month}',
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+        ),
+        const Text(
+          'Gồm cả Chi (Sinh hoạt, CĐ, DH...) và Chuyển đi (Tiết kiệm, Nạp quỹ, Chuyển tiền cho thành viên khác)',
+          style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
         ),
         const SizedBox(height: 6),
         _Donut(
           breakdown: breakdown,
-          totalExpense: totalMemberExpense,
+          totalExpense: totalMemberOutflow,
           categoryById: categoryById,
         ),
         const SizedBox(height: 12),
@@ -103,7 +102,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              'Chưa có khoản chi nào tháng này',
+              'Chưa có khoản chi/chuyển nào tháng này',
               style: TextStyle(color: AppColors.textSecondary),
             ),
           )
@@ -111,7 +110,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
           ...breakdown.map(
             (item) => _LegendRow(
               item: item,
-              totalExpense: totalMemberExpense,
+              totalExpense: totalMemberOutflow,
               category: categoryById[item.categoryId],
             ),
           ),
@@ -122,7 +121,59 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
             breakdown: computeStatusBreakdown(transactions, category),
           ),
         ],
+        for (final category in categories.where(
+          (c) => c.type == TransactionType.income && c.linkedExpenseCategoryId != null,
+        )) ...[
+          const SizedBox(height: 16),
+          _NetIncomeCard(
+            category: category,
+            netIncomeThisMonth: computeNetIncome(
+              category,
+              categoryById[category.linkedExpenseCategoryId],
+              transactions,
+              month: now,
+            ),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+class _NetIncomeCard extends StatelessWidget {
+  const _NetIncomeCard({required this.category, required this.netIncomeThisMonth});
+
+  final Category category;
+  final int? netIncomeThisMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: category.color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Thu nhập ròng "${category.name}" tháng này',
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
+            ),
+          ),
+          Text(
+            Formatters.amount(netIncomeThisMonth ?? 0),
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -254,7 +305,7 @@ class _Donut extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'Tổng chi',
+                  'Tổng ra',
                   style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 Text(

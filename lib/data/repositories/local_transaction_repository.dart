@@ -133,52 +133,108 @@ class LocalTransactionRepository implements TransactionRepository {
     });
   }
 
+  /// Với INCOME, "người tiêu" = `destinationRefId`; với EXPENSE nguồn ví
+  /// (`sourceKind == memberAvailable`), = `sourceRefId`. TRANSFER hoặc
+  /// EXPENSE nguồn Quỹ không có khái niệm "người tiêu" đơn — trả về
+  /// (null, null), báo hiệu bỏ qua [memberRefId] nếu có truyền vào.
+  (String? sourceRefId, String? destinationRefId) _memberFieldTargets(
+    domain.Transaction original,
+    String memberRefId,
+  ) {
+    if (original.type == TransactionType.income) {
+      return (null, memberRefId);
+    }
+    if (original.type == TransactionType.expense &&
+        original.sourceKind == PoolKind.memberAvailable) {
+      return (memberRefId, null);
+    }
+    return (null, null);
+  }
+
   @override
-  Future<void> correctTransactionAmount(
-    String transactionId,
-    int newAmountMinor,
-  ) async {
+  Future<void> updateTransaction(
+    String transactionId, {
+    int? amountMinor,
+    String? categoryId,
+    String? note,
+    String? memberRefId,
+    DateTime? transactionDate,
+    String? statusId,
+  }) async {
     await _db.transaction(() async {
       final existing = await _allTransactions();
       final original = existing.firstWhere((t) => t.id == transactionId);
 
-      final result = buildCorrection(
-        original,
-        newAmountMinor: newAmountMinor,
-        reversalId: IdGenerator.generate(),
-        replacementId: IdGenerator.generate(),
-        clientTxId: IdGenerator.generate(),
-        now: DateTime.now(),
-      );
+      final amountChanged = amountMinor != null && amountMinor != original.amountMinor;
+      String? newSourceRefId;
+      String? newDestinationRefId;
+      var memberChanged = false;
+      if (memberRefId != null) {
+        final (targetSource, targetDestination) = _memberFieldTargets(original, memberRefId);
+        if (targetSource != null && targetSource != original.sourceRefId) {
+          newSourceRefId = targetSource;
+          memberChanged = true;
+        }
+        if (targetDestination != null && targetDestination != original.destinationRefId) {
+          newDestinationRefId = targetDestination;
+          memberChanged = true;
+        }
+      }
 
-      // Áp hiệu ứng reversal trước để check số dư đúng với trạng thái SAU khi
-      // hoàn tác bản gốc (khớp đúng Test 10: chỉ phần chênh lệch bị chặn).
-      final balances = computeAllPoolBalances(existing);
-      applyEffect(result.reversal, 1, balances);
-      _assertWontGoNegative(result.replacement, balances);
+      if (amountChanged || memberChanged) {
+        // amountMinor hoặc người tiêu đổi — 2 field này ảnh hưởng balance,
+        // bắt buộc qua reversal ledger (mục 21). categoryId/note/
+        // transactionDate/statusId "đi kèm" luôn vào bản thay thế.
+        final result = buildCorrection(
+          original,
+          newAmountMinor: amountMinor ?? original.amountMinor,
+          newCategoryId: categoryId,
+          newNote: note,
+          newSourceRefId: newSourceRefId,
+          newDestinationRefId: newDestinationRefId,
+          newTransactionDate: transactionDate,
+          newStatusId: statusId,
+          reversalId: IdGenerator.generate(),
+          replacementId: IdGenerator.generate(),
+          clientTxId: IdGenerator.generate(),
+          now: DateTime.now(),
+        );
 
-      await _db.into(_db.transactionRows).insert(_toCompanion(result.reversal));
-      await _db.into(_db.transactionRows).insert(_toCompanion(result.replacement));
+        // Áp hiệu ứng reversal trước để check số dư đúng với trạng thái SAU
+        // khi hoàn tác bản gốc (khớp Test 10: chỉ phần chênh lệch bị chặn).
+        final balances = computeAllPoolBalances(existing);
+        applyEffect(result.reversal, 1, balances);
+        _assertWontGoNegative(result.replacement, balances);
+
+        await _db.into(_db.transactionRows).insert(_toCompanion(result.reversal));
+        await _db.into(_db.transactionRows).insert(_toCompanion(result.replacement));
+        await (_db.update(
+          _db.transactionRows,
+        )..where((r) => r.id.equals(transactionId))).write(
+          TransactionRowsCompanion(reversedByTxId: Value(result.reversal.id)),
+        );
+        return;
+      }
+
+      // Không field nào ảnh hưởng balance đổi — update thẳng tại chỗ.
+      if (categoryId == null && note == null && transactionDate == null && statusId == null) {
+        return;
+      }
       await (_db.update(
         _db.transactionRows,
       )..where((r) => r.id.equals(transactionId))).write(
-        TransactionRowsCompanion(reversedByTxId: Value(result.reversal.id)),
+        TransactionRowsCompanion(
+          categoryId: categoryId != null ? Value(categoryId) : const Value.absent(),
+          note: note != null ? Value(note) : const Value.absent(),
+          transactionDate: transactionDate != null
+              ? Value(transactionDate)
+              : const Value.absent(),
+          statusId: statusId != null ? Value(statusId) : const Value.absent(),
+          statusUpdatedAt: statusId != null
+              ? Value(DateTime.now())
+              : const Value.absent(),
+        ),
       );
     });
-  }
-
-  @override
-  Future<void> updateTransactionStatus(
-    String transactionId,
-    String? statusId,
-  ) async {
-    await (_db.update(
-      _db.transactionRows,
-    )..where((r) => r.id.equals(transactionId))).write(
-      TransactionRowsCompanion(
-        statusId: Value(statusId),
-        statusUpdatedAt: Value(DateTime.now()),
-      ),
-    );
   }
 }

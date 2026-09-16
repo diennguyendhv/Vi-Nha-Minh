@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
+import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
+import 'package:vi_nha_minh/domain/usecases/compute_pool_balance.dart';
 
 int _seq = 0;
 
@@ -275,32 +277,69 @@ void main() {
     );
   });
 
-  group('Savings Model — mục 9', () {
-    test('Nạp/Rút/Gửi NH tiết kiệm không đổi Tổng tài sản', () {
+  group('Savings Model — mục 9 (loại tài sản tự do, không còn cố định cash/bank)', () {
+    test('Nạp/Chuyển đổi loại tài sản tiết kiệm không đổi Tổng tài sản', () {
       final topup = _tx(
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsTopup,
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
-        destinationKind: PoolKind.memberSavingsCash,
-        destinationRefId: 'vo',
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
         amountMinor: 2000000,
       );
-      final toBank = _tx(
+      final convert = _tx(
         type: TransactionType.transfer,
-        transferKind: TransferKind.savingsToBank,
-        sourceKind: PoolKind.memberSavingsCash,
-        sourceRefId: 'vo',
-        destinationKind: PoolKind.memberSavingsBank,
-        destinationRefId: 'vo',
+        transferKind: TransferKind.savingsConvert,
+        sourceKind: PoolKind.memberSavingsAsset,
+        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         amountMinor: 1500000,
       );
-      final balances = computeAllPoolBalances([topup, toBank]);
+      final balances = computeAllPoolBalances([topup, convert]);
       expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), -2000000);
-      expect(poolBalance(balances, PoolKind.memberSavingsCash, 'vo'), 500000);
-      expect(poolBalance(balances, PoolKind.memberSavingsBank, 'vo'), 1500000);
+      expect(
+        poolBalance(
+          balances,
+          PoolKind.memberSavingsAsset,
+          savingsAssetRefId('savings_cash', FamilyMember.vo),
+        ),
+        500000,
+      );
+      expect(
+        poolBalance(
+          balances,
+          PoolKind.memberSavingsAsset,
+          savingsAssetRefId('savings_bank', FamilyMember.vo),
+        ),
+        1500000,
+      );
       final totalChange = balances.values.fold<int>(0, (s, v) => s + v);
       expect(totalChange, 0);
+    });
+
+    test('computeMemberSavingsTotal cộng dồn mọi loại tài sản của 1 thành viên', () {
+      final stocksTopup = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.savingsTopup,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('chung_khoan', FamilyMember.vo),
+        amountMinor: 3000000,
+      );
+      final bankTopup = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.savingsTopup,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        amountMinor: 2000000,
+      );
+      final total = computeMemberSavingsTotal(FamilyMember.vo, [stocksTopup, bankTopup]);
+      expect(total, 5000000);
     });
   });
 }

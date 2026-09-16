@@ -82,7 +82,22 @@ class FundRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [TransactionRows, CategoryRows, StatusRows, FundRows])
+/// Loại tài sản tiết kiệm tự đặt (Tiền mặt, Ngân hàng, Chứng khoán, Bất
+/// động sản...) — mỗi loại là 1 pool riêng CHO TỪNG thành viên (khác
+/// `FundRows`, dùng chung cả nhà). KHÔNG cache balance, tương tự `FundRows`.
+class SavingsAssetTypeRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(
+  tables: [TransactionRows, CategoryRows, StatusRows, FundRows, SavingsAssetTypeRows],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -90,13 +105,14 @@ class AppDatabase extends _$AppDatabase {
   /// file thật trên máy.
   AppDatabase.forTesting(super.executor);
 
-  /// V2 — schema cũ (V1: `TransactionRows` shape cũ + `FundEntryRows`) chưa
-  /// từng phát hành, chưa có dữ liệu người dùng thật cần giữ lại. Nâng cấp
+  /// Tăng mỗi lần đổi schema (kể cả thêm bảng như `SavingsAssetTypeRows`) —
+  /// app chưa từng phát hành, chưa có dữ liệu người dùng thật cần giữ lại.
+  /// Nâng cấp
   /// đơn giản là xoá sạch bảng cũ rồi tạo lại theo schema mới, KHÔNG có
   /// bước migrate/transform dữ liệu — máy đang có data demo V1 sẽ mất khi
   /// cập nhật app.
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -109,6 +125,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('DROP TABLE IF EXISTS category_rows');
       await customStatement('DROP TABLE IF EXISTS status_rows');
       await customStatement('DROP TABLE IF EXISTS fund_rows');
+      await customStatement('DROP TABLE IF EXISTS savings_asset_type_rows');
       await m.createAll();
     },
     beforeOpen: (details) async {

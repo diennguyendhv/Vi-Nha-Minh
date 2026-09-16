@@ -11,7 +11,7 @@ import 'transfer_kind.dart';
 /// `TRANSACTION` là **append-only** cho mọi field ảnh hưởng balance (`type`,
 /// `amountMinor`, `sourceKind/RefId`, `destinationKind/RefId`) — sửa/xoá
 /// không bao giờ mutate các field này trên 1 bản ghi đã tồn tại, mà tạo bản
-/// ghi mới qua `reverseTransaction`/`correctTransactionAmount` (mục 21).
+/// ghi mới qua `reverseTransaction`/`updateTransaction` (mục 21).
 class Transaction {
   const Transaction({
     required this.id,

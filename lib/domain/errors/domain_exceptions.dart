@@ -35,3 +35,15 @@ class FundNotEmptyException implements Exception {
   String toString() =>
       'FundNotEmptyException: quỹ $fundId còn $balance đ, phải rút hết trước khi xoá';
 }
+
+/// Ném ra khi cố xoá 1 loại tài sản tiết kiệm mà ít nhất 1 thành viên vẫn
+/// còn số dư khác 0 ở loại đó.
+class SavingsAssetTypeNotEmptyException implements Exception {
+  const SavingsAssetTypeNotEmptyException(this.assetTypeId);
+
+  final String assetTypeId;
+
+  @override
+  String toString() =>
+      'SavingsAssetTypeNotEmptyException: loại tài sản $assetTypeId vẫn còn thành viên có số dư khác 0';
+}

@@ -12,17 +12,25 @@ import '../entities/transaction.dart';
 ///
 /// Đây thuần là số hiển thị thêm (report-only) — KHÔNG đổi Total
 /// Income/Total External Expense/Total Assets ở `compute_three_totals.dart`.
+///
+/// Truyền [month] để xem theo từng tháng (vd "doanh thu hàng tháng") —
+/// bỏ trống để tính suốt lịch sử (mặc định trong màn Danh mục).
 int? computeNetIncome(
   Category incomeCategory,
   Category? linkedExpenseCategory,
-  List<Transaction> transactions,
-) {
+  List<Transaction> transactions, {
+  DateTime? month,
+}) {
   if (linkedExpenseCategory == null) return null;
 
   var gross = 0;
   var linkedExpense = 0;
   for (final t in transactions) {
     if (!isVisible(t)) continue;
+    if (month != null &&
+        (t.transactionDate.year != month.year || t.transactionDate.month != month.month)) {
+      continue;
+    }
     if (t.categoryId == incomeCategory.id) gross += t.amountMinor;
     if (t.categoryId == linkedExpenseCategory.id) linkedExpense += t.amountMinor;
   }

@@ -111,12 +111,25 @@ Transaction buildReversal(
   );
 }
 
-/// Sửa số tiền = hoàn tác bản gốc + tạo bản thay thế (`correctsTxId`) —
-/// 1 lần sửa tạo ra 3 bản ghi (gốc, hoàn tác, thay thế). `statusId` được
-/// giữ nguyên từ bản gốc vì đây không phải field ảnh hưởng balance.
+/// Sửa giao dịch = hoàn tác bản gốc + tạo bản thay thế (`correctsTxId`) —
+/// 1 lần sửa tạo ra 3 bản ghi (gốc, hoàn tác, thay thế). Dùng khi
+/// `amountMinor` hoặc "người tiêu" (`sourceRefId`/`destinationRefId`) đổi —
+/// 2 field này ảnh hưởng balance nên bắt buộc qua reversal ledger (mục 21).
+/// `categoryId`/`note`/`transactionDate`/`statusId` không ảnh hưởng balance
+/// nên chỉ cần truyền giá trị mới thẳng vào bản thay thế (không cần đổi
+/// riêng — nếu không ảnh hưởng balance thì sửa trực tiếp qua
+/// `TransactionRepository.updateTransactionDetails` thay vì gọi hàm này).
+///
+/// Bỏ trống bất kỳ `new*` nào để giữ nguyên giá trị gốc.
 ({Transaction reversal, Transaction replacement}) buildCorrection(
   Transaction original, {
   required int newAmountMinor,
+  String? newCategoryId,
+  String? newNote,
+  String? newSourceRefId,
+  String? newDestinationRefId,
+  DateTime? newTransactionDate,
+  String? newStatusId,
   required String reversalId,
   required String replacementId,
   required String clientTxId,
@@ -132,17 +145,17 @@ Transaction buildReversal(
     id: replacementId,
     type: original.type,
     transferKind: original.transferKind,
-    categoryId: original.categoryId,
+    categoryId: newCategoryId ?? original.categoryId,
     sourceKind: original.sourceKind,
-    sourceRefId: original.sourceRefId,
+    sourceRefId: newSourceRefId ?? original.sourceRefId,
     destinationKind: original.destinationKind,
-    destinationRefId: original.destinationRefId,
+    destinationRefId: newDestinationRefId ?? original.destinationRefId,
     amountMinor: newAmountMinor,
     currency: original.currency,
-    note: original.note,
-    statusId: original.statusId,
-    statusUpdatedAt: original.statusUpdatedAt,
-    transactionDate: original.transactionDate,
+    note: newNote ?? original.note,
+    statusId: newStatusId ?? original.statusId,
+    statusUpdatedAt: newStatusId != null ? now : original.statusUpdatedAt,
+    transactionDate: newTransactionDate ?? original.transactionDate,
     createdAt: now,
     correctsTxId: original.id,
     clientTxId: clientTxId,

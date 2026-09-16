@@ -215,17 +215,10 @@ class _MemberCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Hiện tại ${Formatters.amount(financials.savingsOnHand)}',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  'Ngân hàng ${Formatters.amount(financials.savingsInBank)}',
-                  style: const TextStyle(
-                    fontSize: 10.5,
+                const Text(
+                  'Xem theo từng loại tài sản ở Cài đặt › Tiết kiệm',
+                  style: TextStyle(
+                    fontSize: 10,
                     color: AppColors.textMuted,
                   ),
                 ),

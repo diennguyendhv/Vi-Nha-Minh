@@ -4,14 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/entities/transaction.dart';
+import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/transaction_providers.dart';
 
-/// Màn "Chi tiết & đổi trạng thái" (`docs/design.html` màn 11) — quyết định
-/// đã chốt ở `docs/financial-core-v2.md` mục 21: chỉ cho sửa `amountMinor`
-/// và `statusId` tại chỗ. Hạng mục/người ghi cố định từ lúc tạo — nhập sai
-/// thì xoá giao dịch rồi ghi lại từ màn Thêm giao dịch.
+/// Màn "Chi tiết giao dịch" (`docs/design.html` màn 11) — sửa được toàn bộ:
+/// hạng mục (trong cùng loại Thu/Chi/Chuyển gốc), số tiền, ghi chú, người
+/// tiêu, ngày tháng, trạng thái. `amountMinor`/người tiêu ảnh hưởng balance
+/// nên tự động đi qua reversal ledger (mục 21) — các field còn lại update
+/// thẳng. Không đổi được LOẠI giao dịch (Thu/Chi/Chuyển) — nhập sai loại
+/// thì xoá rồi ghi lại từ màn Thêm giao dịch.
 class TransactionDetailScreen extends ConsumerStatefulWidget {
   const TransactionDetailScreen({super.key, required this.transactionId});
 
@@ -25,11 +31,18 @@ class TransactionDetailScreen extends ConsumerStatefulWidget {
 class _TransactionDetailScreenState
     extends ConsumerState<TransactionDetailScreen> {
   final _amountController = TextEditingController();
+  final _noteController = TextEditingController();
   bool _initialized = false;
+
+  late String _categoryId;
+  late DateTime _transactionDate;
+  String? _statusId;
+  FamilyMember? _member;
 
   @override
   void dispose() {
     _amountController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -40,19 +53,62 @@ class _TransactionDetailScreenState
     return null;
   }
 
-  Future<void> _saveAmount(Transaction current) async {
-    final newAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
-    if (newAmount == null || newAmount <= 0) return;
-    if (newAmount == current.amountMinor) return;
-    await ref
-        .read(transactionRepositoryProvider)
-        .correctTransactionAmount(current.id, newAmount);
+  /// Chỉ khác null khi giao dịch có đúng 1 "người tiêu" rõ ràng có thể sửa
+  /// — INCOME (người nhận) hoặc EXPENSE nguồn ví (người chi). TRANSFER và
+  /// EXPENSE nguồn Quỹ không có field này để sửa.
+  FamilyMember? _currentMember(Transaction t) {
+    final refId = t.type == TransactionType.income
+        ? t.destinationRefId
+        : (t.type == TransactionType.expense && t.sourceKind == PoolKind.memberAvailable
+              ? t.sourceRefId
+              : null);
+    if (refId == null) return null;
+    for (final m in FamilyMember.values) {
+      if (m.name == refId) return m;
+    }
+    return null;
   }
 
-  Future<void> _changeStatus(Transaction current, String statusId) async {
-    await ref
-        .read(transactionRepositoryProvider)
-        .updateTransactionStatus(current.id, statusId);
+  void _initFrom(Transaction t) {
+    _amountController.text = t.amountMinor.toString();
+    _noteController.text = t.note;
+    _categoryId = t.categoryId;
+    _transactionDate = t.transactionDate;
+    _statusId = t.statusId;
+    _member = _currentMember(t);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _transactionDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) setState(() => _transactionDate = picked);
+  }
+
+  Future<void> _save(Transaction current) async {
+    final newAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
+    if (newAmount == null || newAmount <= 0) return;
+    try {
+      await ref.read(transactionRepositoryProvider).updateTransaction(
+        current.id,
+        amountMinor: newAmount,
+        categoryId: _categoryId,
+        note: _noteController.text.trim(),
+        memberRefId: _member?.name,
+        transactionDate: _transactionDate,
+        statusId: _statusId,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } on InsufficientBalanceException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Số dư không đủ để lưu thay đổi này.')),
+        );
+      }
+    }
   }
 
   Future<void> _delete(Transaction current) async {
@@ -95,15 +151,20 @@ class _TransactionDetailScreenState
       );
     }
 
-    Category? category;
-    for (final c in categories) {
-      if (c.id == transaction.categoryId) category = c;
-    }
-
     if (!_initialized) {
-      _amountController.text = transaction.amountMinor.toString();
+      _initFrom(transaction);
       _initialized = true;
     }
+
+    Category? selectedCategory;
+    for (final c in categories) {
+      if (c.id == _categoryId) selectedCategory = c;
+    }
+    final sameTypeCategories = categories
+        .where((c) => c.type == transaction.type && (c.isActive || c.id == _categoryId))
+        .toList();
+    final canEditCategory = transaction.type != TransactionType.transfer;
+    final canEditMember = _currentMember(transaction) != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -112,7 +173,33 @@ class _TransactionDetailScreenState
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          _ReadOnlyRow(label: 'Hạng mục (không sửa được)', value: category?.name ?? '—'),
+          const Text(
+            'HẠNG MỤC',
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 8),
+          if (canEditCategory)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: sameTypeCategories
+                  .map(
+                    (c) => ChoiceChip(
+                      label: Text(c.name),
+                      selected: c.id == _categoryId,
+                      onSelected: (_) => setState(() {
+                        _categoryId = c.id;
+                        // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ.
+                        if (!c.hasStatus || c.statuses.every((s) => s.id != _statusId)) {
+                          _statusId = c.hasStatus ? c.statuses.first.id : null;
+                        }
+                      }),
+                    ),
+                  )
+                  .toList(),
+            )
+          else
+            _ReadOnlyRow(label: 'Danh mục hệ thống, không sửa được', value: selectedCategory?.name ?? '—'),
           const SizedBox(height: 16),
           const Text(
             'SỐ TIỀN',
@@ -126,24 +213,61 @@ class _TransactionDetailScreenState
             decoration: const InputDecoration(border: OutlineInputBorder(), suffixText: 'đ'),
           ),
           const SizedBox(height: 16),
-          _ReadOnlyRow(label: 'Ghi chú', value: transaction.note.isEmpty ? '—' : transaction.note),
-          if (category != null && category.hasStatus) ...[
+          const Text(
+            'GHI CHÚ',
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _noteController,
+            decoration: const InputDecoration(border: OutlineInputBorder()),
+          ),
+          if (canEditMember) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'NGƯỜI TIÊU',
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<FamilyMember>(
+              segments: FamilyMember.values
+                  .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+                  .toList(),
+              selected: {_member ?? FamilyMember.vo},
+              onSelectionChanged: (s) => setState(() => _member = s.first),
+            ),
+          ],
+          const SizedBox(height: 16),
+          const Text(
+            'NGÀY',
+            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 6),
+          OutlinedButton.icon(
+            onPressed: _pickDate,
+            icon: const Icon(Icons.calendar_today_rounded, size: 16),
+            label: Text(
+              '${_transactionDate.day.toString().padLeft(2, '0')}/'
+              '${_transactionDate.month.toString().padLeft(2, '0')}/${_transactionDate.year}',
+            ),
+          ),
+          if (selectedCategory != null && selectedCategory.hasStatus) ...[
             const SizedBox(height: 20),
             const Text(
-              'TRẠNG THÁI (bấm để đổi)',
+              'TRẠNG THÁI',
               style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: category.statuses.map((s) {
-                final selected = s.id == transaction.statusId ||
-                    (transaction.statusId == null && s.id == category!.statuses.first.id);
+              children: selectedCategory.statuses.map((s) {
+                final selected = s.id == _statusId ||
+                    (_statusId == null && s.id == selectedCategory!.statuses.first.id);
                 return ChoiceChip(
                   label: Text(s.name),
                   selected: selected,
-                  onSelected: (_) => _changeStatus(transaction, s.id),
+                  onSelected: (_) => setState(() => _statusId = s.id),
                 );
               }).toList(),
             ),
@@ -158,7 +282,7 @@ class _TransactionDetailScreenState
           ],
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () => _saveAmount(transaction),
+            onPressed: () => _save(transaction),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,

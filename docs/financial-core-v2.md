@@ -189,20 +189,24 @@ Test 8 — Spend without Fund 500k: Member 3 → 2.5, Fund 2 → 2 (KHÔNG ĐỔ
 
 ---
 
-## 9. Savings Model
+## 9. Savings Model — cập nhật: loại tài sản tự do, không còn cố định cash/bank
+
+**Đã tổng quát hoá so với bản đầu** (từng cố định đúng 2 pool `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) — thực tế gia đình có thể "tiết kiệm" dưới nhiều hình thức khác nhau: tiền mặt, gửi ngân hàng, mua chứng khoán, mua bất động sản... Không hardcode danh sách hình thức, đúng nguyên tắc "dữ liệu, không phải hằng số cứng" đã áp dụng cho Category/Fund.
 
 ```
-MEMBER_BALANCE
-  uid PK, availableBalance, savingsCash, savingsBank   (đổi tên cho rõ nghĩa so với V1)
+SAVINGS_ASSET_TYPE
+  assetTypeId PK, familyId FK, name, color, isActive (soft delete)
 ```
 
-Tiết kiệm **không còn là Category kiểu Chi** (sửa F-02). Toàn bộ thao tác tiết kiệm là `TRANSFER`, gắn 1 category riêng **"Tiết kiệm"** (`type = TRANSFER`, seed mặc định, dùng chung cho cả 3 `transferKind` bên dưới — phân biệt bằng `transferKind`, không cần 3 category riêng):
+`SAVINGS_ASSET_TYPE` là dữ liệu gia đình tự tạo — y hệt `FUND` về hình dạng (chỉ id/tên/màu/isActive, không cache balance), khác `FUND` ở chỗ **mỗi loại tài sản là 1 pool RIÊNG cho TỪNG thành viên** (Fund thì dùng chung cả nhà). Pool kind mới `PoolKind.memberSavingsAsset` với `refId` là khoá ghép `"${assetTypeId}|${memberName}"` (hàm `savingsAssetRefId`/`parseSavingsAssetRefId`) — thay hẳn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK` của bản đầu. 2 loại seed mặc định "Tiền mặt"/"Ngân hàng" vẫn được tạo sẵn (giữ đúng trải nghiệm cũ), nhưng giờ chỉ là 2 hàng dữ liệu bình thường — xoá/thêm/sửa qua UI như bất kỳ loại nào khác, xoá được khi mọi thành viên đều về 0 ở loại đó (giống quy tắc Fund mục 8).
 
-- **Nạp tiết kiệm:** `MEMBER_AVAILABLE -X` → `MEMBER_SAVINGS_CASH +X`.
-- **Rút tiết kiệm về ví:** `MEMBER_SAVINGS_CASH -X` → `MEMBER_AVAILABLE +X`.
-- **Gửi ngân hàng:** `MEMBER_SAVINGS_CASH -X` → `MEMBER_SAVINGS_BANK +X`.
+Toàn bộ thao tác tiết kiệm vẫn là `TRANSFER`, gắn 1 category riêng **"Tiết kiệm"** (`type = TRANSFER`, seed mặc định, dùng chung cho cả 3 `transferKind` bên dưới — phân biệt bằng `transferKind`, không cần 1 category riêng cho từng loại tài sản):
 
-Cả 3 đều KHÔNG đổi Total Assets, đúng ví dụ mục 5/8/9 trong yêu cầu. Không có màn nhập riêng cho tiết kiệm — cả 3 hành động đều mở lại chính màn Thêm giao dịch (`docs/design.html` màn 09, loại "Chuyển" → "Tiết kiệm"), tránh 2 luồng code trùng nhau cho cùng 1 việc (đã gộp lại sau khi phát hiện trùng UI với màn 09).
+- **Nạp:** `MEMBER_AVAILABLE(X) -tiền` → `memberSavingsAsset(loại Y, X) +tiền` — `transferKind = SAVINGS_TOPUP`.
+- **Rút về ví:** `memberSavingsAsset(loại Y, X) -tiền` → `MEMBER_AVAILABLE(X) +tiền` — `transferKind = SAVINGS_WITHDRAW`.
+- **Chuyển đổi loại tài sản** (vd Tiền mặt → Ngân hàng, hoặc Ngân hàng → Chứng khoán): `memberSavingsAsset(loại Y, X) -tiền` → `memberSavingsAsset(loại Z, X) +tiền` — `transferKind = SAVINGS_CONVERT` (thay `SAVINGS_TO_BANK` cố định của bản đầu — giờ chuyển được giữa BẤT KỲ 2 loại nào, không riêng "sang ngân hàng").
+
+Cả 3 đều KHÔNG đổi Total Assets (tiền chỉ đổi pool, không rời hệ thống). Không có màn nhập riêng cho tiết kiệm — cả 3 hành động đều mở lại chính màn Thêm giao dịch (`docs/design.html` màn 09, loại "Chuyển" → "Tiết kiệm", thêm bước chọn loại tài sản), tránh 2 luồng code trùng nhau cho cùng 1 việc. Màn "Tiết kiệm" riêng (Cài đặt → Tiết kiệm) chỉ để xem số dư từng loại theo từng thành viên + tạo/xoá loại tài sản, không nhập giao dịch trực tiếp — giống hệt nguyên tắc màn Quỹ.
 
 ---
 
@@ -319,7 +323,8 @@ Total Assets (cuối kỳ) = Total Assets (đầu kỳ) + Total Income − Total
                           // Transfer không xuất hiện trong công thức này — tự cân bằng nội bộ
 
 Available Money        = Σ MEMBER_AVAILABLE mọi thành viên
-Savings Assets          = Σ (MEMBER_SAVINGS_CASH + MEMBER_SAVINGS_BANK)
+Savings Assets          = Σ memberSavingsAsset mọi loại, mọi thành viên (mục 9 — không còn
+                          cố định cash+bank, cộng dồn BẤT KỲ loại tài sản nào đã tạo)
 Fund Assets             = Σ FUND.balance
 
 Tỷ lệ tiết kiệm tháng   = (Total Income − Total External Expense) / Total Income
@@ -334,9 +339,22 @@ Thu nhập ròng (1 danh mục Thu có linkedExpenseCategoryId, theo kỳ)
                           // status chỉ là nhãn tiến độ, không phải mốc "tiền đã thật sự rời đi"
                           // Chỉ số hiển thị (report-only) — KHÔNG thay Total Income/Total
                           // External Expense/Total Assets ở trên, không cộng dồn liên tháng
+                          // Truyền `month` để xem theo từng tháng (vd "doanh thu hàng
+                          // tháng"), bỏ trống để tính suốt lịch sử.
+
+Tổng "tiền ra" của 1 thành viên theo hạng mục (`computeMemberOutflowBreakdown`, theo kỳ)
+                        = gộp mọi EXPENSE và TRANSFER mà thành viên đó là nguồn
+                          (sourceKind=MEMBER_AVAILABLE, sourceRefId=thành viên),
+                          nhóm theo categoryId — 1 bảng duy nhất cho Đầu tư/Tự
+                          thưởng/CĐ/DH/Tiết kiệm/Nạp quỹ/Chuyển tiền cho thành
+                          viên khác, đúng cách sheet gốc liệt kê chung. Không gộp
+                          INCOME — dùng riêng `computeMemberIncomeTotal` (Σ INCOME
+                          có destinationRefId = thành viên đó).
 ```
 
 `MONTH_SUMMARY` lưu 3 số `totalIncome / totalExpense / totalTransfer` (thay cho `totalIncome/totalSpending/totalSaving` của V1), cộng `categoryTotals` (mọi type) và `statusTotals` (theo statusId).
+
+**Số dư còn lại (`availableBalance`) là 1 chuỗi liên tục, không có khái niệm "số dư ban đầu của tháng" lưu riêng.** Công thức tương đương tính tay hàng tháng ("số dư ban đầu + doanh thu − chi phí vận hành − chi tiêu − tiết kiệm = số dư hiện tại") **đúng tự động** nhờ cách balance luôn = tổng cộng dồn mọi transaction từ đầu tới nay (Invariant 10) — không cần field `openingBalance` riêng cho mỗi tháng, vì "số dư cuối tháng trước" chính là điểm mà tổng cộng dồn đang dừng ở đó, tự động trở thành điểm bắt đầu của tháng sau khi cộng thêm giao dịch mới. Đây là lý do tách biệt `availableBalance` (không reset) khỏi `MONTH_SUMMARY.totalIncome/totalExpense` (reset mỗi tháng, chỉ để báo cáo).
 
 ---
 
@@ -383,12 +401,12 @@ Thu nhập ròng (1 danh mục Thu có linkedExpenseCategoryId, theo kỳ)
 - **Xoá dữ liệu tham chiếu** (Category, Status, Fund khi `balance=0`, Member) = soft-delete (`isActive=false`) **và không đổi bất kỳ số dư nào**, vì đây chỉ là nhãn/thực thể, không phải bản thân 1 chuyển động tiền.
 - **Xoá 1 giao dịch** = **CÓ đổi số dư thật** — đúng mục đích của việc xoá là hoàn tác chính xác hiệu ứng tiền của giao dịch đó (`reverseTransaction`, mục dưới). "Xoá mềm" ở đây chỉ có nghĩa **không xoá mất bản ghi/lịch sử**, không có nghĩa "không đổi số dư". Balance luôn = tổng tất cả giao dịch còn hiệu lực (`reversedByTxId IS NULL`) tính từ đầu tới nay (Invariant 10) — nên xoá 1 giao dịch ở bất kỳ vị trí nào trong chuỗi lịch sử (kể cả giao dịch từ nhiều tháng trước) đều tự động tính lại đúng số dư hiện tại, không cần biết nó nằm ở đâu trong chuỗi.
 
-**Quyết định phạm vi UI (đã chốt, thu hẹp so với bản đầu):** màn "Chi tiết giao dịch" chỉ cho sửa **`amountMinor`** và **`statusId`** tại chỗ. `categoryId`, `type`, `transferKind`, `sourceKind/RefId`, `destinationKind/RefId` — tức "loại giao dịch" và "ai/ở đâu" — **không sửa được qua UI này**. Nhập sai hạng mục hoặc sai người thì **xoá giao dịch rồi ghi lại từ đầu** qua màn Thêm giao dịch, thay vì "sửa" nó thành 1 loại khác. Lý do: đổi category có thể kéo theo đổi cả `type`/`source`/`destination` (vd từ Expense sang Transfer) — Financial Engine xử lý được (mục 19, Test 11) nhưng phức tạp hơn hẳn so với chỉ đổi 1 con số, và không cần thiết cho MVP. Domain layer (`updateTransaction`) vẫn có thể giữ khả năng tổng quát đổi mọi field (không đóng cửa hoàn toàn), chỉ riêng UI hiện tại không expose ra ngoài.
+**Quyết định phạm vi UI — cập nhật, mở lại so với bản thu hẹp trước đó:** màn "Chi tiết giao dịch" cho sửa **toàn bộ**: `categoryId` (chỉ chọn trong cùng `type` Thu/Chi/Chuyển của giao dịch gốc — không đổi `type`), `amountMinor`, `note`, "người tiêu" (`sourceRefId` khi EXPENSE nguồn ví, hoặc `destinationRefId` khi INCOME), `transactionDate`, `statusId`. Vẫn **không sửa được `type`/`transferKind`/`sourceKind`/`destinationKind`** (vd không đổi từ Expense sang Transfer, không đổi nguồn từ Ví sang Quỹ) và với `TRANSFER` thì không sửa được category/người tiêu (2 phía cùng lúc, mơ hồ) — nhập sai loại giao dịch hoặc sai loại chuyển thì vẫn phải **xoá và ghi lại** qua màn Thêm giao dịch. `amountMinor` và "người tiêu" là 2 field ẢNH HƯỞNG BALANCE nên đổi 1 trong 2 sẽ tự động đi qua reversal ledger; `categoryId`/`note`/`transactionDate`/`statusId` không ảnh hưởng balance nên update thẳng, không tạo bản ghi mới — `TransactionRepository.updateTransaction` tự quyết định nhánh nào theo field nào thực sự đổi.
 
 - **`reverseTransaction(txId)`** — Cloud Function tạo 1 transaction mới: `sourceKind`/`sourceRefId` và `destinationKind`/`destinationRefId` **đảo ngược** so với bản gốc, cùng `amountMinor`, `reversalOfTxId = txId`; đồng thời set `reversedByTxId` lên bản gốc. Bản gốc **không bị xoá**, vẫn nằm trong DB với nhãn "đã hoàn tác". `applyEffect` của bản reversal tự động triệt tiêu đúng hiệu ứng cũ vì source/destination đảo chiều.
 - **`deleteTransaction(txId)`** (người dùng bấm "Xoá giao dịch") = gọi `reverseTransaction(txId)`. Không có xoá thật ở tầng dữ liệu.
-- **`updateTransaction(txId, newFields)`** (sửa số tiền/loại giao dịch/nguồn-đích) = `reverseTransaction(txId)` **rồi** `createTransaction(newFields, correctsTxId: txId)`. 1 lần sửa tạo ra 3 bản ghi (gốc, hoàn tác, thay thế); UI chỉ hiện bản mới nhất theo mặc định (lọc `reversedByTxId IS NULL`), có thể bấm xem lịch sử sửa để thấy cả chuỗi.
-- **Field không ảnh hưởng balance** (`note`, `categoryId` khi `type` giữ nguyên, `statusId`) được sửa trực tiếp, không cần qua reversal.
+- **`updateTransaction(txId, newFields)`** — nếu `amountMinor`/người tiêu đổi: = `reverseTransaction(txId)` **rồi** `createTransaction(newFields, correctsTxId: txId)`, mang theo luôn mọi field khác cũng đổi cùng lúc (category/note/ngày/status). 1 lần sửa kiểu này tạo ra 3 bản ghi (gốc, hoàn tác, thay thế); UI chỉ hiện bản mới nhất theo mặc định (lọc `reversedByTxId IS NULL`), có thể bấm xem lịch sử sửa để thấy cả chuỗi.
+- **Field không ảnh hưởng balance** (`note`, `categoryId` khi `type` giữ nguyên, `transactionDate`, `statusId`) được sửa trực tiếp, không cần qua reversal, khi đó không có field nào ảnh hưởng balance đổi.
 
 Đây là lựa chọn có chi phí cao hơn phương án soft-delete đơn giản (nhiều bản ghi hơn, mọi nơi hiển thị danh sách/rollup phải lọc `reversedByTxId IS NULL`) — đổi lại: không ai "sửa mất" lịch sử, đúng tinh thần app tài chính thật, và sẵn sàng cho multi-device/multi-user ở Giai đoạn B mà không phải thiết kế lại lần nữa.
 

@@ -9,6 +9,7 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/pool_kind.dart';
+import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/entities/transfer_kind.dart';
@@ -16,6 +17,7 @@ import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 
 /// Màn "Thêm giao dịch" (`docs/design.html` màn 09) — nơi tạo giao dịch DUY
@@ -29,6 +31,8 @@ Future<void> showAddTransactionSheet(
   TransferSubKind? initialTransferSubKind,
   String? initialFundId,
   SavingsAction? initialSavingsAction,
+  String? initialSavingsAssetTypeId,
+  FamilyMember? initialMember,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -39,15 +43,26 @@ Future<void> showAddTransactionSheet(
       initialTransferSubKind: initialTransferSubKind,
       initialFundId: initialFundId,
       initialSavingsAction: initialSavingsAction,
+      initialSavingsAssetTypeId: initialSavingsAssetTypeId,
+      initialMember: initialMember,
     ),
   );
+}
+
+String _dateLabel(DateTime date) {
+  final now = DateTime.now();
+  final isToday =
+      date.year == now.year && date.month == now.month && date.day == now.day;
+  final text = '${date.day.toString().padLeft(2, '0')}/'
+      '${date.month.toString().padLeft(2, '0')}/${date.year}';
+  return isToday ? 'Hôm nay · $text' : text;
 }
 
 enum EntryType { thu, chi, chuyen }
 
 enum TransferSubKind { member, fund, savings }
 
-enum SavingsAction { topup, withdraw, toBank }
+enum SavingsAction { topup, withdraw, convert }
 
 class AddTransactionSheet extends ConsumerStatefulWidget {
   const AddTransactionSheet({
@@ -56,12 +71,16 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
     this.initialTransferSubKind,
     this.initialFundId,
     this.initialSavingsAction,
+    this.initialSavingsAssetTypeId,
+    this.initialMember,
   });
 
   final EntryType initialType;
   final TransferSubKind? initialTransferSubKind;
   final String? initialFundId;
   final SavingsAction? initialSavingsAction;
+  final String? initialSavingsAssetTypeId;
+  final FamilyMember? initialMember;
 
   @override
   ConsumerState<AddTransactionSheet> createState() =>
@@ -71,7 +90,7 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   late EntryType _entryType = widget.initialType;
   String? _categoryId;
-  FamilyMember _member = FamilyMember.vo;
+  late FamilyMember _member = widget.initialMember ?? FamilyMember.vo;
   String? _statusId;
   late String? _sourceFundId =
       widget.initialTransferSubKind == null ? widget.initialFundId : null;
@@ -86,12 +105,25 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       : null;
   late SavingsAction _savingsAction =
       widget.initialSavingsAction ?? SavingsAction.topup;
+  late String? _savingsAssetTypeId = widget.initialSavingsAssetTypeId;
+  String? _savingsTargetAssetTypeId;
 
   String _amountDigits = '';
   String _note = '';
+  DateTime _transactionDate = DateTime.now();
 
   int get _amount =>
       int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _transactionDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) setState(() => _transactionDate = picked);
+  }
 
   void _pressKey(String key) {
     setState(() {
@@ -157,7 +189,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           amountMinor: _amount,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
-          transactionDate: now,
+          transactionDate: _transactionDate,
           createdAt: now,
           clientTxId: clientTxId,
         );
@@ -176,7 +208,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           amountMinor: _amount,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
-          transactionDate: now,
+          transactionDate: _transactionDate,
           createdAt: now,
           clientTxId: clientTxId,
         );
@@ -196,7 +228,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               destinationRefId: _transferTo.name,
               amountMinor: _amount,
               note: _note,
-              transactionDate: now,
+              transactionDate: _transactionDate,
               createdAt: now,
               clientTxId: clientTxId,
             );
@@ -214,48 +246,66 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               destinationRefId: fundId,
               amountMinor: _amount,
               note: _note,
-              transactionDate: now,
+              transactionDate: _transactionDate,
               createdAt: now,
               clientTxId: clientTxId,
             );
           case TransferSubKind.savings:
             final member = _member;
-            final (
-              PoolKind sourceKind,
-              PoolKind destinationKind,
-              TransferKind transferKind,
-            ) = switch (_savingsAction) {
-              SavingsAction.topup => (
-                PoolKind.memberAvailable,
-                PoolKind.memberSavingsCash,
-                TransferKind.savingsTopup,
-              ),
-              SavingsAction.withdraw => (
-                PoolKind.memberSavingsCash,
-                PoolKind.memberAvailable,
-                TransferKind.savingsWithdraw,
-              ),
-              SavingsAction.toBank => (
-                PoolKind.memberSavingsCash,
-                PoolKind.memberSavingsBank,
-                TransferKind.savingsToBank,
-              ),
-            };
-            return Transaction(
-              id: id,
-              type: TransactionType.transfer,
-              transferKind: transferKind,
-              categoryId: DefaultCategories.tietKiem.id,
-              sourceKind: sourceKind,
-              sourceRefId: member.name,
-              destinationKind: destinationKind,
-              destinationRefId: member.name,
-              amountMinor: _amount,
-              note: _note,
-              transactionDate: now,
-              createdAt: now,
-              clientTxId: clientTxId,
-            );
+            final assetTypeId = _savingsAssetTypeId;
+            if (assetTypeId == null) return null;
+            switch (_savingsAction) {
+              case SavingsAction.topup:
+                return Transaction(
+                  id: id,
+                  type: TransactionType.transfer,
+                  transferKind: TransferKind.savingsTopup,
+                  categoryId: DefaultCategories.tietKiem.id,
+                  sourceKind: PoolKind.memberAvailable,
+                  sourceRefId: member.name,
+                  destinationKind: PoolKind.memberSavingsAsset,
+                  destinationRefId: savingsAssetRefId(assetTypeId, member),
+                  amountMinor: _amount,
+                  note: _note,
+                  transactionDate: _transactionDate,
+                  createdAt: now,
+                  clientTxId: clientTxId,
+                );
+              case SavingsAction.withdraw:
+                return Transaction(
+                  id: id,
+                  type: TransactionType.transfer,
+                  transferKind: TransferKind.savingsWithdraw,
+                  categoryId: DefaultCategories.tietKiem.id,
+                  sourceKind: PoolKind.memberSavingsAsset,
+                  sourceRefId: savingsAssetRefId(assetTypeId, member),
+                  destinationKind: PoolKind.memberAvailable,
+                  destinationRefId: member.name,
+                  amountMinor: _amount,
+                  note: _note,
+                  transactionDate: _transactionDate,
+                  createdAt: now,
+                  clientTxId: clientTxId,
+                );
+              case SavingsAction.convert:
+                final targetId = _savingsTargetAssetTypeId;
+                if (targetId == null || targetId == assetTypeId) return null;
+                return Transaction(
+                  id: id,
+                  type: TransactionType.transfer,
+                  transferKind: TransferKind.savingsConvert,
+                  categoryId: DefaultCategories.tietKiem.id,
+                  sourceKind: PoolKind.memberSavingsAsset,
+                  sourceRefId: savingsAssetRefId(assetTypeId, member),
+                  destinationKind: PoolKind.memberSavingsAsset,
+                  destinationRefId: savingsAssetRefId(targetId, member),
+                  amountMinor: _amount,
+                  note: _note,
+                  transactionDate: _transactionDate,
+                  createdAt: now,
+                  clientTxId: clientTxId,
+                );
+            }
         }
     }
   }
@@ -265,6 +315,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
     final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final assetTypes = ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
 
     final activeCategories = categories.where((c) => c.isActive).toList();
     final incomeCategories = activeCategories
@@ -274,6 +325,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         .where((c) => c.type == TransactionType.expense)
         .toList();
     final activeFunds = funds.where((f) => f.isActive).toList();
+    final activeAssetTypes = assetTypes.where((a) => a.isActive).toList();
 
     final canSave = _buildTransaction(categories) != null;
 
@@ -342,12 +394,21 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 4),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: _pickDate,
+                        icon: const Icon(Icons.calendar_today_rounded, size: 14),
+                        label: Text(_dateLabel(_transactionDate)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     ..._buildPanel(
                       incomeCategories: incomeCategories,
                       expenseCategories: expenseCategories,
                       funds: activeFunds,
                       transactions: transactions,
+                      assetTypes: activeAssetTypes,
                     ),
                     const SizedBox(height: 16),
                     const _SectionLabel('Ghi chú'),
@@ -403,6 +464,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     required List<Category> expenseCategories,
     required List<Fund> funds,
     required List<Transaction> transactions,
+    required List<SavingsAssetType> assetTypes,
   }) {
     switch (_entryType) {
       case EntryType.thu:
@@ -486,7 +548,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             onChanged: (v) => setState(() => _transferSubKind = v),
           ),
           const SizedBox(height: 16),
-          ..._buildTransferSubPanel(funds: funds, transactions: transactions),
+          ..._buildTransferSubPanel(
+            funds: funds,
+            transactions: transactions,
+            assetTypes: assetTypes,
+          ),
         ];
     }
   }
@@ -494,6 +560,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   List<Widget> _buildTransferSubPanel({
     required List<Fund> funds,
     required List<Transaction> transactions,
+    required List<SavingsAssetType> assetTypes,
   }) {
     switch (_transferSubKind) {
       case TransferSubKind.member:
@@ -547,6 +614,29 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             value: _savingsAction,
             onChanged: (v) => setState(() => _savingsAction = v),
           ),
+          const SizedBox(height: 12),
+          _SectionLabel(
+            _savingsAction == SavingsAction.convert ? 'Từ loại tài sản' : 'Loại tài sản',
+          ),
+          const SizedBox(height: 8),
+          _AssetTypeChipGrid(
+            assetTypes: assetTypes,
+            selectedId: _savingsAssetTypeId,
+            onTap: (id) => setState(() {
+              _savingsAssetTypeId = id;
+              if (_savingsTargetAssetTypeId == id) _savingsTargetAssetTypeId = null;
+            }),
+          ),
+          if (_savingsAction == SavingsAction.convert) ...[
+            const SizedBox(height: 12),
+            const _SectionLabel('Sang loại tài sản'),
+            const SizedBox(height: 8),
+            _AssetTypeChipGrid(
+              assetTypes: assetTypes.where((a) => a.id != _savingsAssetTypeId).toList(),
+              selectedId: _savingsTargetAssetTypeId,
+              onTap: (id) => setState(() => _savingsTargetAssetTypeId = id),
+            ),
+          ],
         ];
     }
   }
@@ -626,7 +716,7 @@ class _SavingsActionSegmented extends StatelessWidget {
   static const _labels = {
     SavingsAction.topup: 'Nạp',
     SavingsAction.withdraw: 'Rút về ví',
-    SavingsAction.toBank: 'Gửi NH',
+    SavingsAction.convert: 'Chuyển đổi',
   };
 
   @override
@@ -738,6 +828,42 @@ class _CategoryChipGrid extends StatelessWidget {
               category: c,
               selected: c.id == selectedId,
               onTap: () => onTap(c),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _AssetTypeChipGrid extends StatelessWidget {
+  const _AssetTypeChipGrid({
+    required this.assetTypes,
+    required this.selectedId,
+    required this.onTap,
+  });
+
+  final List<SavingsAssetType> assetTypes;
+  final String? selectedId;
+  final ValueChanged<String> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (assetTypes.isEmpty) {
+      return const Text(
+        'Chưa có loại tài sản nào — tạo ở màn Tiết kiệm trước.',
+        style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+      );
+    }
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: assetTypes
+          .map(
+            (a) => _ChoiceChip(
+              label: a.name,
+              selected: a.id == selectedId,
+              accent: a.color,
+              onTap: () => onTap(a.id),
             ),
           )
           .toList(),
