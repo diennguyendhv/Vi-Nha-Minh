@@ -114,6 +114,8 @@ families/{familyId}/budgets/{yearMonth}
 
 `memberBalances`/`funds/{id}.balance` là số liệu dẫn xuất (derived) — tính lại từ toàn bộ `transactions` chưa bị `reversedByTxId`; cache bằng Cloud Function cập nhật mỗi khi có giao dịch mới, phải luôn rebuild lại được 100% từ `transactions` gốc (tham khảo số dòng thật trong sheet: hơn 1700 dòng chỉ riêng 8 tháng đầu năm).
 
+**`availableBalance` không reset theo tháng — là số cộng dồn từ ngày đầu dùng app tới nay.** Đây chính là "số tiền còn lại an toàn để chi tiêu" hiển thị nổi bật ở Trang chủ và Tổng hợp: tháng này còn dư bao nhiêu thì tháng sau cộng tiếp vào, không bắt đầu lại từ 0 — khác hẳn `totalIncome`/`totalExpense` ở `months/{yearMonth}` (2 số đó MỚI reset theo từng tháng, chỉ để xem phát sinh trong tháng).
+
 **Công thức tài chính (3 tổng tách biệt — thay hẳn công thức "Tổng thu = Tổng chi + Tiết kiệm" ở bản nháp đầu, vốn tự mâu thuẫn vì gộp cả Transfer vào Chi):**
 
 ```

@@ -1220,20 +1220,22 @@ erDiagram
           <div class="phone-notch"></div>
           <div class="phone-head">Tổng hợp <span class="sub">Th 9</span></div>
           <div class="phone-body">
+            <div class="segmented" id="summaryMemberSeg">
+              <button class="active" data-m="vo">Vợ</button>
+              <button data-m="chong">Chồng</button>
+            </div>
+            <div class="fund-balance" style="background:linear-gradient(135deg,var(--jade),var(--jade-deep))">
+              <div class="lbl">Số dư còn lại <span style="opacity:.85">· an toàn để chi tiêu</span></div>
+              <div class="val" id="summaryBalanceVal">4.850.000 đ</div>
+              <div style="font-size:.6rem;opacity:.85;margin-top:4px">Cộng dồn từ tháng này qua tháng khác, không reset — khớp đúng số ở Trang chủ</div>
+            </div>
             <div class="donut-wrap">
-              <div class="donut" style="background:conic-gradient(var(--ink-soft) 0% 44%, var(--slate) 44% 64%, var(--amber) 64% 80%, var(--amber-dark) 80% 92%, var(--rust) 92% 100%)">
-                <div class="donut-label"><b>39%</b><span>tiết kiệm</span></div>
+              <div class="donut" id="summaryDonut">
+                <div class="donut-label"><b id="summaryExpenseVal">5.000.000</b><span>tổng chi th.9</span></div>
               </div>
             </div>
-            <div class="legend-list">
-              <div class="legend-row"><span class="dot" style="background:var(--ink-soft)"></span><span class="lbl">Sinh hoạt</span><span class="pct">44%</span></div>
-              <div class="legend-row"><span class="dot" style="background:var(--slate)"></span><span class="lbl">Đầu tư</span><span class="pct">20%</span></div>
-              <div class="legend-row"><span class="dot" style="background:var(--amber)"></span><span class="lbl">Cho đi</span><span class="pct">16%</span></div>
-              <div class="legend-row"><span class="dot" style="background:var(--amber-dark)"></span><span class="lbl">Dâng hiến</span><span class="pct">12%</span></div>
-              <div class="legend-row"><span class="dot" style="background:var(--rust)"></span><span class="lbl">Tự thưởng</span><span class="pct">8%</span></div>
-            </div>
-            <div class="stat-strip" style="background:var(--paper-sunken)"><span>Tổng chi <span class="hint">(EXPENSE, không tính Tiết kiệm)</span></span><span class="v" style="color:var(--ink)">9.600.000 đ</span></div>
-            <div class="stat-strip"><span>Tiết kiệm tháng này <span class="hint">(Chuyển, xem màn 16)</span></span><span class="v">1.400.000 đ</span></div>
+            <div class="legend-list" id="summaryLegend"></div>
+            <div class="stat-strip"><span>Tiết kiệm tháng này <span class="hint">(Chuyển, xem màn 16)</span></span><span class="v" id="summarySavingsVal">1.000.000 đ</span></div>
             <p style="font-size:.66rem;color:var(--ink-soft)">Trạng thái Cho đi/Dâng hiến không hiện ở đây nữa — xem riêng ở màn "Trạng thái" (13), vì đây là thói quen riêng của gia đình này, không phải mọi gia đình dùng app đều cần.</p>
             <div class="bottom-nav">
               <div class="tab"><span class="ic"></span>Trang chủ</div>
@@ -1244,7 +1246,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">12 · TỔNG HỢP</div><p>Chỉ còn biểu đồ theo hạng mục Chi + 2 dòng tổng — phần này gia đình nào cũng có. Trạng thái theo dõi (Cho đi/Dâng hiến) chuyển hẳn sang màn 13, vì không phải gia đình nào dùng app sau này cũng cần.</p></div>
+        <div class="screen-caption"><div class="tag">12 · TỔNG HỢP</div><p>Tách theo từng thành viên (tab Vợ/Chồng) thay vì gộp chung — mỗi người có Số dư còn lại riêng (<code>availableBalance</code>, cộng dồn nhiều tháng, y hệt số ở Trang chủ) và biểu đồ Chi riêng theo tháng đang xem. Trạng thái Cho đi/Dâng hiến chuyển sang màn 13.</p></div>
       </div>
 
       <div class="screen-col">
@@ -1969,6 +1971,8 @@ families/{familyId}/budgets/{yearMonth}
 
 `memberBalances`/`funds/{id}.balance` là số liệu dẫn xuất (derived) — tính lại từ toàn bộ `transactions` chưa bị `reversedByTxId`; cache bằng Cloud Function cập nhật mỗi khi có giao dịch mới, phải luôn rebuild lại được 100% từ `transactions` gốc (tham khảo số dòng thật trong sheet: hơn 1700 dòng chỉ riêng 8 tháng đầu năm).
 
+**`availableBalance` không reset theo tháng — là số cộng dồn từ ngày đầu dùng app tới nay.** Đây chính là "số tiền còn lại an toàn để chi tiêu" hiển thị nổi bật ở Trang chủ và Tổng hợp: tháng này còn dư bao nhiêu thì tháng sau cộng tiếp vào, không bắt đầu lại từ 0 — khác hẳn `totalIncome`/`totalExpense` ở `months/{yearMonth}` (2 số đó MỚI reset theo từng tháng, chỉ để xem phát sinh trong tháng).
+
 **Công thức tài chính (3 tổng tách biệt — thay hẳn công thức "Tổng thu = Tổng chi + Tiết kiệm" ở bản nháp đầu, vốn tự mâu thuẫn vì gộp cả Transfer vào Chi):**
 
 ```
@@ -2437,6 +2441,63 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
     deleteFundBtn.addEventListener('click', function(){
       if(deleteFundWarn) deleteFundWarn.hidden = !deleteFundWarn.hidden;
     });
+  }
+
+  var summaryMemberData = {
+    vo: {
+      balance: '4.850.000 đ', expense: '5.000.000', savings: '1.000.000 đ',
+      cats: [
+        { label: 'Sinh hoạt', pct: 60, color: 'var(--ink-soft)' },
+        { label: 'Cho đi', pct: 20, color: 'var(--amber)' },
+        { label: 'Dâng hiến', pct: 12, color: 'var(--amber-dark)' },
+        { label: 'Tự thưởng', pct: 8, color: 'var(--rust)' }
+      ]
+    },
+    chong: {
+      balance: '6.120.000 đ', expense: '4.000.000', savings: '400.000 đ',
+      cats: [
+        { label: 'Đầu tư', pct: 55, color: 'var(--slate)' },
+        { label: 'Sinh hoạt', pct: 20, color: 'var(--ink-soft)' },
+        { label: 'Dâng hiến', pct: 15, color: 'var(--amber-dark)' },
+        { label: 'Tự thưởng', pct: 10, color: 'var(--rust)' }
+      ]
+    }
+  };
+  var summaryMemberSeg = document.getElementById('summaryMemberSeg');
+  var summaryBalanceVal = document.getElementById('summaryBalanceVal');
+  var summaryExpenseVal = document.getElementById('summaryExpenseVal');
+  var summarySavingsVal = document.getElementById('summarySavingsVal');
+  var summaryDonut = document.getElementById('summaryDonut');
+  var summaryLegend = document.getElementById('summaryLegend');
+  function renderSummaryMember(key){
+    var d = summaryMemberData[key];
+    if(!d) return;
+    if(summaryBalanceVal) summaryBalanceVal.textContent = d.balance;
+    if(summaryExpenseVal) summaryExpenseVal.textContent = d.expense;
+    if(summarySavingsVal) summarySavingsVal.textContent = d.savings;
+    if(summaryLegend){
+      summaryLegend.innerHTML = d.cats.map(function(c){
+        return '<div class="legend-row"><span class="dot" style="background:'+c.color+'"></span><span class="lbl">'+c.label+'</span><span class="pct">'+c.pct+'%</span></div>';
+      }).join('');
+    }
+    if(summaryDonut){
+      var acc = 0, stops = [];
+      d.cats.forEach(function(c){
+        stops.push(c.color+' '+acc+'% '+(acc+c.pct)+'%');
+        acc += c.pct;
+      });
+      summaryDonut.style.background = 'conic-gradient(' + stops.join(', ') + ')';
+    }
+  }
+  if(summaryMemberSeg){
+    summaryMemberSeg.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        summaryMemberSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderSummaryMember(btn.dataset.m);
+      });
+    });
+    renderSummaryMember('vo');
   }
 
   var statusCategoryData = {
