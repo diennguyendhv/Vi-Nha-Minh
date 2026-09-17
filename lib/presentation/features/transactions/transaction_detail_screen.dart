@@ -34,6 +34,12 @@ class _TransactionDetailScreenState
   final _noteController = TextEditingController();
   bool _initialized = false;
 
+  /// Chặn double-tap Lưu/Xoá (Phase 7 mục 11) — 2 hành động dùng chung 1 cờ
+  /// vì loại trừ lẫn nhau trên cùng 1 giao dịch (không thể vừa sửa vừa xoá
+  /// cùng lúc). KHÔNG thay thế bảo vệ thật của Repository
+  /// (`AlreadyReversedException`/idempotency) — chỉ là UX guard.
+  bool _submitting = false;
+
   late String _categoryId;
   late DateTime _transactionDate;
   String? _statusId;
@@ -88,11 +94,21 @@ class _TransactionDetailScreenState
     if (picked != null) setState(() => _transactionDate = picked);
   }
 
+  /// Canonical mutation path (Phase 7 mục 2/3/4/5): UI chỉ cung cấp Ý ĐỊNH
+  /// (toàn bộ field hiện tại của form), `UpdateTransactionUseCase` →
+  /// `TransactionRepository` (frozen) tự quyết định field nào ảnh hưởng
+  /// balance (đi qua reversal ledger) hay update thẳng — KHÔNG phân biệt
+  /// "financial vs non-financial" ở đây, tránh lặp lại logic đã có sẵn ở
+  /// Repository (mục 4: "Do not duplicate logic... if Repository already
+  /// owns that distinction").
   Future<void> _save(Transaction current) async {
+    if (_submitting) return; // chặn double-tap.
     final newAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
     if (newAmount == null || newAmount <= 0) return;
+
+    setState(() => _submitting = true);
     try {
-      await ref.read(transactionRepositoryProvider).updateTransaction(
+      await ref.read(updateTransactionUseCaseProvider)(
         current.id,
         amountMinor: newAmount,
         categoryId: _categoryId,
@@ -102,15 +118,21 @@ class _TransactionDetailScreenState
         statusId: _statusId,
       );
       if (mounted) Navigator.of(context).pop();
-    } on InsufficientBalanceException {
+    } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Số dư không đủ để lưu thay đổi này.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
+  /// Reverse — Phase 7 mục 6: gọi thẳng `ReverseTransactionUseCase`, KHÔNG
+  /// tự build bản hoàn tác/tính hiệu ứng ngược nào ở Presentation. Không
+  /// xoá cứng — Repository (frozen) tạo bản reversal mới, đánh dấu
+  /// `reversedByTxId` lên bản gốc.
   Future<void> _delete(Transaction current) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -132,8 +154,49 @@ class _TransactionDetailScreenState
       ),
     );
     if (confirmed != true) return;
-    await ref.read(transactionRepositoryProvider).reverseTransaction(current.id);
-    if (mounted) Navigator.of(context).pop();
+    if (_submitting) return; // chặn double-tap.
+
+    setState(() => _submitting = true);
+    try {
+      await ref.read(reverseTransactionUseCaseProvider)(current.id);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  /// Ánh xạ typed exception (Domain/Repository/Application, đã frozen) sang
+  /// message tiếng Việt — Phase 7 mục 10. KHÔNG lộ SqliteException/message
+  /// SQLite/tên class/stack trace. Trùng lặp có chủ đích với
+  /// `add_transaction_sheet.dart._errorMessage` (không refactor màn Thêm
+  /// giao dịch đã frozen ở Phase 6 chỉ để dùng chung 1 hàm nhỏ).
+  String _errorMessage(Object error) {
+    if (error is TransactionNotFoundException) {
+      return 'Giao dịch không còn tồn tại — có thể đã bị xoá ở nơi khác.';
+    }
+    if (error is AlreadyReversedException) {
+      return 'Giao dịch này đã được xử lý rồi, vui lòng tải lại.';
+    }
+    if (error is InvalidAmountException) return 'Số tiền không hợp lệ.';
+    if (error is SameSourceDestinationException) {
+      return 'Nguồn và đích không được trùng nhau.';
+    }
+    if (error is InsufficientBalanceException) {
+      return 'Số dư không đủ để lưu thay đổi này.';
+    }
+    if (error is PersistenceConstraintException) {
+      return 'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.';
+    }
+    if (error is PersistenceException) {
+      return 'Có lỗi khi lưu dữ liệu, vui lòng thử lại.';
+    }
+    return 'Có lỗi xảy ra, vui lòng thử lại.';
   }
 
   @override
@@ -285,17 +348,17 @@ class _TransactionDetailScreenState
           ],
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: () => _save(transaction),
+            onPressed: _submitting ? null : () => _save(transaction),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            child: const Text('Lưu thay đổi'),
+            child: Text(_submitting ? 'Đang lưu...' : 'Lưu thay đổi'),
           ),
           const SizedBox(height: 10),
           OutlinedButton(
-            onPressed: () => _delete(transaction),
+            onPressed: _submitting ? null : () => _delete(transaction),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.expenseAmount,
               side: const BorderSide(color: AppColors.expenseAmount),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../application/commands/create_transaction_command.dart';
 import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/fund.dart';
@@ -19,6 +19,26 @@ import '../../providers/category_providers.dart';
 import '../../providers/fund_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
+
+/// Snapshot bất biến (Dart record — so sánh cấu trúc bằng `==` tự động) của
+/// TOÀN BỘ field ảnh hưởng "đây là logical request nào" — dùng để phát hiện
+/// người dùng có đổi form sau 1 lần Lưu thất bại hay không (Phase 6 mục 10).
+/// KHÔNG chứa `id`/`clientTxId`/`currency` — những field đó thuộc về
+/// `CreateTransactionCommand` (Application layer), không phải "ý định" của
+/// người dùng.
+typedef _TransactionIntent = ({
+  TransactionType type,
+  TransferKind? transferKind,
+  String categoryId,
+  PoolKind sourceKind,
+  String? sourceRefId,
+  PoolKind destinationKind,
+  String? destinationRefId,
+  int amountMinor,
+  DateTime transactionDate,
+  String note,
+  String? statusId,
+});
 
 /// Màn "Thêm giao dịch" (`docs/design.html` màn 09) — nơi tạo giao dịch DUY
 /// NHẤT trong app: Nạp quỹ/Ghi khoản mua (màn Quỹ) và Rút về ví/Gửi ngân
@@ -112,6 +132,20 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   String _note = '';
   DateTime _transactionDate = DateTime.now();
 
+  /// Logical request đã "đóng băng" từ lần bấm Lưu gần nhất chưa thành công
+  /// — Phase 6 mục 9/10. `null` nghĩa là chưa có gì đang chờ (form sạch,
+  /// hoặc lần Lưu trước đã thành công/command trước đã bị vô hiệu).
+  CreateTransactionCommand? _pendingCommand;
+
+  /// Snapshot các field logic tại thời điểm `_pendingCommand` được tạo —
+  /// dùng để phát hiện người dùng đã đổi form hay chưa trước khi quyết định
+  /// tái sử dụng `_pendingCommand` hay tạo command mới.
+  _TransactionIntent? _pendingIntent;
+
+  /// Chặn double-tap (Phase 6 mục 11) — bảo vệ UX, KHÔNG thay thế idempotency
+  /// thật của Repository (`clientTxId`, đã frozen từ Phase 3).
+  bool _submitting = false;
+
   int get _amount =>
       int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
 
@@ -154,71 +188,146 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     });
   }
 
+  /// Canonical write path (Phase 6 mục 3/4/5/9/10):
+  /// intent form → (reuse hoặc tạo mới) `CreateTransactionCommand` qua
+  /// `createTransactionCommandFactoryProvider` → `addTransactionUseCaseProvider`.
+  /// KHÔNG tự build `Transaction`, KHÔNG tự sinh `clientTxId`, KHÔNG tự đọc
+  /// `CurrencyContext` — tất cả đã thuộc trách nhiệm Application layer.
   Future<void> _save(List<Category> categories) async {
-    final tx = _buildTransaction(categories);
-    if (tx == null) return;
+    if (_submitting) return; // chặn double-tap — mục 11.
+    final intent = _buildLogicalIntent(categories);
+    if (intent == null) return;
+
+    setState(() => _submitting = true);
     try {
-      await ref.read(transactionRepositoryProvider).addTransaction(tx);
-      if (mounted) Navigator.of(context).pop();
-    } on InsufficientBalanceException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Số dư không đủ để ghi giao dịch này.')),
-        );
+      CreateTransactionCommand command;
+      if (_pendingCommand != null && _pendingIntent == intent) {
+        // Retry đúng nghĩa: form không đổi từ lần Lưu trước → tái sử dụng
+        // NGUYÊN VẸN command cũ (cùng clientTxId/transactionDate/payload) —
+        // mục 6/9. KHÔNG gọi factory.create() lại ở đây.
+        command = _pendingCommand!;
+      } else {
+        // Logical request MỚI (lần đầu, hoặc form đã đổi sau lần Lưu trước
+        // — mục 10) → tạo command mới, đóng băng đúng 1 lần.
+        command = await ref
+            .read(createTransactionCommandFactoryProvider)
+            .create(
+              type: intent.type,
+              transferKind: intent.transferKind,
+              categoryId: intent.categoryId,
+              sourceKind: intent.sourceKind,
+              sourceRefId: intent.sourceRefId,
+              destinationKind: intent.destinationKind,
+              destinationRefId: intent.destinationRefId,
+              amountMinor: intent.amountMinor,
+              transactionDate: intent.transactionDate,
+              note: intent.note,
+              statusId: intent.statusId,
+            );
+        _pendingCommand = command;
+        _pendingIntent = intent;
       }
+
+      await ref.read(addTransactionUseCaseProvider)(command);
+
+      // Thành công — dữ liệu mới sẽ tự trôi tới UI qua
+      // transactionsStreamProvider (Drift stream → Repository →
+      // WatchTransactionsUseCase), KHÔNG tự thêm vào state nào ở đây (mục 20/21).
+      _pendingCommand = null;
+      _pendingIntent = null;
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (error is ClientTxIdConflictException) {
+        // Xung đột thật trên chính clientTxId đang giữ — retry lại với cùng
+        // command sẽ luôn xung đột nữa, nên vô hiệu hoá để lần Lưu kế tiếp
+        // bắt buộc tạo command mới (mục 19 — không âm thầm sinh clientTxId
+        // mới rồi tự retry ở đây).
+        _pendingCommand = null;
+        _pendingIntent = null;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
-  Transaction? _buildTransaction(List<Category> categories) {
+  /// Ánh xạ typed exception (Domain/Repository/Application, đã frozen) sang
+  /// message tiếng Việt cho người dùng — Phase 6 mục 18. KHÔNG lộ message
+  /// SQLite/tên class/stack trace. Đặt ở Presentation, KHÔNG đổi thành
+  /// string ở Provider/Application.
+  String _errorMessage(Object error) {
+    if (error is InvalidAmountException) return 'Số tiền không hợp lệ.';
+    if (error is SameSourceDestinationException) {
+      return 'Nguồn và đích không được trùng nhau.';
+    }
+    if (error is InsufficientBalanceException) {
+      return 'Số dư không đủ để ghi giao dịch này.';
+    }
+    if (error is ClientTxIdConflictException) {
+      return 'Giao dịch bị xung đột, vui lòng thử lưu lại.';
+    }
+    if (error is PersistenceConstraintException) {
+      return 'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.';
+    }
+    if (error is PersistenceException) {
+      return 'Có lỗi khi lưu dữ liệu, vui lòng thử lại.';
+    }
+    return 'Có lỗi xảy ra, vui lòng thử lại.';
+  }
+
+  /// "Ý định" của người dùng hiện tại trên form — thay thế `_buildTransaction`
+  /// cũ (Phase 6 mục 4): CHỈ trả field logic (không `id`/`clientTxId`/
+  /// `createdAt`/`currency`), giữ NGUYÊN VẸN mọi nhánh mapping UI→pool đã có
+  /// từ trước (Thu/Chi/Chuyển × thành viên/quỹ/tiết kiệm) — không đổi hành
+  /// vi nghiệp vụ nào, chỉ đổi kiểu dữ liệu trả về.
+  _TransactionIntent? _buildLogicalIntent(List<Category> categories) {
     if (_amount <= 0) return null;
-    final now = DateTime.now();
-    final id = IdGenerator.generate();
-    final clientTxId = IdGenerator.generate();
 
     switch (_entryType) {
       case EntryType.thu:
         final category = _findCategory(categories, _categoryId);
         if (category == null) return null;
-        return Transaction(
-          id: id,
+        return (
           type: TransactionType.income,
+          transferKind: null,
           categoryId: category.id,
           sourceKind: PoolKind.external,
+          sourceRefId: null,
           destinationKind: PoolKind.memberAvailable,
           destinationRefId: _member.name,
           amountMinor: _amount,
+          transactionDate: _transactionDate,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
-          transactionDate: _transactionDate,
-          createdAt: now,
-          clientTxId: clientTxId,
         );
 
       case EntryType.chi:
         final category = _findCategory(categories, _categoryId);
         if (category == null) return null;
         final fundId = _sourceFundId;
-        return Transaction(
-          id: id,
+        return (
           type: TransactionType.expense,
+          transferKind: null,
           categoryId: category.id,
           sourceKind: fundId == null ? PoolKind.memberAvailable : PoolKind.fund,
           sourceRefId: fundId ?? _member.name,
           destinationKind: PoolKind.external,
+          destinationRefId: null,
           amountMinor: _amount,
+          transactionDate: _transactionDate,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
-          transactionDate: _transactionDate,
-          createdAt: now,
-          clientTxId: clientTxId,
         );
 
       case EntryType.chuyen:
         switch (_transferSubKind) {
           case TransferSubKind.member:
             if (_transferFrom == _transferTo) return null;
-            return Transaction(
-              id: id,
+            return (
               type: TransactionType.transfer,
               transferKind: TransferKind.memberToMember,
               categoryId: DefaultCategories.chuyenTienThanhVien.id,
@@ -227,16 +336,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               destinationKind: PoolKind.memberAvailable,
               destinationRefId: _transferTo.name,
               amountMinor: _amount,
-              note: _note,
               transactionDate: _transactionDate,
-              createdAt: now,
-              clientTxId: clientTxId,
+              note: _note,
+              statusId: null,
             );
           case TransferSubKind.fund:
             final fundId = _transferFundId;
             if (fundId == null) return null;
-            return Transaction(
-              id: id,
+            return (
               type: TransactionType.transfer,
               transferKind: TransferKind.fundTopup,
               categoryId: DefaultCategories.napQuy.id,
@@ -245,10 +352,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               destinationKind: PoolKind.fund,
               destinationRefId: fundId,
               amountMinor: _amount,
-              note: _note,
               transactionDate: _transactionDate,
-              createdAt: now,
-              clientTxId: clientTxId,
+              note: _note,
+              statusId: null,
             );
           case TransferSubKind.savings:
             final member = _member;
@@ -256,8 +362,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             if (assetTypeId == null) return null;
             switch (_savingsAction) {
               case SavingsAction.topup:
-                return Transaction(
-                  id: id,
+                return (
                   type: TransactionType.transfer,
                   transferKind: TransferKind.savingsTopup,
                   categoryId: DefaultCategories.tietKiem.id,
@@ -266,14 +371,12 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationKind: PoolKind.memberSavingsAsset,
                   destinationRefId: savingsAssetRefId(assetTypeId, member),
                   amountMinor: _amount,
-                  note: _note,
                   transactionDate: _transactionDate,
-                  createdAt: now,
-                  clientTxId: clientTxId,
+                  note: _note,
+                  statusId: null,
                 );
               case SavingsAction.withdraw:
-                return Transaction(
-                  id: id,
+                return (
                   type: TransactionType.transfer,
                   transferKind: TransferKind.savingsWithdraw,
                   categoryId: DefaultCategories.tietKiem.id,
@@ -282,16 +385,14 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationKind: PoolKind.memberAvailable,
                   destinationRefId: member.name,
                   amountMinor: _amount,
-                  note: _note,
                   transactionDate: _transactionDate,
-                  createdAt: now,
-                  clientTxId: clientTxId,
+                  note: _note,
+                  statusId: null,
                 );
               case SavingsAction.convert:
                 final targetId = _savingsTargetAssetTypeId;
                 if (targetId == null || targetId == assetTypeId) return null;
-                return Transaction(
-                  id: id,
+                return (
                   type: TransactionType.transfer,
                   transferKind: TransferKind.savingsConvert,
                   categoryId: DefaultCategories.tietKiem.id,
@@ -300,10 +401,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationKind: PoolKind.memberSavingsAsset,
                   destinationRefId: savingsAssetRefId(targetId, member),
                   amountMinor: _amount,
-                  note: _note,
                   transactionDate: _transactionDate,
-                  createdAt: now,
-                  clientTxId: clientTxId,
+                  note: _note,
+                  statusId: null,
                 );
             }
         }
@@ -327,7 +427,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     final activeFunds = funds.where((f) => f.isActive).toList();
     final activeAssetTypes = assetTypes.where((a) => a.isActive).toList();
 
-    final canSave = _buildTransaction(categories) != null;
+    final canSave = !_submitting && _buildLogicalIntent(categories) != null;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.88,
@@ -443,9 +543,12 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                             borderRadius: BorderRadius.circular(15),
                           ),
                         ),
-                        child: const Text(
-                          'Lưu giao dịch',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                        child: Text(
+                          _submitting ? 'Đang lưu...' : 'Lưu giao dịch',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
