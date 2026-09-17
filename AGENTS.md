@@ -1,6 +1,6 @@
-# CLAUDE.md — Hướng dẫn cho Claude khi làm việc trên dự án này
+# AGENTS.md — Hướng dẫn cho Codex khi làm việc trên dự án này
 
-Đây là file định hướng cho Claude (hoặc bất kỳ ai/AI nào) khi bắt tay vào code dự án **app Quản lý Chi tiêu Gia đình**. Đọc `spec.md` để có đặc tả sản phẩm và lộ trình đầy đủ theo từng phase; file này chỉ nêu quy ước kỹ thuật và cách làm việc trong repo.
+Đây là file định hướng cho Codex (hoặc bất kỳ ai/AI nào) khi bắt tay vào code dự án **app Quản lý Chi tiêu Gia đình**. Đọc `spec.md` để có đặc tả sản phẩm và lộ trình đầy đủ theo từng phase; file này chỉ nêu quy ước kỹ thuật và cách làm việc trong repo.
 
 ## 1. Tổng quan dự án
 
@@ -94,6 +94,6 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 ## 11. Tài liệu liên quan
 
 - `spec.md` — đặc tả sản phẩm, mô hình dữ liệu, lộ trình theo phase (76 phase, Giai đoạn A-H), kế hoạch phát hành CH Play, tài chính domain logic (ngân sách, tỷ lệ tiết kiệm...). Đọc file đó trước khi bắt đầu bất kỳ phase nào.
-- `docs/financial-core-v2.md` — **đọc trước khi viết bất kỳ dòng domain logic nào liên quan tới tiền.** Audit đầy đủ các lỗi tài chính đã sửa (trừ kép ở Quỹ, Transfer bị tính nhầm thành Chi...), model `Transaction` với `source`/`destination`, 15 invariant bắt buộc đúng, 20 test case (double-count + reversal ledger) phải pass trước khi merge bất kỳ PR nào đụng tới Financial Engine. Đây là **source of truth cao nhất cho business logic tài chính** — nếu `spec.md`/`CLAUDE.md`/`docs/design.html` có chỗ nào mâu thuẫn với file này, sửa lại theo file này.
+- `docs/financial-core-v2.md` — **đọc trước khi viết bất kỳ dòng domain logic nào liên quan tới tiền.** Audit đầy đủ các lỗi tài chính đã sửa (trừ kép ở Quỹ, Transfer bị tính nhầm thành Chi...), model `Transaction` với `source`/`destination`, 15 invariant bắt buộc đúng, 20 test case (double-count + reversal ledger) phải pass trước khi merge bất kỳ PR nào đụng tới Financial Engine. Đây là **source of truth cao nhất cho business logic tài chính** — nếu `spec.md`/`AGENTS.md`/`docs/design.html` có chỗ nào mâu thuẫn với file này, sửa lại theo file này.
 - `docs/design.html` — bản vẽ giao diện: sơ đồ use case, ERD, màn hình mô phỏng có tương tác. Đã đồng bộ theo model V2 ở `financial-core-v2.md` (đợt rà soát `docs/audit-pre-implementation.md`, 2026-09-16) — mọi màn hình thật khi code phải khớp luồng trong file này; nếu cần đổi khác đi, cập nhật lại `docs/design.html` trước rồi mới đổi code, để các tài liệu không lệch nhau.
-- `docs/audit-pre-implementation.md` — audit trước-khi-code: đối chiếu toàn bộ `spec.md`/`CLAUDE.md`/`financial-core-v2.md`/`design.html`/code hiện có, liệt kê mọi mâu thuẫn/BLOCKER đã tìm thấy và cách đã sửa. Tham khảo nếu cần hiểu tại sao 1 đoạn tài liệu được viết như hiện tại.
+- `docs/audit-pre-implementation.md` — audit trước-khi-code: đối chiếu toàn bộ `spec.md`/`AGENTS.md`/`financial-core-v2.md`/`design.html`/code hiện có, liệt kê mọi mâu thuẫn/BLOCKER đã tìm thấy và cách đã sửa. Tham khảo nếu cần hiểu tại sao 1 đoạn tài liệu được viết như hiện tại.

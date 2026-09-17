@@ -14,11 +14,28 @@ part 'app_database.g.dart';
 /// Core V2, `docs/financial-core-v2.md` mục 6) để migrate lên Firestore ở
 /// Giai đoạn B chỉ là copy nguyên văn, không transform. Append-only cho mọi
 /// field ảnh hưởng balance — sửa/xoá luôn tạo bản ghi mới (mục 21).
+///
+/// Không có cột `familyId`: Giai đoạn A là local-first, 1 gia đình ngầm
+/// định/máy (`spec.md` dòng 73-74 — `families/{familyId}` chỉ sinh ra trên
+/// Firestore khi có người thứ 2 tham gia ở Giai đoạn B). `clientTxId` do đó
+/// unique toàn cục là đủ tương đương `UNIQUE(familyId, clientTxId)`.
+///
+/// `sourceRefId`/`destinationRefId` KHÔNG có FK — polymorphic theo
+/// `sourceKind`/`destinationKind` (member enum/`FundRows`/
+/// `SavingsAssetTypeRows`/external), SQLite không biểu diễn được FK có điều
+/// kiện. Integrity phần này do Domain/Repository đảm nhiệm.
+@TableIndex(name: 'ux_transaction_client_tx_id', columns: {#clientTxId}, unique: true)
+@TableIndex(name: 'ix_transaction_source', columns: {#sourceKind, #sourceRefId})
+@TableIndex(
+  name: 'ix_transaction_destination',
+  columns: {#destinationKind, #destinationRefId},
+)
+@TableIndex(name: 'ix_transaction_category_status', columns: {#categoryId, #statusId})
 class TransactionRows extends Table {
   TextColumn get id => text()();
   TextColumn get type => text()();
   TextColumn get transferKind => text().nullable()();
-  TextColumn get categoryId => text()();
+  TextColumn get categoryId => text().references(CategoryRows, #id)();
   TextColumn get sourceKind => text()();
   TextColumn get sourceRefId => text().nullable()();
   TextColumn get destinationKind => text()();
@@ -26,7 +43,7 @@ class TransactionRows extends Table {
   IntColumn get amountMinor => integer()();
   TextColumn get currency => text().withDefault(const Constant('VND'))();
   TextColumn get note => text().withDefault(const Constant(''))();
-  TextColumn get statusId => text().nullable()();
+  TextColumn get statusId => text().nullable().references(StatusRows, #id)();
   DateTimeColumn get statusUpdatedAt => dateTime().nullable()();
   DateTimeColumn get transactionDate => dateTime()();
   DateTimeColumn get createdAt => dateTime()();
@@ -59,9 +76,10 @@ class CategoryRows extends Table {
 
 /// Bước trạng thái con của 1 danh mục (`Status`) — bảng riêng để CRUD/sắp
 /// xếp độc lập từng bước, khớp shape subcollection Firestore ở Giai đoạn B.
+@TableIndex(name: 'ix_status_category', columns: {#categoryId})
 class StatusRows extends Table {
   TextColumn get id => text()();
-  TextColumn get categoryId => text()();
+  TextColumn get categoryId => text().references(CategoryRows, #id)();
   TextColumn get name => text()();
   IntColumn get sortOrder => integer()();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
@@ -105,14 +123,16 @@ class AppDatabase extends _$AppDatabase {
   /// file thật trên máy.
   AppDatabase.forTesting(super.executor);
 
-  /// Tăng mỗi lần đổi schema (kể cả thêm bảng như `SavingsAssetTypeRows`) —
-  /// app chưa từng phát hành, chưa có dữ liệu người dùng thật cần giữ lại.
-  /// Nâng cấp
-  /// đơn giản là xoá sạch bảng cũ rồi tạo lại theo schema mới, KHÔNG có
-  /// bước migrate/transform dữ liệu — máy đang có data demo V1 sẽ mất khi
-  /// cập nhật app.
+  /// Tăng mỗi lần đổi schema. Version 1-3: app chưa từng phát hành, chưa có
+  /// dữ liệu người dùng thật cần giữ, nên `onUpgrade` cho các version cũ này
+  /// vẫn xoá sạch rồi tạo lại (giữ nguyên hành vi lịch sử, không sửa lại).
+  /// Từ version 4 trở đi (Phase 2 — Database Foundation), migration PHẢI
+  /// giữ dữ liệu thật: thêm FK (`categoryId`/`statusId`) + unique index
+  /// (`clientTxId`) yêu cầu SQLite recreate bảng (FK chỉ khai báo được lúc
+  /// `CREATE TABLE`), nên dùng pattern rename → tạo bảng mới → copy dữ liệu
+  /// → xoá bảng cũ, không `DROP` thẳng.
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -120,20 +140,82 @@ class AppDatabase extends _$AppDatabase {
       await m.createAll();
     },
     onUpgrade: (Migrator m, int from, int to) async {
-      await customStatement('DROP TABLE IF EXISTS transaction_rows');
-      await customStatement('DROP TABLE IF EXISTS fund_entry_rows');
-      await customStatement('DROP TABLE IF EXISTS category_rows');
-      await customStatement('DROP TABLE IF EXISTS status_rows');
-      await customStatement('DROP TABLE IF EXISTS fund_rows');
-      await customStatement('DROP TABLE IF EXISTS savings_asset_type_rows');
-      await m.createAll();
+      if (from < 3) {
+        await customStatement('DROP TABLE IF EXISTS transaction_rows');
+        await customStatement('DROP TABLE IF EXISTS fund_entry_rows');
+        await customStatement('DROP TABLE IF EXISTS category_rows');
+        await customStatement('DROP TABLE IF EXISTS status_rows');
+        await customStatement('DROP TABLE IF EXISTS fund_rows');
+        await customStatement('DROP TABLE IF EXISTS savings_asset_type_rows');
+        await m.createAll();
+        return;
+      }
+      if (from < 4) {
+        // Bọc trong transaction() để nếu 1 bước giữa chừng fail (vd dữ liệu
+        // cũ vô tình có 2 row trùng clientTxId — vi phạm unique index mới),
+        // toàn bộ rename/create/copy/drop đều rollback sạch thay vì để DB
+        // kẹt ở trạng thái nửa vời (vd bảng `_v3` đã rename nhưng bảng mới
+        // chưa kịp tạo). Phát hiện khi code review Phase 2 — sửa theo yêu
+        // cầu review, không tự ý đổi thêm gì khác ngoài phạm vi này.
+        await transaction(() => _migrateToV4(m));
+      }
     },
     beforeOpen: (details) async {
+      // sqlite3 tắt FK enforcement theo mặc định mỗi connection — phải bật
+      // lại mỗi lần mở DB (không chỉ lúc tạo mới).
+      await customStatement('PRAGMA foreign_keys = ON');
       if (details.wasCreated) {
         await seedDefaults(this);
       }
     },
   );
+
+  /// v3 → v4: thêm FK `status_rows.category_id`, `transaction_rows.
+  /// categoryId/statusId`, và unique index `clientTxId` — giữ nguyên dữ
+  /// liệu hiện có bằng cách rename bảng cũ, tạo bảng mới theo schema hiện
+  /// tại (đã có FK/index qua `@TableIndex`/`.references()`), copy dữ liệu,
+  /// rồi xoá bảng cũ.
+  ///
+  /// KHÔNG cần tự bật/tắt `PRAGMA foreign_keys` ở đây: connection còn đang
+  /// ở trạng thái mặc định (OFF) lúc migration chạy — Drift chỉ bật FK thật
+  /// sự ở `beforeOpen` (chạy SAU khi `onUpgrade` xong), và SQLite còn không
+  /// cho phép đổi pragma này giữa 1 transaction đang mở (no-op) — gọi ở đây
+  /// sẽ không có tác dụng gì, dễ gây hiểu lầm nên đã bỏ.
+  ///
+  /// Thứ tự copy (status_rows trước, rồi mới transaction_rows) đã đảm bảo
+  /// FK hợp lệ theo đúng dữ liệu gốc mà không cần tắt enforcement.
+  Future<void> _migrateToV4(Migrator m) async {
+    await customStatement('ALTER TABLE status_rows RENAME TO status_rows_v3');
+    await m.createTable(statusRows);
+    await m.createIndex(ixStatusCategory);
+    await customStatement(
+      'INSERT INTO status_rows (id, category_id, name, sort_order, is_active) '
+      'SELECT id, category_id, name, sort_order, is_active FROM status_rows_v3',
+    );
+    await customStatement('DROP TABLE status_rows_v3');
+
+    await customStatement(
+      'ALTER TABLE transaction_rows RENAME TO transaction_rows_v3',
+    );
+    await m.createTable(transactionRows);
+    await m.createIndex(uxTransactionClientTxId);
+    await m.createIndex(ixTransactionSource);
+    await m.createIndex(ixTransactionDestination);
+    await m.createIndex(ixTransactionCategoryStatus);
+    await customStatement(
+      'INSERT INTO transaction_rows (id, type, transfer_kind, category_id, '
+      'source_kind, source_ref_id, destination_kind, destination_ref_id, '
+      'amount_minor, currency, note, status_id, status_updated_at, '
+      'transaction_date, created_at, reversal_of_tx_id, corrects_tx_id, '
+      'reversed_by_tx_id, client_tx_id, version) '
+      'SELECT id, type, transfer_kind, category_id, source_kind, '
+      'source_ref_id, destination_kind, destination_ref_id, amount_minor, '
+      'currency, note, status_id, status_updated_at, transaction_date, '
+      'created_at, reversal_of_tx_id, corrects_tx_id, reversed_by_tx_id, '
+      'client_tx_id, version FROM transaction_rows_v3',
+    );
+    await customStatement('DROP TABLE transaction_rows_v3');
+  }
 }
 
 QueryExecutor _openConnection() {

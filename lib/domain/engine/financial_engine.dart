@@ -1,6 +1,7 @@
 import '../entities/pool_kind.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
+import '../errors/domain_exceptions.dart';
 
 /// Khoá 1 "pool" tiền — `(kind, refId)` (`docs/financial-core-v2.md` mục 4).
 /// `refId` luôn null khi `kind == PoolKind.external`.
@@ -65,6 +66,21 @@ TransactionType typeFromEndpoints(PoolKind source, PoolKind destination) {
   return TransactionType.transfer;
 }
 
+/// Kiểm tra Invariant 12 (`amountMinor` luôn dương) và Invariant 15
+/// (source/destination không được là cùng 1 pool) TRƯỚC khi ghi 1 giao dịch
+/// mới. Hàm thuần domain, không đụng DB/repository — caller (repository,
+/// Phase 2) gọi hàm này ngay trước khi ghi để có validate THẬT, không chỉ
+/// dựa vào `assert()` trong constructor `Transaction` (bị strip ở release
+/// build).
+void validateNewTransaction(Transaction tx) {
+  if (tx.amountMinor <= 0) {
+    throw InvalidAmountException(tx.amountMinor);
+  }
+  if (tx.sourceKind == tx.destinationKind && tx.sourceRefId == tx.destinationRefId) {
+    throw SameSourceDestinationException(tx.sourceKind, tx.sourceRefId);
+  }
+}
+
 /// Kiểm tra Invariant 7 (Quỹ/Tiết kiệm/MEMBER_AVAILABLE không bao giờ âm)
 /// TRƯỚC khi ghi 1 giao dịch mới — gọi với `delta = -amountMinor` cho pool
 /// nguồn của giao dịch sắp tạo.
@@ -79,6 +95,64 @@ bool wouldGoNegative({
   return current + delta < 0;
 }
 
+/// So sánh 2 giao dịch có cùng "ý định tài chính" hay không — dùng cho
+/// idempotency của `clientTxId` (Phase 3, `docs/financial-core-v2.md` mục
+/// 14 + mục 6 spec Phase 3): nếu 2 payload cùng gửi 1 `clientTxId` nhưng
+/// các field này khác nhau, đó là [ClientTxIdConflictException], KHÔNG phải
+/// retry hợp lệ.
+///
+/// **Cập nhật Phase 3.1 (audit lại theo yêu cầu — idempotency xác định
+/// "same request", không chỉ "same financial effect"):** so cả
+/// `transactionDate`/`note`/`statusId` vì cả 3 đều là dữ liệu người dùng
+/// nhập/CHỌN ngay trên màn "Thêm giao dịch" (`docs/design.html` màn 09) lúc
+/// tạo, KHÔNG phải metadata hệ thống tự sinh:
+/// - `transactionDate`: có date-picker riêng trên màn 09 (mặc định "Hôm
+///   nay", đổi được), cố tình tách khỏi `createdAt` để rollup đúng tháng
+///   phát sinh thật (`docs/financial-core-v2.md` F-07) — 1 retry hợp lệ
+///   (resend đúng request cũ) luôn mang cùng giá trị đã chọn.
+/// - `note`: input text tự do ngay trên màn 09 (cả 3 panel Thu/Chi/Chuyển).
+/// - `statusId`: với category có `statuses`, màn 09 có `status-stepper` để
+///   chọn NGAY bước trạng thái ban đầu lúc tạo — không chỉ là field sửa
+///   sau qua `updateTransaction`.
+///
+/// Việc `docs/financial-core-v2.md` liệt các field này vào nhóm "không ảnh
+/// hưởng balance, sửa trực tiếp không qua reversal" là quy tắc cho
+/// `updateTransaction` (sửa 1 giao dịch ĐÃ tồn tại) — khác hoàn toàn với
+/// câu hỏi ở đây ("2 request tạo mới có phải cùng 1 request logic không").
+/// Không suy ra từ "không ảnh hưởng balance" rằng nên bỏ qua khi so
+/// idempotency.
+///
+/// Chỉ KHÔNG so `id`/`createdAt`/`statusUpdatedAt` — cả 3 là metadata hệ
+/// thống tự sinh mỗi lần gọi (`IdGenerator.generate()`/`DateTime.now()`),
+/// đổi giá trị ngay cả với đúng 1 request logic lặp lại y hệt.
+///
+/// **Cập nhật Phase 4.1 (idempotency hardening, KHÔNG phải đổi financial
+/// calculation):** thêm `currency` vào so sánh. Audit retry+currency
+/// (Phase 4.1) phát hiện: nếu 1 nguồn currency context có thể đổi giá trị
+/// giữa 2 lần gọi `AddTransactionUseCase` cho CÙNG 1 `clientTxId` (vd
+/// tương lai khi currency trở thành setting mutable ở Layer 2), thiếu điều
+/// kiện này sẽ khiến 1 request "VND" và 1 request "USD" bị coi là cùng 1
+/// logical transaction — Repository âm thầm trả về bản ghi cũ, bỏ qua
+/// currency mới mà không báo lỗi. Currency giờ là 1 phần logical request
+/// identity giống hệt `amountMinor`/`categoryId` — khác currency với cùng
+/// `clientTxId` phải là [ClientTxIdConflictException], không phải retry
+/// hợp lệ. Không đổi `applyEffect`/`buildReversal`/`buildCorrection`/balance
+/// rules — đây thuần tuý là mở rộng 1 hàm so sánh identity.
+bool isSameLogicalTransaction(Transaction a, Transaction b) {
+  return a.type == b.type &&
+      a.transferKind == b.transferKind &&
+      a.categoryId == b.categoryId &&
+      a.sourceKind == b.sourceKind &&
+      a.sourceRefId == b.sourceRefId &&
+      a.destinationKind == b.destinationKind &&
+      a.destinationRefId == b.destinationRefId &&
+      a.amountMinor == b.amountMinor &&
+      a.currency == b.currency &&
+      a.transactionDate == b.transactionDate &&
+      a.note == b.note &&
+      a.statusId == b.statusId;
+}
+
 /// Tạo bản hoàn tác của [original] — source/destination đảo ngược, cùng
 /// `amountMinor`, `reversalOfTxId = original.id` (mục 21). `applyEffect` của
 /// bản này tự động triệt tiêu đúng hiệu ứng cũ khi cộng dồn vào balance.
@@ -88,6 +162,9 @@ Transaction buildReversal(
   required String clientTxId,
   required DateTime now,
 }) {
+  if (original.isReversed) {
+    throw AlreadyReversedException(original.id, original.reversedByTxId!);
+  }
   final newSourceKind = original.destinationKind;
   final newSourceRefId = original.destinationRefId;
   final newDestinationKind = original.sourceKind;
@@ -160,5 +237,6 @@ Transaction buildReversal(
     correctsTxId: original.id,
     clientTxId: clientTxId,
   );
+  validateNewTransaction(replacement);
   return (reversal: reversal, replacement: replacement);
 }

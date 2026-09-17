@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:drift/native.dart' show SqliteException;
 
 import '../../core/utils/id_generator.dart';
 import '../../domain/engine/financial_engine.dart';
@@ -79,7 +80,10 @@ class LocalTransactionRepository implements TransactionRepository {
     return rows.map(_toDomain).toList();
   }
 
-  void _assertWontGoNegative(domain.Transaction candidate, Map<PoolRef, int> balances) {
+  void _assertWontGoNegative(
+    domain.Transaction candidate,
+    Map<PoolRef, int> balances,
+  ) {
     if (wouldGoNegative(
       currentBalances: balances,
       kind: candidate.sourceKind,
@@ -89,7 +93,11 @@ class LocalTransactionRepository implements TransactionRepository {
       throw InsufficientBalanceException(
         poolKind: candidate.sourceKind,
         refId: candidate.sourceRefId,
-        currentBalance: poolBalance(balances, candidate.sourceKind, candidate.sourceRefId),
+        currentBalance: poolBalance(
+          balances,
+          candidate.sourceKind,
+          candidate.sourceRefId,
+        ),
         requestedAmount: candidate.amountMinor,
       );
     }
@@ -103,34 +111,163 @@ class LocalTransactionRepository implements TransactionRepository {
         .map((rows) => rows.map(_toDomain).toList());
   }
 
+  Future<domain.Transaction?> _findByClientTxId(String clientTxId) async {
+    final row = await (_db.select(
+      _db.transactionRows,
+    )..where((r) => r.clientTxId.equals(clientTxId))).getSingleOrNull();
+    return row == null ? null : _toDomain(row);
+  }
+
+  /// `true` chỉ khi [e] chắc chắn là vi phạm `UNIQUE(clientTxId)` — phân
+  /// biệt bằng `extendedResultCode` (2067 = SQLITE_CONSTRAINT_UNIQUE, khác
+  /// 787 = FOREIGN KEY, 1555 = PRIMARY KEY) VÀ nội dung message (SQLite trả
+  /// nguyên văn `"UNIQUE constraint failed: <table>.<column>"`). Bắt buộc
+  /// kiểm tra cả 2 điều kiện để KHÔNG nuốt nhầm lỗi FK/PK khác thành
+  /// "trùng clientTxId" (mục 5/12 — không được nuốt mọi exception).
+  bool _isClientTxIdUniqueViolation(SqliteException e) {
+    const sqliteConstraintUnique = 2067;
+    return e.extendedResultCode == sqliteConstraintUnique &&
+        e.message.contains('transaction_rows.client_tx_id');
+  }
+
+  /// Dịch 1 `SqliteException` thô (KHÔNG PHẢI vi phạm `clientTxId` — case đó
+  /// đã được xử lý riêng làm cơ chế idempotency, không phải lỗi) sang
+  /// exception ở `domain/errors` — ranh giới của `TransactionRepository`
+  /// không để lộ `SqliteException`/Drift internals ra ngoài (Phase 3.1 mục
+  /// 4/5). Phân biệt bằng `extendedResultCode`:
+  /// - 787 (SQLITE_CONSTRAINT_FOREIGNKEY) → `foreignKey`.
+  /// - 2067/1555 (UNIQUE/PRIMARY KEY) → `uniqueViolation` (hiếm, không phải
+  ///   `clientTxId` vì case đó không tới được đây).
+  /// - Còn lại nhưng vẫn là 1 constraint (`resultCode == 19`) → `other`.
+  /// - Không phải constraint nào cả → [PersistenceException] chung.
+  Object _mapSqliteException(SqliteException e) {
+    const constraintForeignKey = 787;
+    const constraintUnique = 2067;
+    const constraintPrimaryKey = 1555;
+    const constraintBase = 19; // SQLITE_CONSTRAINT
+
+    if (e.extendedResultCode == constraintForeignKey) {
+      return PersistenceConstraintException(
+        kind: PersistenceConstraintKind.foreignKey,
+        message:
+            'Vi phạm khoá ngoại khi ghi giao dịch — dữ liệu tham chiếu '
+            '(categoryId/statusId) không tồn tại',
+        cause: e,
+      );
+    }
+    if (e.extendedResultCode == constraintUnique ||
+        e.extendedResultCode == constraintPrimaryKey) {
+      return PersistenceConstraintException(
+        kind: PersistenceConstraintKind.uniqueViolation,
+        message: 'Vi phạm ràng buộc duy nhất không phải clientTxId',
+        cause: e,
+      );
+    }
+    if (e.resultCode == constraintBase) {
+      return PersistenceConstraintException(
+        kind: PersistenceConstraintKind.other,
+        message: 'Vi phạm ràng buộc dữ liệu không xác định',
+        cause: e,
+      );
+    }
+    return PersistenceException('Lỗi lưu trữ không mong đợi', cause: e);
+  }
+
   @override
-  Future<void> addTransaction(domain.Transaction transaction) async {
-    final existing = await _allTransactions();
-    final balances = computeAllPoolBalances(existing);
-    _assertWontGoNegative(transaction, balances);
-    await _db.into(_db.transactionRows).insert(_toCompanion(transaction));
+  Future<domain.Transaction> addTransaction(
+    domain.Transaction transaction,
+  ) async {
+    validateNewTransaction(transaction);
+
+    try {
+      return await _db.transaction(() async {
+        // Fast path — KHÔNG phải lớp bảo vệ duy nhất (xem catch bên dưới):
+        // tránh chạy lại balance-check/insert cho 1 request lặp lại đã biết
+        // trước là trùng, để không double-count hiệu ứng balance của chính
+        // request cũ khi tính `computeAllPoolBalances`.
+        final existingByClientTxId = await _findByClientTxId(
+          transaction.clientTxId,
+        );
+        if (existingByClientTxId != null) {
+          if (isSameLogicalTransaction(existingByClientTxId, transaction)) {
+            return existingByClientTxId;
+          }
+          throw ClientTxIdConflictException(
+            clientTxId: transaction.clientTxId,
+            existing: existingByClientTxId,
+            attempted: transaction,
+          );
+        }
+
+        final existing = await _allTransactions();
+        final balances = computeAllPoolBalances(existing);
+        _assertWontGoNegative(transaction, balances);
+
+        try {
+          await _db.into(_db.transactionRows).insert(_toCompanion(transaction));
+          return transaction;
+        } on SqliteException catch (e) {
+          if (!_isClientTxIdUniqueViolation(e)) rethrow;
+          // Race thật: 1 lệnh gọi khác cùng clientTxId đã insert xong giữa
+          // lúc fast-path phía trên chạy xong và insert ở đây — DB UNIQUE là
+          // lớp bảo vệ cuối cùng bắt lại đúng lúc này.
+          final raced = await _findByClientTxId(transaction.clientTxId);
+          if (raced == null) {
+            rethrow; // không thể xảy ra, nhưng không nuốt lỗi nếu có.
+          }
+          if (isSameLogicalTransaction(raced, transaction)) return raced;
+          throw ClientTxIdConflictException(
+            clientTxId: transaction.clientTxId,
+            existing: raced,
+            attempted: transaction,
+          );
+        }
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
+  }
+
+  @override
+  Future<domain.Transaction?> getTransactionById(String id) async {
+    final row = await (_db.select(
+      _db.transactionRows,
+    )..where((r) => r.id.equals(id))).getSingleOrNull();
+    return row == null ? null : _toDomain(row);
+  }
+
+  @override
+  Future<domain.Transaction?> getTransactionByClientTxId(String clientTxId) {
+    return _findByClientTxId(clientTxId);
   }
 
   @override
   Future<void> reverseTransaction(String transactionId) async {
-    await _db.transaction(() async {
-      final row = await (_db.select(
-        _db.transactionRows,
-      )..where((r) => r.id.equals(transactionId))).getSingle();
-      final original = _toDomain(row);
-      final reversal = buildReversal(
-        original,
-        newId: IdGenerator.generate(),
-        clientTxId: IdGenerator.generate(),
-        now: DateTime.now(),
-      );
-      await _db.into(_db.transactionRows).insert(_toCompanion(reversal));
-      await (_db.update(
-        _db.transactionRows,
-      )..where((r) => r.id.equals(transactionId))).write(
-        TransactionRowsCompanion(reversedByTxId: Value(reversal.id)),
-      );
-    });
+    try {
+      await _db.transaction(() async {
+        final row = await (_db.select(
+          _db.transactionRows,
+        )..where((r) => r.id.equals(transactionId))).getSingleOrNull();
+        if (row == null) {
+          throw TransactionNotFoundException(transactionId);
+        }
+        final original = _toDomain(row);
+        final reversal = buildReversal(
+          original,
+          newId: IdGenerator.generate(),
+          clientTxId: IdGenerator.generate(),
+          now: DateTime.now(),
+        );
+        await _db.into(_db.transactionRows).insert(_toCompanion(reversal));
+        await (_db.update(
+          _db.transactionRows,
+        )..where((r) => r.id.equals(transactionId))).write(
+          TransactionRowsCompanion(reversedByTxId: Value(reversal.id)),
+        );
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
   }
 
   /// Với INCOME, "người tiêu" = `destinationRefId`; với EXPENSE nguồn ví
@@ -161,80 +298,107 @@ class LocalTransactionRepository implements TransactionRepository {
     DateTime? transactionDate,
     String? statusId,
   }) async {
-    await _db.transaction(() async {
-      final existing = await _allTransactions();
-      final original = existing.firstWhere((t) => t.id == transactionId);
-
-      final amountChanged = amountMinor != null && amountMinor != original.amountMinor;
-      String? newSourceRefId;
-      String? newDestinationRefId;
-      var memberChanged = false;
-      if (memberRefId != null) {
-        final (targetSource, targetDestination) = _memberFieldTargets(original, memberRefId);
-        if (targetSource != null && targetSource != original.sourceRefId) {
-          newSourceRefId = targetSource;
-          memberChanged = true;
+    try {
+      await _db.transaction(() async {
+        final existing = await _allTransactions();
+        domain.Transaction? original;
+        for (final t in existing) {
+          if (t.id == transactionId) {
+            original = t;
+            break;
+          }
         }
-        if (targetDestination != null && targetDestination != original.destinationRefId) {
-          newDestinationRefId = targetDestination;
-          memberChanged = true;
+        if (original == null) {
+          throw TransactionNotFoundException(transactionId);
         }
-      }
 
-      if (amountChanged || memberChanged) {
-        // amountMinor hoặc người tiêu đổi — 2 field này ảnh hưởng balance,
-        // bắt buộc qua reversal ledger (mục 21). categoryId/note/
-        // transactionDate/statusId "đi kèm" luôn vào bản thay thế.
-        final result = buildCorrection(
-          original,
-          newAmountMinor: amountMinor ?? original.amountMinor,
-          newCategoryId: categoryId,
-          newNote: note,
-          newSourceRefId: newSourceRefId,
-          newDestinationRefId: newDestinationRefId,
-          newTransactionDate: transactionDate,
-          newStatusId: statusId,
-          reversalId: IdGenerator.generate(),
-          replacementId: IdGenerator.generate(),
-          clientTxId: IdGenerator.generate(),
-          now: DateTime.now(),
-        );
+        final amountChanged =
+            amountMinor != null && amountMinor != original.amountMinor;
+        String? newSourceRefId;
+        String? newDestinationRefId;
+        var memberChanged = false;
+        if (memberRefId != null) {
+          final (targetSource, targetDestination) = _memberFieldTargets(
+            original,
+            memberRefId,
+          );
+          if (targetSource != null && targetSource != original.sourceRefId) {
+            newSourceRefId = targetSource;
+            memberChanged = true;
+          }
+          if (targetDestination != null &&
+              targetDestination != original.destinationRefId) {
+            newDestinationRefId = targetDestination;
+            memberChanged = true;
+          }
+        }
 
-        // Áp hiệu ứng reversal trước để check số dư đúng với trạng thái SAU
-        // khi hoàn tác bản gốc (khớp Test 10: chỉ phần chênh lệch bị chặn).
-        final balances = computeAllPoolBalances(existing);
-        applyEffect(result.reversal, 1, balances);
-        _assertWontGoNegative(result.replacement, balances);
+        if (amountChanged || memberChanged) {
+          // amountMinor hoặc người tiêu đổi — 2 field này ảnh hưởng balance,
+          // bắt buộc qua reversal ledger (mục 21). categoryId/note/
+          // transactionDate/statusId "đi kèm" luôn vào bản thay thế.
+          final result = buildCorrection(
+            original,
+            newAmountMinor: amountMinor ?? original.amountMinor,
+            newCategoryId: categoryId,
+            newNote: note,
+            newSourceRefId: newSourceRefId,
+            newDestinationRefId: newDestinationRefId,
+            newTransactionDate: transactionDate,
+            newStatusId: statusId,
+            reversalId: IdGenerator.generate(),
+            replacementId: IdGenerator.generate(),
+            clientTxId: IdGenerator.generate(),
+            now: DateTime.now(),
+          );
 
-        await _db.into(_db.transactionRows).insert(_toCompanion(result.reversal));
-        await _db.into(_db.transactionRows).insert(_toCompanion(result.replacement));
+          // Áp hiệu ứng reversal trước để check số dư đúng với trạng thái SAU
+          // khi hoàn tác bản gốc (khớp Test 10: chỉ phần chênh lệch bị chặn).
+          final balances = computeAllPoolBalances(existing);
+          applyEffect(result.reversal, 1, balances);
+          _assertWontGoNegative(result.replacement, balances);
+
+          await _db
+              .into(_db.transactionRows)
+              .insert(_toCompanion(result.reversal));
+          await _db
+              .into(_db.transactionRows)
+              .insert(_toCompanion(result.replacement));
+          await (_db.update(
+            _db.transactionRows,
+          )..where((r) => r.id.equals(transactionId))).write(
+            TransactionRowsCompanion(reversedByTxId: Value(result.reversal.id)),
+          );
+          return;
+        }
+
+        // Không field nào ảnh hưởng balance đổi — update thẳng tại chỗ.
+        if (categoryId == null &&
+            note == null &&
+            transactionDate == null &&
+            statusId == null) {
+          return;
+        }
         await (_db.update(
           _db.transactionRows,
         )..where((r) => r.id.equals(transactionId))).write(
-          TransactionRowsCompanion(reversedByTxId: Value(result.reversal.id)),
+          TransactionRowsCompanion(
+            categoryId: categoryId != null
+                ? Value(categoryId)
+                : const Value.absent(),
+            note: note != null ? Value(note) : const Value.absent(),
+            transactionDate: transactionDate != null
+                ? Value(transactionDate)
+                : const Value.absent(),
+            statusId: statusId != null ? Value(statusId) : const Value.absent(),
+            statusUpdatedAt: statusId != null
+                ? Value(DateTime.now())
+                : const Value.absent(),
+          ),
         );
-        return;
-      }
-
-      // Không field nào ảnh hưởng balance đổi — update thẳng tại chỗ.
-      if (categoryId == null && note == null && transactionDate == null && statusId == null) {
-        return;
-      }
-      await (_db.update(
-        _db.transactionRows,
-      )..where((r) => r.id.equals(transactionId))).write(
-        TransactionRowsCompanion(
-          categoryId: categoryId != null ? Value(categoryId) : const Value.absent(),
-          note: note != null ? Value(note) : const Value.absent(),
-          transactionDate: transactionDate != null
-              ? Value(transactionDate)
-              : const Value.absent(),
-          statusId: statusId != null ? Value(statusId) : const Value.absent(),
-          statusUpdatedAt: statusId != null
-              ? Value(DateTime.now())
-              : const Value.absent(),
-        ),
-      );
-    });
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
   }
 }

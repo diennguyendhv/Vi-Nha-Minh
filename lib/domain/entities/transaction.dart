@@ -34,7 +34,7 @@ class Transaction {
     this.reversedByTxId,
     required this.clientTxId,
     this.version = 1,
-  }) : assert(amountMinor > 0, 'amountMinor luôn phải dương (Invariant 12)');
+  });
 
   final String id;
   final TransactionType type;
@@ -56,7 +56,12 @@ class Transaction {
   final String? destinationRefId;
 
   /// Luôn dương — chiều +/- suy ra từ vị trí source/destination
-  /// (Invariant 12), không lưu số âm.
+  /// (Invariant 12), không lưu số âm. **Không enforce bằng `assert()` ở
+  /// constructor này** (từng có, đã bỏ — assert bị strip ở release build
+  /// và không testable, vì test chạy ở chế độ bật assert nên object không
+  /// hợp lệ sẽ không bao giờ construct được để test đường ném lỗi). Validate
+  /// thật nằm ở `validateNewTransaction` (`domain/engine/financial_engine.dart`),
+  /// caller (repository) BẮT BUỘC gọi hàm đó trước khi ghi.
   final int amountMinor;
 
   final String currency;

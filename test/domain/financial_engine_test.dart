@@ -5,6 +5,7 @@ import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
+import 'package:vi_nha_minh/domain/errors/domain_exceptions.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_pool_balance.dart';
 
 int _seq = 0;
@@ -340,6 +341,332 @@ void main() {
       );
       final total = computeMemberSavingsTotal(FamilyMember.vo, [stocksTopup, bankTopup]);
       expect(total, 5000000);
+    });
+  });
+
+  group('validateNewTransaction — Invariant 12 (amount) & 15 (source≠destination)', () {
+    test('amount = 0 bị reject bằng InvalidAmountException', () {
+      final tx = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 0,
+      );
+      expect(() => validateNewTransaction(tx), throwsA(isA<InvalidAmountException>()));
+    });
+
+    test('amount âm bị reject bằng InvalidAmountException', () {
+      final tx = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: -50000,
+      );
+      expect(() => validateNewTransaction(tx), throwsA(isA<InvalidAmountException>()));
+    });
+
+    test('amount dương hợp lệ không ném lỗi gì', () {
+      final tx = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 100000,
+      );
+      expect(() => validateNewTransaction(tx), returnsNormally);
+    });
+
+    test('MEMBER_TO_MEMBER người nhận = người gửi bị reject (source = destination)', () {
+      final tx = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.memberToMember,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 100000,
+      );
+      expect(() => validateNewTransaction(tx), throwsA(isA<SameSourceDestinationException>()));
+    });
+
+    test('SAVINGS_CONVERT cùng loại tài sản (nguồn = đích) bị reject', () {
+      final tx = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.savingsConvert,
+        sourceKind: PoolKind.memberSavingsAsset,
+        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        amountMinor: 500000,
+      );
+      expect(() => validateNewTransaction(tx), throwsA(isA<SameSourceDestinationException>()));
+    });
+
+    test('SAVINGS_CONVERT khác loại tài sản (hợp lệ) không ném lỗi', () {
+      final tx = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.savingsConvert,
+        sourceKind: PoolKind.memberSavingsAsset,
+        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        destinationKind: PoolKind.memberSavingsAsset,
+        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        amountMinor: 500000,
+      );
+      expect(() => validateNewTransaction(tx), returnsNormally);
+    });
+  });
+
+  group('Reversal — chặn hoàn tác 2 lần (Invariant 13)', () {
+    test('reverse lần đầu thành công', () {
+      final original = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+      );
+      final reversal = buildReversal(
+        original,
+        newId: 'rev-1',
+        clientTxId: 'client-rev-1',
+        now: DateTime(2026, 9, 5),
+      );
+      expect(reversal.reversalOfTxId, original.id);
+    });
+
+    test('reverse lần thứ 2 trên bản đã REVERSED bị AlreadyReversedException, balance không đổi thêm', () {
+      final original = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+      );
+      final firstReversal = buildReversal(
+        original,
+        newId: 'rev-1',
+        clientTxId: 'client-rev-1',
+        now: DateTime(2026, 9, 5),
+      );
+      // Bản gốc giờ đã REVERSED (giống repository set reversedByTxId sau khi ghi bản reversal).
+      final reversedOriginal = original.copyWith(reversedByTxId: firstReversal.id);
+
+      expect(
+        () => buildReversal(
+          reversedOriginal,
+          newId: 'rev-2',
+          clientTxId: 'client-rev-2',
+          now: DateTime(2026, 9, 6),
+        ),
+        throwsA(isA<AlreadyReversedException>()),
+      );
+
+      // Balance chỉ tính đúng 1 lần hoàn tác (gốc + reversal đầu tiên), không có rev-2.
+      final balances = computeAllPoolBalances([reversedOriginal, firstReversal]);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), 0);
+    });
+
+    test('buildCorrection trên bản đã REVERSED cũng bị AlreadyReversedException (Invariant 14)', () {
+      final original = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+      );
+      final firstReversal = buildReversal(
+        original,
+        newId: 'rev-1',
+        clientTxId: 'client-rev-1',
+        now: DateTime(2026, 9, 5),
+      );
+      final reversedOriginal = original.copyWith(reversedByTxId: firstReversal.id);
+
+      expect(
+        () => buildCorrection(
+          reversedOriginal,
+          newAmountMinor: 800000,
+          reversalId: 'rev-2',
+          replacementId: 'repl-2',
+          clientTxId: 'client-correct-2',
+          now: DateTime(2026, 9, 6),
+        ),
+        throwsA(isA<AlreadyReversedException>()),
+      );
+    });
+  });
+
+  group('Sửa nhiều lần liên tiếp (Invariant 14) — 100 → 150 → 200 → 250', () {
+    test('mỗi lần sửa phải thao tác trên bản mới nhất, balance cuối khớp đúng 250k', () {
+      final original = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 100000,
+      );
+
+      // Sửa lần 1: 100k -> 150k, thao tác trên `original`.
+      final step1 = buildCorrection(
+        original,
+        newAmountMinor: 150000,
+        reversalId: 'rev-1',
+        replacementId: 'repl-1',
+        clientTxId: 'client-1',
+        now: DateTime(2026, 9, 2),
+      );
+      final originalAfterStep1 = original.copyWith(reversedByTxId: step1.reversal.id);
+
+      // Sửa lần 2: 150k -> 200k, PHẢI thao tác trên step1.replacement (bản mới nhất).
+      final step2 = buildCorrection(
+        step1.replacement,
+        newAmountMinor: 200000,
+        reversalId: 'rev-2',
+        replacementId: 'repl-2',
+        clientTxId: 'client-2',
+        now: DateTime(2026, 9, 3),
+      );
+      final replacement1AfterStep2 = step1.replacement.copyWith(reversedByTxId: step2.reversal.id);
+
+      // Sửa lần 3: 200k -> 250k, thao tác trên step2.replacement.
+      final step3 = buildCorrection(
+        step2.replacement,
+        newAmountMinor: 250000,
+        reversalId: 'rev-3',
+        replacementId: 'repl-3',
+        clientTxId: 'client-3',
+        now: DateTime(2026, 9, 4),
+      );
+      final replacement2AfterStep3 = step2.replacement.copyWith(reversedByTxId: step3.reversal.id);
+
+      final allRecords = [
+        originalAfterStep1,
+        step1.reversal,
+        replacement1AfterStep2,
+        step2.reversal,
+        replacement2AfterStep3,
+        step3.reversal,
+        step3.replacement,
+      ];
+
+      // 7 bản ghi tổng cộng (1 gốc + 3 x (reversal+replacement) trừ bản thay thế cuối chưa bị reverse).
+      expect(allRecords.length, 7);
+
+      final balances = computeAllPoolBalances(allRecords);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), -250000);
+
+      // Chỉ đúng 1 bản hiển thị: bản thay thế cuối cùng (250k).
+      final visible = allRecords.where(isVisible).toList();
+      expect(visible.length, 1);
+      expect(visible.single.amountMinor, 250000);
+      expect(visible.single.correctsTxId, step2.replacement.id);
+    });
+
+    test('sửa nhầm trên bản đã lỗi thời (không phải mới nhất) bị chặn (Invariant 14)', () {
+      final original = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 100000,
+      );
+      final step1 = buildCorrection(
+        original,
+        newAmountMinor: 150000,
+        reversalId: 'rev-1',
+        replacementId: 'repl-1',
+        clientTxId: 'client-1',
+        now: DateTime(2026, 9, 2),
+      );
+      final originalAfterStep1 = original.copyWith(reversedByTxId: step1.reversal.id);
+
+      // Cố sửa tiếp trên `originalAfterStep1` (đã REVERSED) thay vì `step1.replacement` — phải bị chặn.
+      expect(
+        () => buildCorrection(
+          originalAfterStep1,
+          newAmountMinor: 999000,
+          reversalId: 'rev-x',
+          replacementId: 'repl-x',
+          clientTxId: 'client-x',
+          now: DateTime(2026, 9, 3),
+        ),
+        throwsA(isA<AlreadyReversedException>()),
+      );
+    });
+  });
+
+  group('Status không ảnh hưởng balance (Invariant 9)', () {
+    test('2 giao dịch giống hệt nhau, chỉ khác statusId, cho cùng 1 hiệu ứng balance', () {
+      final withStatusA = _tx(
+        type: TransactionType.expense,
+        categoryId: 'cho_di',
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+        statusId: 'cho_di_chua_chuan_bi',
+      );
+      final withStatusB = _tx(
+        type: TransactionType.expense,
+        categoryId: 'cho_di',
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+        statusId: 'cho_di_da_gui',
+      );
+      final balancesA = computeAllPoolBalances([withStatusA]);
+      final balancesB = computeAllPoolBalances([withStatusB]);
+      expect(
+        poolBalance(balancesA, PoolKind.memberAvailable, 'vo'),
+        poolBalance(balancesB, PoolKind.memberAvailable, 'vo'),
+      );
+    });
+
+    test('đổi statusId qua copyWith không kích hoạt applyEffect nào khác', () {
+      final tx = _tx(
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+        statusId: 'step_0',
+      );
+      final changedStatus = tx.copyWith(statusId: 'step_1');
+      final balancesBefore = computeAllPoolBalances([tx]);
+      final balancesAfter = computeAllPoolBalances([changedStatus]);
+      expect(
+        poolBalance(balancesAfter, PoolKind.memberAvailable, 'vo'),
+        poolBalance(balancesBefore, PoolKind.memberAvailable, 'vo'),
+      );
+    });
+  });
+
+  group('isSameLogicalTransaction — currency là 1 phần logical identity (Phase 4.1)', () {
+    Transaction incomeTx({required String currency}) {
+      return Transaction(
+        id: 'tx-currency-test',
+        type: TransactionType.income,
+        categoryId: 'thu_nhap',
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 100000,
+        currency: currency,
+        transactionDate: DateTime(2026, 9, 1),
+        createdAt: DateTime(2026, 9, 1),
+        clientTxId: 'client-currency-test',
+      );
+    }
+
+    test('C — cùng currency → coi là cùng logical transaction', () {
+      expect(isSameLogicalTransaction(incomeTx(currency: 'VND'), incomeTx(currency: 'VND')), isTrue);
+    });
+
+    test('C — khác currency (mọi field khác giống hệt) → KHÔNG phải cùng logical transaction', () {
+      expect(isSameLogicalTransaction(incomeTx(currency: 'VND'), incomeTx(currency: 'USD')), isFalse);
     });
   });
 }

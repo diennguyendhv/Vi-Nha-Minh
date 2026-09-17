@@ -64,6 +64,10 @@ dev_dependencies:
 
   drift_dev: ^2.21.0
   build_runner: ^2.4.13
+  # Dùng trực tiếp trong test để dựng fixture schema v3 cho persistence test
+  # migration (test/data/local/app_database_test.dart) — vốn chỉ là
+  # transitive dependency của sqlite3_flutter_libs/drift.
+  sqlite3: ^3.5.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
