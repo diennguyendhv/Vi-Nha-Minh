@@ -38,6 +38,7 @@ typedef _TransactionIntent = ({
   DateTime transactionDate,
   String note,
   String? statusId,
+  String? recoveryOfTxId,
 });
 
 /// Màn "Thêm giao dịch" (`docs/design.html` màn 09) — nơi tạo giao dịch DUY
@@ -53,6 +54,7 @@ Future<void> showAddTransactionSheet(
   SavingsAction? initialSavingsAction,
   String? initialSavingsAssetTypeId,
   FamilyMember? initialMember,
+  Transaction? recoveryTarget,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -65,6 +67,7 @@ Future<void> showAddTransactionSheet(
       initialSavingsAction: initialSavingsAction,
       initialSavingsAssetTypeId: initialSavingsAssetTypeId,
       initialMember: initialMember,
+      recoveryTarget: recoveryTarget,
     ),
   );
 }
@@ -82,6 +85,8 @@ enum EntryType { thu, chi, chuyen }
 
 enum TransferSubKind { member, fund, savings }
 
+enum FundAction { topup, withdraw }
+
 enum SavingsAction { topup, withdraw, convert }
 
 class AddTransactionSheet extends ConsumerStatefulWidget {
@@ -93,6 +98,7 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
     this.initialSavingsAction,
     this.initialSavingsAssetTypeId,
     this.initialMember,
+    this.recoveryTarget,
   });
 
   final EntryType initialType;
@@ -102,13 +108,22 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
   final String? initialSavingsAssetTypeId;
   final FamilyMember? initialMember;
 
+  /// Phase 8.6 — khác null khi sheet mở ở chế độ "Hoàn tiền / Thu hồi" cho
+  /// ĐÚNG giao dịch Chi này (mở từ nút trên Transaction Detail). Khoá loại
+  /// giao dịch = Thu và category = `hoanTienThuHoi`; người nhận/số tiền/ghi
+  /// chú/ngày vẫn tự do — người dùng không cần biết `TransactionType.income`/
+  /// `excludeFromTotals`/`recoveryOfTxId` là gì (mục 12).
+  final Transaction? recoveryTarget;
+
   @override
   ConsumerState<AddTransactionSheet> createState() =>
       _AddTransactionSheetState();
 }
 
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
-  late EntryType _entryType = widget.initialType;
+  bool get _isRecoveryMode => widget.recoveryTarget != null;
+  late EntryType _entryType =
+      widget.recoveryTarget != null ? EntryType.thu : widget.initialType;
   String? _categoryId;
   late FamilyMember _member = widget.initialMember ?? FamilyMember.vo;
   String? _statusId;
@@ -123,6 +138,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       widget.initialTransferSubKind == TransferSubKind.fund
       ? widget.initialFundId
       : null;
+  FundAction _fundAction = FundAction.topup;
   late SavingsAction _savingsAction =
       widget.initialSavingsAction ?? SavingsAction.topup;
   late String? _savingsAssetTypeId = widget.initialSavingsAssetTypeId;
@@ -223,6 +239,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               transactionDate: intent.transactionDate,
               note: intent.note,
               statusId: intent.statusId,
+              recoveryOfTxId: intent.recoveryOfTxId,
             );
         _pendingCommand = command;
         _pendingIntent = intent;
@@ -270,6 +287,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     if (error is ClientTxIdConflictException) {
       return 'Giao dịch bị xung đột, vui lòng thử lưu lại.';
     }
+    if (error is InvalidRecoveryTargetException) {
+      return 'Giao dịch gốc không còn phù hợp để hoàn tiền/thu hồi (có thể đã bị xoá hoặc thay đổi) — vui lòng thử lại.';
+    }
     if (error is PersistenceConstraintException) {
       return 'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.';
     }
@@ -287,6 +307,27 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   _TransactionIntent? _buildLogicalIntent(List<Category> categories) {
     if (_amount <= 0) return null;
 
+    // Phase 8.6 — chế độ "Hoàn tiền / Thu hồi": intent riêng, KHÔNG đi qua
+    // category picker thường (khoá cứng `hoanTienThuHoi`), gắn thêm
+    // `recoveryOfTxId` trỏ về đúng giao dịch Chi gốc đã mở sheet này.
+    if (_isRecoveryMode) {
+      final target = widget.recoveryTarget!;
+      return (
+        type: TransactionType.income,
+        transferKind: null,
+        categoryId: DefaultCategories.hoanTienThuHoi.id,
+        sourceKind: PoolKind.external,
+        sourceRefId: null,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: _member.name,
+        amountMinor: _amount,
+        transactionDate: _transactionDate,
+        note: _note,
+        statusId: null,
+        recoveryOfTxId: target.id,
+      );
+    }
+
     switch (_entryType) {
       case EntryType.thu:
         final category = _findCategory(categories, _categoryId);
@@ -303,6 +344,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           transactionDate: _transactionDate,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
+          recoveryOfTxId: null,
         );
 
       case EntryType.chi:
@@ -321,6 +363,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           transactionDate: _transactionDate,
           note: _note,
           statusId: category.hasStatus ? _statusId : null,
+          recoveryOfTxId: null,
         );
 
       case EntryType.chuyen:
@@ -339,23 +382,43 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               transactionDate: _transactionDate,
               note: _note,
               statusId: null,
+              recoveryOfTxId: null,
             );
           case TransferSubKind.fund:
             final fundId = _transferFundId;
             if (fundId == null) return null;
-            return (
-              type: TransactionType.transfer,
-              transferKind: TransferKind.fundTopup,
-              categoryId: DefaultCategories.napQuy.id,
-              sourceKind: PoolKind.memberAvailable,
-              sourceRefId: _member.name,
-              destinationKind: PoolKind.fund,
-              destinationRefId: fundId,
-              amountMinor: _amount,
-              transactionDate: _transactionDate,
-              note: _note,
-              statusId: null,
-            );
+            switch (_fundAction) {
+              case FundAction.topup:
+                return (
+                  type: TransactionType.transfer,
+                  transferKind: TransferKind.fundTopup,
+                  categoryId: DefaultCategories.napQuy.id,
+                  sourceKind: PoolKind.memberAvailable,
+                  sourceRefId: _member.name,
+                  destinationKind: PoolKind.fund,
+                  destinationRefId: fundId,
+                  amountMinor: _amount,
+                  transactionDate: _transactionDate,
+                  note: _note,
+                  statusId: null,
+                  recoveryOfTxId: null,
+                );
+              case FundAction.withdraw:
+                return (
+                  type: TransactionType.transfer,
+                  transferKind: TransferKind.fundWithdraw,
+                  categoryId: DefaultCategories.napQuy.id,
+                  sourceKind: PoolKind.fund,
+                  sourceRefId: fundId,
+                  destinationKind: PoolKind.memberAvailable,
+                  destinationRefId: _member.name,
+                  amountMinor: _amount,
+                  transactionDate: _transactionDate,
+                  note: _note,
+                  statusId: null,
+                  recoveryOfTxId: null,
+                );
+            }
           case TransferSubKind.savings:
             final member = _member;
             final assetTypeId = _savingsAssetTypeId;
@@ -374,6 +437,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transactionDate: _transactionDate,
                   note: _note,
                   statusId: null,
+                  recoveryOfTxId: null,
                 );
               case SavingsAction.withdraw:
                 return (
@@ -388,6 +452,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transactionDate: _transactionDate,
                   note: _note,
                   statusId: null,
+                  recoveryOfTxId: null,
                 );
               case SavingsAction.convert:
                 final targetId = _savingsTargetAssetTypeId;
@@ -404,6 +469,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transactionDate: _transactionDate,
                   note: _note,
                   statusId: null,
+                  recoveryOfTxId: null,
                 );
             }
         }
@@ -456,9 +522,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Thêm giao dịch',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    Text(
+                      _isRecoveryMode ? 'Hoàn tiền / Thu hồi' : 'Thêm giao dịch',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
@@ -476,12 +542,16 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
                   children: [
-                    const _SectionLabel('Loại giao dịch'),
-                    const SizedBox(height: 8),
-                    _TypeSegmented(
-                      value: _entryType,
-                      onChanged: (t) => setState(() => _entryType = t),
-                    ),
+                    if (_isRecoveryMode)
+                      _RecoveryTargetBanner(target: widget.recoveryTarget!)
+                    else ...[
+                      const _SectionLabel('Loại giao dịch'),
+                      const SizedBox(height: 8),
+                      _TypeSegmented(
+                        value: _entryType,
+                        onChanged: (t) => setState(() => _entryType = t),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Center(
                       child: Text(
@@ -569,6 +639,16 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     required List<Transaction> transactions,
     required List<SavingsAssetType> assetTypes,
   }) {
+    if (_isRecoveryMode) {
+      return [
+        const _SectionLabel('Người nhận'),
+        const SizedBox(height: 8),
+        _MemberToggle(
+          member: _member,
+          onChanged: (m) => setState(() => _member = m),
+        ),
+      ];
+    }
     switch (_entryType) {
       case EntryType.thu:
         final category = _findCategory(incomeCategories, _categoryId);
@@ -683,21 +763,29 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ),
         ];
       case TransferSubKind.fund:
+        final isWithdraw = _fundAction == FundAction.withdraw;
         return [
-          const _SectionLabel('Người nạp'),
+          const _SectionLabel('Hành động'),
+          const SizedBox(height: 8),
+          _FundActionSegmented(
+            value: _fundAction,
+            onChanged: (v) => setState(() => _fundAction = v),
+          ),
+          const SizedBox(height: 12),
+          _SectionLabel(isWithdraw ? 'Người nhận' : 'Người nạp'),
           const SizedBox(height: 8),
           _MemberToggle(
             member: _member,
             onChanged: (m) => setState(() => _member = m),
           ),
           const SizedBox(height: 12),
-          const _SectionLabel('Quỹ đích'),
+          _SectionLabel(isWithdraw ? 'Quỹ nguồn' : 'Quỹ đích'),
           const SizedBox(height: 8),
           _FundPickRow(
             walletLabel: null,
             funds: funds,
             selectedFundId: _transferFundId,
-            amount: 0,
+            amount: isWithdraw ? _amount : 0,
             transactions: transactions,
             onSelect: (fundId) => setState(() => _transferFundId = fundId),
           ),
@@ -742,6 +830,51 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ],
         ];
     }
+  }
+}
+
+/// Phase 8.6 — banner hiển thị ĐÚNG giao dịch Chi gốc đang được hoàn tiền/
+/// thu hồi, khi sheet mở ở chế độ recovery. Chỉ hiển thị số tiền + ghi chú
+/// gốc — không lộ bất kỳ thuật ngữ kỹ thuật nào (`TransactionType.income`/
+/// `excludeFromTotals`/`recoveryOfTxId`, mục 12).
+class _RecoveryTargetBanner extends StatelessWidget {
+  const _RecoveryTargetBanner({required this.target});
+
+  final Transaction target;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'HOÀN TIỀN / THU HỒI CHO',
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+              letterSpacing: 0.4,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            target.note.isEmpty ? 'Giao dịch chi' : target.note,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+          Text(
+            Formatters.amount(target.amountMinor),
+            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -804,6 +937,28 @@ class _TransferSubSegmented extends StatelessWidget {
     return _Segmented<TransferSubKind>(
       value: value,
       options: TransferSubKind.values,
+      labelOf: (t) => _labels[t]!,
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _FundActionSegmented extends StatelessWidget {
+  const _FundActionSegmented({required this.value, required this.onChanged});
+
+  final FundAction value;
+  final ValueChanged<FundAction> onChanged;
+
+  static const _labels = {
+    FundAction.topup: 'Nạp vào quỹ',
+    FundAction.withdraw: 'Rút khỏi quỹ',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return _Segmented<FundAction>(
+      value: value,
+      options: FundAction.values,
       labelOf: (t) => _labels[t]!,
       onChanged: onChanged,
     );

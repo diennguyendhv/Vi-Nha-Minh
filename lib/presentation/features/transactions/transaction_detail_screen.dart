@@ -9,8 +9,10 @@ import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
+import '../../../domain/usecases/compute_recovery_summary.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../add_transaction/add_transaction_sheet.dart';
 
 /// Màn "Chi tiết giao dịch" (`docs/design.html` màn 11) — sửa được toàn bộ:
 /// hạng mục (trong cùng loại Thu/Chi/Chuyển gốc), số tiền, ghi chú, người
@@ -129,6 +131,14 @@ class _TransactionDetailScreenState
     }
   }
 
+  /// Phase 8.6 mục 12 — mở lại ĐÚNG 1 nơi tạo giao dịch duy nhất
+  /// (`add_transaction_sheet.dart`), truyền `recoveryTarget` để sheet tự
+  /// khoá loại giao dịch/category, không dựng form/pipeline riêng nào ở
+  /// đây.
+  void _openRecoverySheet(Transaction current) {
+    showAddTransactionSheet(context, recoveryTarget: current);
+  }
+
   /// Reverse — Phase 7 mục 6: gọi thẳng `ReverseTransactionUseCase`, KHÔNG
   /// tự build bản hoàn tác/tính hiệu ứng ngược nào ở Presentation. Không
   /// xoá cứng — Repository (frozen) tạo bản reversal mới, đánh dấu
@@ -229,6 +239,15 @@ class _TransactionDetailScreenState
     final canEditCategory = transaction.type != TransactionType.transfer;
     final canEditMember = _currentMember(transaction) != null;
 
+    // Phase 8.6 — chỉ giao dịch Chi CHƯA từng là 1 khoản recovery mới được
+    // phép làm target ("Hoàn tiền/Thu hồi") — khớp đúng
+    // `validateRecoveryRelation` (target phải là expense, không phải
+    // chain). Giao dịch đã bị hoàn tác không tới được đây (return sớm ở
+    // trên) nên không cần check lại `reversedByTxId`.
+    final canRecover =
+        transaction.type == TransactionType.expense && transaction.recoveryOfTxId == null;
+    final recoverySummary = computeRecoverySummary(transaction, transactions);
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Chi tiết giao dịch · ${Formatters.dayMonth(transaction.transactionDate)}'),
@@ -290,6 +309,10 @@ class _TransactionDetailScreenState
             controller: _noteController,
             decoration: const InputDecoration(border: OutlineInputBorder()),
           ),
+          if (recoverySummary.totalRecovered > 0) ...[
+            const SizedBox(height: 16),
+            _RecoverySummaryCard(summary: recoverySummary),
+          ],
           if (canEditMember) ...[
             const SizedBox(height: 16),
             const Text(
@@ -356,6 +379,18 @@ class _TransactionDetailScreenState
             ),
             child: Text(_submitting ? 'Đang lưu...' : 'Lưu thay đổi'),
           ),
+          if (canRecover) ...[
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: _submitting ? null : () => _openRecoverySheet(transaction),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.accent,
+                side: const BorderSide(color: AppColors.accent),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Hoàn tiền / Thu hồi'),
+            ),
+          ],
           const SizedBox(height: 10),
           OutlinedButton(
             onPressed: _submitting ? null : () => _delete(transaction),
@@ -365,6 +400,59 @@ class _TransactionDetailScreenState
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: const Text('Xoá giao dịch'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Phase 8.6 mục 13 — "Mua iPad 10.000.000đ / Đã thu hồi 2.800.000đ / Chi
+/// phí ròng 7.200.000đ". Chỉ hiện khi `totalRecovered > 0` (đã có ít nhất 1
+/// recovery đang hiệu lực) — netCost là derived metric HIỂN THỊ, không sửa
+/// `amountMinor` của giao dịch gốc ở đâu cả.
+class _RecoverySummaryCard extends StatelessWidget {
+  const _RecoverySummaryCard({required this.summary});
+
+  final RecoverySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.incomeTile,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                summary.recoveries.length > 1
+                    ? 'Đã thu hồi · ${summary.recoveries.length} giao dịch'
+                    : 'Đã thu hồi',
+                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+              Text(
+                Formatters.amount(summary.totalRecovered),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Chi phí ròng', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+              Text(
+                Formatters.amount(summary.netCost),
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+              ),
+            ],
           ),
         ],
       ),

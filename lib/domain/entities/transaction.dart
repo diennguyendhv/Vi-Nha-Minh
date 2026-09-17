@@ -32,6 +32,7 @@ class Transaction {
     this.reversalOfTxId,
     this.correctsTxId,
     this.reversedByTxId,
+    this.recoveryOfTxId,
     required this.clientTxId,
     this.version = 1,
   });
@@ -86,6 +87,18 @@ class Transaction {
   /// sách/rollup mặc định phải lọc `reversedByTxId == null`.
   final String? reversedByTxId;
 
+  /// Phase 8.6 — transaction này là 1 khoản THU HỒI/HOÀN TIỀN liên kết tới
+  /// `Transaction.id` nào (KHÔNG phải hoàn tác — xem
+  /// `docs/financial-core-v2.md` mục 21 vs Phase 8.6): 1 sự kiện tài chính
+  /// MỚI (vd bán lại đồ đã mua, hoàn tiền một phần), hiển thị bình thường
+  /// (không bị `isVisible()` ẩn), hiệu ứng CỘNG THÊM chứ không triệt tiêu
+  /// giao dịch gốc. `applyEffect`/`typeFromEndpoints` hoàn toàn không đọc
+  /// field này — chỉ là metadata quan hệ, không tạo nhánh tính toán riêng.
+  /// null = transaction gốc (không phải recovery). 1 original → 0..N
+  /// recovery (query ngược bằng `recoveryOfTxId == original.id`, không lưu
+  /// danh sách recovery IDs trên bản gốc).
+  final String? recoveryOfTxId;
+
   /// Idempotency key chống double-submit (bấm Lưu 2 lần).
   final String clientTxId;
 
@@ -121,6 +134,7 @@ class Transaction {
       reversalOfTxId: reversalOfTxId,
       correctsTxId: correctsTxId,
       reversedByTxId: reversedByTxId ?? this.reversedByTxId,
+      recoveryOfTxId: recoveryOfTxId,
       clientTxId: clientTxId,
       version: version ?? this.version,
     );

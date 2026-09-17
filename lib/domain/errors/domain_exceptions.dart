@@ -224,3 +224,42 @@ class PersistenceException implements Exception {
   @override
   String toString() => 'PersistenceException: $message (cause: $cause)';
 }
+
+/// Phase 8.6 — lý do 1 giao dịch `recoveryOfTxId` bị từ chối. Validate ở
+/// `validateRecoveryRelation` (Financial Engine), Repository gọi trước khi
+/// ghi (giống cách `_assertWontGoNegative` cần đọc DB nên nằm ở Repository,
+/// không phải `validateNewTransaction` thuần).
+enum InvalidRecoveryReason {
+  /// Target không phải `TransactionType.expense` — minimum-safe rule khớp
+  /// 100% use case đã nêu (mua đồ/ứng tiền hộ), không tự mở rộng thêm.
+  targetNotExpense,
+
+  /// Target CHÍNH NÓ đã là 1 recovery (`target.recoveryOfTxId != null`) —
+  /// cấm recovery chain, recovery phải trỏ THẲNG về giao dịch gốc.
+  targetIsRecovery,
+
+  /// Target đã bị hoàn tác (`target.reversedByTxId != null`) — hiệu ứng gốc
+  /// coi như chưa từng xảy ra, thu hồi 1 khoản chi "không tồn tại" là vô
+  /// nghĩa.
+  targetReversed,
+
+  /// `recoveryOfTxId == id` của chính giao dịch đang tạo.
+  selfLink,
+
+  /// `recoveryOfTxId` trỏ tới 1 id không tồn tại trong DB.
+  targetNotFound,
+}
+
+class InvalidRecoveryTargetException implements Exception {
+  const InvalidRecoveryTargetException({
+    required this.reason,
+    required this.targetId,
+  });
+
+  final InvalidRecoveryReason reason;
+  final String targetId;
+
+  @override
+  String toString() =>
+      'InvalidRecoveryTargetException($reason): target=$targetId';
+}

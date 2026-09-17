@@ -45,6 +45,7 @@ class LocalTransactionRepository implements TransactionRepository {
       reversalOfTxId: row.reversalOfTxId,
       correctsTxId: row.correctsTxId,
       reversedByTxId: row.reversedByTxId,
+      recoveryOfTxId: row.recoveryOfTxId,
       clientTxId: row.clientTxId,
       version: row.version,
     );
@@ -70,6 +71,7 @@ class LocalTransactionRepository implements TransactionRepository {
       reversalOfTxId: Value(t.reversalOfTxId),
       correctsTxId: Value(t.correctsTxId),
       reversedByTxId: Value(t.reversedByTxId),
+      recoveryOfTxId: Value(t.recoveryOfTxId),
       clientTxId: t.clientTxId,
       version: Value(t.version),
     );
@@ -200,6 +202,36 @@ class LocalTransactionRepository implements TransactionRepository {
         }
 
         final existing = await _allTransactions();
+
+        // Phase 8.6 — recovery relation validate TRƯỚC balance check: cần
+        // đọc target từ DB (hàm domain thuần không tự tra được), nhưng phải
+        // chặn SỚM trước khi insert, không phải sau.
+        if (transaction.recoveryOfTxId != null) {
+          // Self-link kiểm tra TRƯỚC tra DB: target = chính transaction này
+          // (chưa insert) nên sẽ không bao giờ tìm thấy trong `existing`,
+          // phải bắt case này riêng trước khi coi là "target không tồn tại".
+          if (transaction.recoveryOfTxId == transaction.id) {
+            throw InvalidRecoveryTargetException(
+              reason: InvalidRecoveryReason.selfLink,
+              targetId: transaction.id,
+            );
+          }
+          domain.Transaction? target;
+          for (final t in existing) {
+            if (t.id == transaction.recoveryOfTxId) {
+              target = t;
+              break;
+            }
+          }
+          if (target == null) {
+            throw InvalidRecoveryTargetException(
+              reason: InvalidRecoveryReason.targetNotFound,
+              targetId: transaction.recoveryOfTxId!,
+            );
+          }
+          validateRecoveryRelation(transaction, target);
+        }
+
         final balances = computeAllPoolBalances(existing);
         _assertWontGoNegative(transaction, balances);
 

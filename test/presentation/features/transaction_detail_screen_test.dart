@@ -3,16 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/application/currency/currency_context.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
+import 'package:vi_nha_minh/core/constants/default_funds.dart';
+import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
+import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
+import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/errors/domain_exceptions.dart';
 import 'package:vi_nha_minh/domain/repositories/category_repository.dart';
+import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
+import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/currency_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 /// Ghi lại toàn bộ tham số 1 lần gọi `updateTransaction`.
@@ -102,9 +112,15 @@ class _FakeTransactionRepository implements TransactionRepository {
     }
   }
 
+  final List<Transaction> addedTransactions = [];
+
   @override
-  Future<Transaction> addTransaction(Transaction transaction) async =>
-      throw UnimplementedError();
+  Future<Transaction> addTransaction(Transaction transaction) async {
+    addedTransactions.add(transaction);
+    _current = [..._current, transaction];
+    _controller.add(_current);
+    return transaction;
+  }
 
   @override
   Future<Transaction?> getTransactionById(String id) async => null;
@@ -127,6 +143,39 @@ class _StaticCategoryRepository implements CategoryRepository {
   Future<void> updateCategory(Category category) async {}
   @override
   Future<void> softDeleteCategory(String categoryId) async {}
+}
+
+class _StaticFundRepository implements FundRepository {
+  _StaticFundRepository(this._funds);
+  final List<Fund> _funds;
+  @override
+  Stream<List<Fund>> watchFunds() => Stream.value(_funds);
+  @override
+  Future<void> addFund(Fund fund) async {}
+  @override
+  Future<void> updateFund(Fund fund) async {}
+  @override
+  Future<void> softDeleteFund(String fundId) async {}
+}
+
+class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
+  _StaticSavingsAssetTypeRepository(this._assetTypes);
+  final List<SavingsAssetType> _assetTypes;
+  @override
+  Stream<List<SavingsAssetType>> watchAssetTypes() => Stream.value(_assetTypes);
+  @override
+  Future<void> addAssetType(SavingsAssetType assetType) async {}
+  @override
+  Future<void> updateAssetType(SavingsAssetType assetType) async {}
+  @override
+  Future<void> softDeleteAssetType(String assetTypeId) async {}
+}
+
+class _TestCurrencyContext implements CurrencyContext {
+  const _TestCurrencyContext(this.value);
+  final String value;
+  @override
+  Future<String> getBaseCurrencyCode() async => value;
 }
 
 Transaction _expenseTx({
@@ -154,6 +203,41 @@ Transaction _expenseTx({
   );
 }
 
+Transaction _incomeTx({String id = 'income1', int amountMinor = 100000}) {
+  return Transaction(
+    id: id,
+    type: TransactionType.income,
+    categoryId: 'thu_nhap',
+    sourceKind: PoolKind.external,
+    destinationKind: PoolKind.memberAvailable,
+    destinationRefId: 'vo',
+    amountMinor: amountMinor,
+    transactionDate: DateTime(2026, 9, 1),
+    createdAt: DateTime(2026, 9, 1),
+    clientTxId: 'client-$id',
+  );
+}
+
+Transaction _recoveryTx({
+  String id = 'recovery1',
+  required String recoveryOfTxId,
+  int amountMinor = 450000,
+}) {
+  return Transaction(
+    id: id,
+    type: TransactionType.income,
+    categoryId: 'hoan_tien_thu_hoi',
+    sourceKind: PoolKind.external,
+    destinationKind: PoolKind.memberAvailable,
+    destinationRefId: 'chong',
+    amountMinor: amountMinor,
+    recoveryOfTxId: recoveryOfTxId,
+    transactionDate: DateTime(2026, 9, 2),
+    createdAt: DateTime(2026, 9, 2),
+    clientTxId: 'client-$id',
+  );
+}
+
 Future<void> _pumpDetail(
   WidgetTester tester, {
   required _FakeTransactionRepository fakeRepo,
@@ -171,6 +255,13 @@ Future<void> _pumpDetail(
         categoryRepositoryProvider.overrideWithValue(
           _StaticCategoryRepository(DefaultCategories.all),
         ),
+        fundRepositoryProvider.overrideWithValue(
+          _StaticFundRepository(DefaultFunds.all),
+        ),
+        savingsAssetTypeRepositoryProvider.overrideWithValue(
+          _StaticSavingsAssetTypeRepository(DefaultSavingsAssetTypes.all),
+        ),
+        currencyContextProvider.overrideWithValue(const _TestCurrencyContext('VND')),
       ],
       child: MaterialApp(
         home: TransactionDetailScreen(transactionId: transactionId),
@@ -381,5 +472,96 @@ void main() {
         expect(find.text('Giao dịch này đã bị xoá.'), findsOneWidget);
       },
     );
+  });
+
+  group('Phase 8.6 — Hoàn tiền / Thu hồi', () {
+    testWidgets('nút "Hoàn tiền / Thu hồi" hiện với giao dịch Chi hợp lệ', (tester) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsOneWidget);
+    });
+
+    testWidgets('nút KHÔNG hiện với giao dịch Thu (không phải target hợp lệ)', (tester) async {
+      fakeRepo.seed([_incomeTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'income1');
+      expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsNothing);
+    });
+
+    testWidgets('nút KHÔNG hiện với giao dịch CHÍNH NÓ đã là 1 recovery (chống chain)', (tester) async {
+      final expense = _expenseTx();
+      final recovery = _recoveryTx(recoveryOfTxId: expense.id);
+      fakeRepo.seed([expense, recovery]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: recovery.id);
+      expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsNothing);
+    });
+
+    testWidgets('bấm nút mở sheet Hoàn tiền, pre-linked đúng target, lưu tạo đúng recoveryOfTxId', (
+      tester,
+    ) async {
+      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000, note: 'Mua iPad');
+      fakeRepo.seed([expense]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'));
+      await tester.pumpAndSettle();
+
+      // Sheet mở đúng chế độ recovery — tiêu đề đổi, banner hiện đúng target.
+      expect(find.text('Hoàn tiền / Thu hồi'), findsWidgets);
+      expect(find.text('Mua iPad'), findsWidgets, reason: 'banner hiện đúng ghi chú giao dịch gốc');
+
+      // Nhập số tiền thu hồi (2.800.000) qua bàn phím sheet.
+      for (final d in '2800000'.split('')) {
+        await tester.tap(find.text(d).first);
+        await tester.pump();
+      }
+      final saveButton = find.widgetWithText(ElevatedButton, 'Lưu giao dịch');
+      await tester.ensureVisible(saveButton);
+      await tester.tap(saveButton, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedTransactions, hasLength(1));
+      final recovery = fakeRepo.addedTransactions.single;
+      expect(recovery.type, TransactionType.income);
+      expect(recovery.categoryId, 'hoan_tien_thu_hoi');
+      expect(recovery.recoveryOfTxId, 'ipad');
+      expect(recovery.amountMinor, 2800000);
+      expect(recovery.sourceKind, PoolKind.external);
+      expect(recovery.destinationKind, PoolKind.memberAvailable);
+    });
+
+    testWidgets('có recovery đang hiệu lực → hiện "Đã thu hồi"/"Chi phí ròng" đúng số', (tester) async {
+      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
+      final recovery = _recoveryTx(id: 'r1', recoveryOfTxId: expense.id, amountMinor: 2800000);
+      fakeRepo.seed([expense, recovery]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
+
+      expect(find.textContaining('Đã thu hồi'), findsOneWidget);
+      expect(find.text('2.800.000 đ'), findsOneWidget);
+      expect(find.textContaining('Chi phí ròng'), findsOneWidget);
+      expect(find.text('7.200.000 đ'), findsOneWidget);
+    });
+
+    testWidgets('recovery ĐÃ bị reverse → KHÔNG hiện card "Đã thu hồi" (loại theo isVisible)', (tester) async {
+      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
+      final recovery = _recoveryTx(id: 'r1', recoveryOfTxId: expense.id, amountMinor: 2800000);
+      final reversedRecovery = Transaction(
+        id: recovery.id,
+        type: recovery.type,
+        categoryId: recovery.categoryId,
+        sourceKind: recovery.sourceKind,
+        destinationKind: recovery.destinationKind,
+        destinationRefId: recovery.destinationRefId,
+        amountMinor: recovery.amountMinor,
+        recoveryOfTxId: recovery.recoveryOfTxId,
+        reversedByTxId: 'reversal-of-r1',
+        transactionDate: recovery.transactionDate,
+        createdAt: recovery.createdAt,
+        clientTxId: recovery.clientTxId,
+      );
+      fakeRepo.seed([expense, reversedRecovery]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
+
+      expect(find.textContaining('Đã thu hồi'), findsNothing);
+    });
   });
 }

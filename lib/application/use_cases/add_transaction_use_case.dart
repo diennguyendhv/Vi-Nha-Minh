@@ -43,6 +43,7 @@ class AddTransactionUseCase {
       amountMinor: command.amountMinor,
       note: command.note,
       statusId: command.statusId,
+      recoveryOfTxId: command.recoveryOfTxId,
       transactionDate: command.transactionDate,
       // Audit timestamp của LẦN THỬ NÀY — cố tình sinh mới mỗi lần `call()`
       // chạy (khác `command.transactionDate`/`clientTxId`, được freeze 1

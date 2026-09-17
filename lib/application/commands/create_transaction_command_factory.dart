@@ -36,6 +36,7 @@ class CreateTransactionCommandFactory {
     required DateTime transactionDate,
     String note = '',
     String? statusId,
+    String? recoveryOfTxId,
   }) async {
     final baseCurrencyCode = await _currencyContext.getBaseCurrencyCode();
     return CreateTransactionCommand(
@@ -51,6 +52,7 @@ class CreateTransactionCommandFactory {
       baseCurrencyCode: baseCurrencyCode,
       note: note,
       statusId: statusId,
+      recoveryOfTxId: recoveryOfTxId,
     );
   }
 }

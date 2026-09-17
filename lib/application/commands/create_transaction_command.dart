@@ -46,6 +46,7 @@ class CreateTransactionCommand {
     required this.baseCurrencyCode,
     this.note = '',
     this.statusId,
+    this.recoveryOfTxId,
     String? id,
     String? clientTxId,
   }) : id = id ?? IdGenerator.generate(),
@@ -92,4 +93,10 @@ class CreateTransactionCommand {
 
   /// FK tới `Status.id`, nullable — không ảnh hưởng balance (Invariant 9).
   final String? statusId;
+
+  /// Phase 8.6 — khác null khi command này tạo 1 giao dịch THU HỒI/HOÀN
+  /// TIỀN, trỏ về `id` của giao dịch Chi gốc. Validate quan hệ (target phải
+  /// là Chi, không phải chain, chưa bị hoàn tác...) nằm ở Repository
+  /// (`validateRecoveryRelation`), KHÔNG lặp lại ở Application layer.
+  final String? recoveryOfTxId;
 }

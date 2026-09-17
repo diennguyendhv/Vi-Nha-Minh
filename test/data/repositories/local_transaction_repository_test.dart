@@ -50,6 +50,7 @@ void main() {
     int amountMinor = 100000,
     String? clientTxId,
     String? note,
+    String? recoveryOfTxId,
   }) {
     final now = DateTime(2026, 9, 1);
     return domain.Transaction(
@@ -63,6 +64,7 @@ void main() {
       destinationRefId: destinationRefId,
       amountMinor: amountMinor,
       note: note ?? '',
+      recoveryOfTxId: recoveryOfTxId,
       transactionDate: now,
       createdAt: now,
       clientTxId: clientTxId ?? nextId('client'),
@@ -666,6 +668,326 @@ void main() {
         300000,
         reason: 'balance cuối phản ánh đúng giá trị SAU khi sửa, không phải 100000+300000',
       );
+    });
+  });
+
+  group('Fund Withdraw — Phase 7.1 (qua Repository thật, InsufficientBalance atomic)', () {
+    test('Success: Fund giảm đúng amount, member nhận tăng đúng amount, Total Assets không đổi', () async {
+      await repo.addTransaction(
+        buildTx(clientTxId: 'seed', destinationRefId: 'vo', amountMinor: 6000000),
+      );
+      await repo.addTransaction(
+        buildTx(
+          clientTxId: 'topup',
+          type: TransactionType.transfer,
+          transferKind: TransferKind.fundTopup,
+          sourceKind: PoolKind.memberAvailable,
+          sourceRefId: 'vo',
+          destinationKind: PoolKind.fund,
+          destinationRefId: 'fund1',
+          amountMinor: 5000000,
+        ),
+      );
+      final beforeWithdraw = computeAllPoolBalances(await repo.watchTransactions().first);
+      final totalBefore = beforeWithdraw.values.fold<int>(0, (s, v) => s + v);
+
+      await repo.addTransaction(
+        buildTx(
+          clientTxId: 'withdraw-1',
+          type: TransactionType.transfer,
+          transferKind: TransferKind.fundWithdraw,
+          sourceKind: PoolKind.fund,
+          sourceRefId: 'fund1',
+          destinationKind: PoolKind.memberAvailable,
+          destinationRefId: 'chong',
+          amountMinor: 1000000,
+        ),
+      );
+
+      final balances = computeAllPoolBalances(await repo.watchTransactions().first);
+      expect(poolBalance(balances, PoolKind.fund, 'fund1'), 4000000);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 1000000);
+      final totalAfter = balances.values.fold<int>(0, (s, v) => s + v);
+      expect(
+        totalAfter,
+        totalBefore,
+        reason: 'Total Assets không đổi bởi RIÊNG giao dịch Fund Withdraw — Transfer tự cân bằng nội bộ',
+      );
+    });
+
+    test('Insufficient balance: rút 600k khi Fund chỉ còn 500k → InsufficientBalanceException, không persist, không đổi balance', () async {
+      await repo.addTransaction(
+        buildTx(clientTxId: 'seed', destinationRefId: 'vo', amountMinor: 2000000),
+      );
+      await repo.addTransaction(
+        buildTx(
+          clientTxId: 'topup',
+          type: TransactionType.transfer,
+          transferKind: TransferKind.fundTopup,
+          sourceKind: PoolKind.memberAvailable,
+          sourceRefId: 'vo',
+          destinationKind: PoolKind.fund,
+          destinationRefId: 'fund1',
+          amountMinor: 500000,
+        ),
+      );
+
+      expect(
+        () => repo.addTransaction(
+          buildTx(
+            clientTxId: 'withdraw-fail',
+            type: TransactionType.transfer,
+            transferKind: TransferKind.fundWithdraw,
+            sourceKind: PoolKind.fund,
+            sourceRefId: 'fund1',
+            destinationKind: PoolKind.memberAvailable,
+            destinationRefId: 'chong',
+            amountMinor: 600000,
+          ),
+        ),
+        throwsA(isA<InsufficientBalanceException>()),
+      );
+
+      final rows = await db.select(db.transactionRows).get();
+      expect(rows, hasLength(2), reason: 'seed + topup only — no orphan withdraw/reversal row');
+      final balances = computeAllPoolBalances(await repo.watchTransactions().first);
+      expect(poolBalance(balances, PoolKind.fund, 'fund1'), 500000, reason: 'Fund balance không đổi');
+      expect(
+        poolBalance(balances, PoolKind.memberAvailable, 'chong'),
+        0,
+        reason: 'Member balance không đổi',
+      );
+    });
+
+    test('Reversal: original FUND_WITHDRAW + reversal triệt tiêu về 0 cho cả fund lẫn member', () async {
+      await repo.addTransaction(
+        buildTx(clientTxId: 'seed', destinationRefId: 'vo', amountMinor: 6000000),
+      );
+      await repo.addTransaction(
+        buildTx(
+          clientTxId: 'topup',
+          type: TransactionType.transfer,
+          transferKind: TransferKind.fundTopup,
+          sourceKind: PoolKind.memberAvailable,
+          sourceRefId: 'vo',
+          destinationKind: PoolKind.fund,
+          destinationRefId: 'fund1',
+          amountMinor: 5000000,
+        ),
+      );
+      final withdraw = buildTx(
+        clientTxId: 'withdraw-rev',
+        type: TransactionType.transfer,
+        transferKind: TransferKind.fundWithdraw,
+        sourceKind: PoolKind.fund,
+        sourceRefId: 'fund1',
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 1000000,
+      );
+      await repo.addTransaction(withdraw);
+      await repo.reverseTransaction(withdraw.id);
+
+      final balances = computeAllPoolBalances(await repo.watchTransactions().first);
+      expect(poolBalance(balances, PoolKind.fund, 'fund1'), 5000000, reason: 'quay lại đúng balance trước khi rút');
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 0);
+    });
+  });
+
+  group('Phase 8.6 — Linked refund/recovery, qua Repository thật', () {
+    Future<domain.Transaction> seedExpense({int amountMinor = 2000000}) async {
+      await repo.addTransaction(
+        buildTx(clientTxId: 'seed-income', destinationRefId: 'chong', amountMinor: amountMinor + 5000000),
+      );
+      final expense = buildTx(
+        clientTxId: 'seed-expense',
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        destinationRefId: null,
+        amountMinor: amountMinor,
+      );
+      await repo.addTransaction(expense);
+      return expense;
+    }
+
+    domain.Transaction recoveryTx({
+      required String recoveryOfTxId,
+      int amountMinor = 450000,
+      String? clientTxId,
+      String destinationRefId = 'chong',
+    }) {
+      return buildTx(
+        type: TransactionType.income,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: destinationRefId,
+        amountMinor: amountMinor,
+        recoveryOfTxId: recoveryOfTxId,
+        clientTxId: clientTxId,
+      );
+    }
+
+    test('1 — recovery relation persist đúng: đọc lại từ DB có recoveryOfTxId khớp', () async {
+      final expense = await seedExpense();
+      final recovery = recoveryTx(recoveryOfTxId: expense.id);
+      await repo.addTransaction(recovery);
+
+      final stored = await repo.getTransactionById(recovery.id);
+      expect(stored, isNotNull);
+      expect(stored!.recoveryOfTxId, expense.id);
+    });
+
+    test('3/4 — 1 original → nhiều recovery, mỗi cái persist độc lập', () async {
+      final expense = await seedExpense(amountMinor: 10000000);
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 2800000, clientTxId: 'r1'));
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 300000, clientTxId: 'r2'));
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 100000, clientTxId: 'r3'));
+
+      final all = await repo.watchTransactions().first;
+      final recoveries = all.where((t) => t.recoveryOfTxId == expense.id).toList();
+      expect(recoveries, hasLength(3));
+    });
+
+    test('5/6 — Available/Total Assets: expense -10tr, 3 recovery cộng lại +3.2tr', () async {
+      final expense = await seedExpense(amountMinor: 10000000);
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 2800000, clientTxId: 'r1'));
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 300000, clientTxId: 'r2'));
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 100000, clientTxId: 'r3'));
+
+      final balances = computeAllPoolBalances(await repo.watchTransactions().first);
+      // seed 5tr + (-10tr expense) + 3.2tr recovery = -1.8tr
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 5000000 + 3200000);
+    });
+
+    test('8 — Historical Expense KHÔNG bị mutate bởi recovery', () async {
+      final expense = await seedExpense(amountMinor: 2000000);
+      await repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id, amountMinor: 450000));
+
+      final storedExpense = await repo.getTransactionById(expense.id);
+      expect(storedExpense!.amountMinor, 2000000, reason: 'append-only — amount gốc không đổi');
+    });
+
+    test('13 — self-link bị reject, không persist', () async {
+      final selfLinked = buildTx(
+        id: 'self-linked-id',
+        type: TransactionType.income,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 100000,
+        recoveryOfTxId: 'self-linked-id',
+      );
+      expect(
+        () => repo.addTransaction(selfLinked),
+        throwsA(isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.selfLink)),
+      );
+      expect(await repo.getTransactionById('self-linked-id'), isNull);
+    });
+
+    test('14 — target không tồn tại → InvalidRecoveryTargetException(targetNotFound), không persist', () async {
+      expect(
+        () => repo.addTransaction(recoveryTx(recoveryOfTxId: 'khong-ton-tai')),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetNotFound),
+        ),
+      );
+    });
+
+    test('14 — target KHÔNG phải EXPENSE (vd income) → InvalidRecoveryTargetException(targetNotExpense)', () async {
+      final income = buildTx(clientTxId: 'income-target', destinationRefId: 'vo', amountMinor: 100000);
+      await repo.addTransaction(income);
+      expect(
+        () => repo.addTransaction(recoveryTx(recoveryOfTxId: income.id)),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetNotExpense),
+        ),
+      );
+    });
+
+    test('target đã reversed → InvalidRecoveryTargetException(targetReversed)', () async {
+      final expense = await seedExpense();
+      await repo.reverseTransaction(expense.id);
+      expect(
+        () => repo.addTransaction(recoveryTx(recoveryOfTxId: expense.id)),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetReversed),
+        ),
+      );
+    });
+
+    test(
+      '15 — recovery chain (recovery trỏ vào recovery khác) bị reject qua pipeline thật '
+      '— chặn bởi targetNotExpense (recovery thật luôn type=income nên không bao giờ '
+      'lọt qua rule A để chạm tới rule "no chain" — xem test riêng ở financial_engine_test.dart '
+      'cho rule "no chain" độc lập)',
+      () async {
+      final expense = await seedExpense();
+      final firstRecovery = recoveryTx(recoveryOfTxId: expense.id, clientTxId: 'first-recovery');
+      await repo.addTransaction(firstRecovery);
+
+      expect(
+        () => repo.addTransaction(recoveryTx(recoveryOfTxId: firstRecovery.id, clientTxId: 'chained-recovery')),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetNotExpense),
+        ),
+      );
+    });
+
+    test('11 — reversed recovery: reverse xong, hiệu ứng available triệt tiêu hoàn toàn', () async {
+      final expense = await seedExpense(amountMinor: 1000000);
+      final recovery = recoveryTx(recoveryOfTxId: expense.id, amountMinor: 400000);
+      await repo.addTransaction(recovery);
+      await repo.reverseTransaction(recovery.id);
+
+      final balances = computeAllPoolBalances(await repo.watchTransactions().first);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 5000000);
+    });
+
+    test('12 — corrected recovery: sửa amount vẫn giữ đúng relationship, balance phản ánh giá trị mới', () async {
+      final expense = await seedExpense(amountMinor: 2000000);
+      final recovery = recoveryTx(recoveryOfTxId: expense.id, amountMinor: 450000);
+      await repo.addTransaction(recovery);
+      await repo.updateTransaction(recovery.id, amountMinor: 400000);
+
+      final all = await repo.watchTransactions().first;
+      final visibleRecovery = all.where((t) => t.recoveryOfTxId == expense.id && isVisible(t)).toList();
+      expect(visibleRecovery, hasLength(1));
+      expect(visibleRecovery.single.amountMinor, 400000);
+
+      final balances = computeAllPoolBalances(all);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 5000000 + 400000);
+    });
+
+    test('16 — idempotent retry: cùng clientTxId + cùng recoveryOfTxId → không tạo bản ghi thứ 2', () async {
+      final expense = await seedExpense();
+      final recovery = recoveryTx(recoveryOfTxId: expense.id, clientTxId: 'retry-recovery');
+      final first = await repo.addTransaction(recovery);
+      final second = await repo.addTransaction(recovery);
+      expect(second.id, first.id);
+
+      final all = await repo.watchTransactions().first;
+      expect(all.where((t) => t.clientTxId == 'retry-recovery'), hasLength(1));
+    });
+
+    test('17 — cùng clientTxId nhưng khác recoveryOfTxId → ClientTxIdConflictException', () async {
+      final expenseA = await seedExpense(amountMinor: 1000000);
+      final expenseB = buildTx(
+        clientTxId: 'expense-b',
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        amountMinor: 500000,
+      );
+      await repo.addTransaction(expenseB);
+
+      final recoveryToA = recoveryTx(recoveryOfTxId: expenseA.id, clientTxId: 'same-client-tx-id');
+      await repo.addTransaction(recoveryToA);
+
+      final recoveryToB = recoveryTx(recoveryOfTxId: expenseB.id, clientTxId: 'same-client-tx-id');
+      expect(() => repo.addTransaction(recoveryToB), throwsA(isA<ClientTxIdConflictException>()));
     });
   });
 }

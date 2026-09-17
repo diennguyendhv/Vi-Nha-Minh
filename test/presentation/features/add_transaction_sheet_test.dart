@@ -150,6 +150,7 @@ Future<void> _pumpSheet(
   required _FakeTransactionRepository fakeRepo,
   CurrencyContext currencyContext = const _TestCurrencyContext('VND'),
   EntryType initialType = EntryType.chi,
+  Transaction? recoveryTarget,
 }) async {
   // Sheet dài (DraggableScrollableSheet + keypad) không vừa viewport test
   // mặc định (800x600) — phóng to bề mặt test để mọi control (kể cả bàn
@@ -173,8 +174,11 @@ Future<void> _pumpSheet(
             // nhầm lẫn với nút "Lưu giao dịch" thật (ElevatedButton) khi
             // tìm theo `find.byType(ElevatedButton)` trong `_tapSave`.
             builder: (context) => TextButton(
-              onPressed: () =>
-                  showAddTransactionSheet(context, initialType: initialType),
+              onPressed: () => showAddTransactionSheet(
+                context,
+                initialType: initialType,
+                recoveryTarget: recoveryTarget,
+              ),
               child: const Text('open'),
             ),
           ),
@@ -302,6 +306,51 @@ void main() {
       expect(tx.destinationKind, PoolKind.fund);
       expect(tx.destinationRefId, DefaultFunds.anUongId);
       expect(tx.amountMinor, 50000);
+    });
+
+    testWidgets('3.1 — FUND_WITHDRAW: transfer → rút khỏi quỹ map đúng (Phase 7.1)', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+
+      await _tapSegment(tester, 'Nạp quỹ');
+      await _tapSegment(tester, 'Rút khỏi quỹ');
+      await _tapSegment(tester, 'Chồng');
+      await _selectFundByType(tester, DefaultFunds.anUong.name);
+      await _typeDigits(tester, '50000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      final tx = fakeRepo.lastAdded!;
+      expect(tx.type, TransactionType.transfer);
+      expect(tx.transferKind, TransferKind.fundWithdraw);
+      expect(tx.categoryId, DefaultCategories.napQuy.id);
+      expect(tx.sourceKind, PoolKind.fund, reason: 'Phase 7.1 — nguồn là Quỹ, không phải ví thành viên');
+      expect(tx.sourceRefId, DefaultFunds.anUongId);
+      expect(tx.destinationKind, PoolKind.memberAvailable);
+      expect(tx.destinationRefId, 'chong', reason: 'người nhận phải là thành viên TỰ CHỌN, không mặc định ngầm');
+      expect(tx.amountMinor, 50000);
+    });
+
+    testWidgets('3.2 — FUND_TOPUP regression: sau khi đổi qua Rút rồi đổi lại Nạp vẫn map đúng chiều cũ', (
+      tester,
+    ) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+
+      await _tapSegment(tester, 'Nạp quỹ');
+      await _tapSegment(tester, 'Rút khỏi quỹ');
+      await _tapSegment(tester, 'Nạp vào quỹ');
+      await _selectFundByType(tester, DefaultFunds.anUong.name);
+      await _typeDigits(tester, '50000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      final tx = fakeRepo.lastAdded!;
+      expect(tx.transferKind, TransferKind.fundTopup);
+      expect(tx.sourceKind, PoolKind.memberAvailable);
+      expect(tx.sourceRefId, 'vo');
+      expect(tx.destinationKind, PoolKind.fund);
+      expect(tx.destinationRefId, DefaultFunds.anUongId);
     });
 
     testWidgets('4 — Fund-backed EXPENSE: source = FUND, không phải MEMBER_AVAILABLE', (
@@ -525,6 +574,167 @@ void main() {
       fakeRepo.pendingGate!.complete();
       await tester.pumpAndSettle();
       expect(fakeRepo.lastAdded, isNotNull);
+    });
+  });
+
+  group('Fund Withdraw — retry/edit/double-submit (Phase 7.1, dùng chung Phase 6 lifecycle)', () {
+    Future<void> setUpFundWithdrawForm(WidgetTester tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      await _tapSegment(tester, 'Nạp quỹ');
+      await _tapSegment(tester, 'Rút khỏi quỹ');
+      await _selectFundByType(tester, DefaultFunds.anUong.name);
+      await _typeDigits(tester, '50000');
+    }
+
+    testWidgets('35 — retry sau lỗi transient, KHÔNG đổi form → giữ nguyên clientTxId', (
+      tester,
+    ) async {
+      await setUpFundWithdrawForm(tester);
+
+      fakeRepo.nextAddError = const PersistenceException('lỗi mô phỏng lần 1');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(1));
+      expect(fakeRepo.lastAdded, isNull);
+
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(2));
+      expect(
+        fakeRepo.addedClientTxIds[0],
+        fakeRepo.addedClientTxIds[1],
+        reason: 'retry phải tái sử dụng đúng clientTxId cũ',
+      );
+      expect(fakeRepo.lastAdded!.transferKind, TransferKind.fundWithdraw);
+      expect(fakeRepo.lastAdded!.sourceRefId, DefaultFunds.anUongId);
+      expect(fakeRepo.lastAdded!.amountMinor, 50000);
+    });
+
+    testWidgets('36 — đổi amount sau khi fail → command/clientTxId MỚI', (tester) async {
+      await setUpFundWithdrawForm(tester);
+
+      fakeRepo.nextAddError = const PersistenceException('lỗi mô phỏng');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      final firstClientTxId = fakeRepo.addedClientTxIds.single;
+
+      await _typeDigits(tester, '1'); // 50000 -> 500001
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(2));
+      expect(fakeRepo.addedClientTxIds[1], isNot(firstClientTxId));
+      expect(fakeRepo.lastAdded!.amountMinor, 500001);
+    });
+
+    testWidgets('37 — tap Save 2 lần liên tiếp khi lần đầu còn treo → chỉ 1 request', (
+      tester,
+    ) async {
+      await setUpFundWithdrawForm(tester);
+
+      fakeRepo.pendingGate = Completer<void>();
+      await _tapSave(tester);
+      await tester.pump();
+
+      await _tapSave(tester);
+      await tester.pump();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(1));
+
+      fakeRepo.pendingGate!.complete();
+      await tester.pumpAndSettle();
+      expect(fakeRepo.lastAdded!.transferKind, TransferKind.fundWithdraw);
+    });
+  });
+
+  group('Phase 8.6 — Recovery mode: retry/edit/double-submit (dùng chung Phase 6 lifecycle)', () {
+    Transaction recoveryTargetTx() {
+      return Transaction(
+        id: 'ipad-expense',
+        type: TransactionType.expense,
+        categoryId: 'dau_tu',
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        amountMinor: 10000000,
+        note: 'Mua iPad',
+        transactionDate: DateTime(2026, 1, 1),
+        createdAt: DateTime(2026, 1, 1),
+        clientTxId: 'client-ipad-expense',
+      );
+    }
+
+    Future<void> setUpRecoveryForm(WidgetTester tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, recoveryTarget: recoveryTargetTx());
+      await _typeDigits(tester, '2800000');
+    }
+
+    testWidgets('retry sau lỗi transient, KHÔNG đổi form → giữ nguyên clientTxId', (tester) async {
+      await setUpRecoveryForm(tester);
+
+      fakeRepo.nextAddError = const PersistenceException('lỗi mô phỏng');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(1));
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(2));
+      expect(fakeRepo.addedClientTxIds[0], fakeRepo.addedClientTxIds[1]);
+      expect(fakeRepo.lastAdded!.recoveryOfTxId, 'ipad-expense');
+      expect(fakeRepo.lastAdded!.amountMinor, 2800000);
+    });
+
+    testWidgets('đổi amount sau khi fail → command/clientTxId MỚI', (tester) async {
+      await setUpRecoveryForm(tester);
+
+      fakeRepo.nextAddError = const PersistenceException('lỗi mô phỏng');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      final firstClientTxId = fakeRepo.addedClientTxIds.single;
+
+      await _typeDigits(tester, '1');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(2));
+      expect(fakeRepo.addedClientTxIds[1], isNot(firstClientTxId));
+      expect(fakeRepo.lastAdded!.recoveryOfTxId, 'ipad-expense', reason: 'quan hệ recovery vẫn giữ đúng target dù command mới');
+    });
+
+    testWidgets('tap Save 2 lần liên tiếp khi lần đầu còn treo → chỉ 1 request', (tester) async {
+      await setUpRecoveryForm(tester);
+
+      fakeRepo.pendingGate = Completer<void>();
+      await _tapSave(tester);
+      await tester.pump();
+      await _tapSave(tester);
+      await tester.pump();
+
+      expect(fakeRepo.addedClientTxIds, hasLength(1));
+
+      fakeRepo.pendingGate!.complete();
+      await tester.pumpAndSettle();
+      expect(fakeRepo.lastAdded!.recoveryOfTxId, 'ipad-expense');
+    });
+
+    testWidgets('InvalidRecoveryTargetException → message an toàn, không lộ chi tiết kỹ thuật', (tester) async {
+      await setUpRecoveryForm(tester);
+      fakeRepo.nextAddError = const InvalidRecoveryTargetException(
+        reason: InvalidRecoveryReason.targetReversed,
+        targetId: 'ipad-expense',
+      );
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('không còn phù hợp để hoàn tiền'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('InvalidRecoveryTargetException'), findsNothing);
     });
   });
 

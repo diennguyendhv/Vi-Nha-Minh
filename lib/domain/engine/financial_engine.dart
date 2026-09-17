@@ -150,7 +150,49 @@ bool isSameLogicalTransaction(Transaction a, Transaction b) {
       a.currency == b.currency &&
       a.transactionDate == b.transactionDate &&
       a.note == b.note &&
-      a.statusId == b.statusId;
+      a.statusId == b.statusId &&
+      a.recoveryOfTxId == b.recoveryOfTxId;
+}
+
+/// Phase 8.6 — kiểm tra [recovery] (transaction sắp ghi, `recoveryOfTxId ==
+/// target.id`) có hợp lệ so với [target] hay không. Hàm THUẦN domain
+/// (không đụng DB) — Repository gọi SAU khi tự tra [target] từ DB (giống
+/// cách `_assertWontGoNegative` cần đọc balances từ DB trước khi gọi
+/// `wouldGoNegative`). KHÔNG động tới `applyEffect`/`typeFromEndpoints` —
+/// recovery vẫn là 1 giao dịch INCOME bình thường về mặt tính toán, đây chỉ
+/// là ràng buộc QUAN HỆ (mục 7 Phase 8.6).
+void validateRecoveryRelation(Transaction recovery, Transaction target) {
+  if (recovery.recoveryOfTxId != target.id) {
+    // Lỗi lập trình của caller (Repository) — target truyền vào không khớp
+    // recoveryOfTxId đang validate. Không phải business exception.
+    throw ArgumentError(
+      'target.id (${target.id}) không khớp recovery.recoveryOfTxId (${recovery.recoveryOfTxId})',
+    );
+  }
+  if (recovery.recoveryOfTxId == recovery.id) {
+    throw InvalidRecoveryTargetException(
+      reason: InvalidRecoveryReason.selfLink,
+      targetId: target.id,
+    );
+  }
+  if (target.type != TransactionType.expense) {
+    throw InvalidRecoveryTargetException(
+      reason: InvalidRecoveryReason.targetNotExpense,
+      targetId: target.id,
+    );
+  }
+  if (target.recoveryOfTxId != null) {
+    throw InvalidRecoveryTargetException(
+      reason: InvalidRecoveryReason.targetIsRecovery,
+      targetId: target.id,
+    );
+  }
+  if (target.reversedByTxId != null) {
+    throw InvalidRecoveryTargetException(
+      reason: InvalidRecoveryReason.targetReversed,
+      targetId: target.id,
+    );
+  }
 }
 
 /// Tạo bản hoàn tác của [original] — source/destination đảo ngược, cùng
@@ -235,6 +277,9 @@ Transaction buildReversal(
     transactionDate: newTransactionDate ?? original.transactionDate,
     createdAt: now,
     correctsTxId: original.id,
+    // Phase 8.6 — quan hệ recovery KHÔNG được mất khi sửa (mục 7F): 1
+    // recovery bị correction vẫn phải trỏ về đúng target cũ.
+    recoveryOfTxId: original.recoveryOfTxId,
     clientTxId: clientTxId,
   );
   validateNewTransaction(replacement);

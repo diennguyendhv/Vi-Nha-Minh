@@ -23,10 +23,12 @@ Transaction _tx({
   String? reversalOfTxId,
   String? correctsTxId,
   String? reversedByTxId,
+  String? recoveryOfTxId,
+  String? id,
 }) {
   _seq++;
   return Transaction(
-    id: 'tx-$_seq',
+    id: id ?? 'tx-$_seq',
     type: type,
     transferKind: transferKind,
     categoryId: categoryId,
@@ -41,6 +43,7 @@ Transaction _tx({
     reversalOfTxId: reversalOfTxId,
     correctsTxId: correctsTxId,
     reversedByTxId: reversedByTxId,
+    recoveryOfTxId: recoveryOfTxId,
     clientTxId: 'client-$_seq',
   );
 }
@@ -148,6 +151,75 @@ void main() {
       final balances = computeAllPoolBalances([topUp, spendDirect]);
       expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), -2500000);
       expect(poolBalance(balances, PoolKind.fund, 'an_uong'), 2000000);
+    });
+  });
+
+  group('Fund Withdraw — Phase 7.1 (docs/financial-core-v2.md mục 8, dòng 189/2244)', () {
+    test('FUND_WITHDRAW: fund giảm đúng amount, MEMBER_AVAILABLE tăng đúng amount, không đụng pool khác', () {
+      final topUp = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.fundTopup,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.fund,
+        destinationRefId: 'du_lich',
+        amountMinor: 5000000,
+      );
+      final withdraw = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.fundWithdraw,
+        sourceKind: PoolKind.fund,
+        sourceRefId: 'du_lich',
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 1000000,
+      );
+      final balances = computeAllPoolBalances([topUp, withdraw]);
+      expect(poolBalance(balances, PoolKind.fund, 'du_lich'), 4000000);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 1000000);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), -5000000);
+    });
+
+    test('FUND_WITHDRAW: tổng hiệu ứng = 0 (Total Assets không đổi)', () {
+      final withdraw = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.fundWithdraw,
+        sourceKind: PoolKind.fund,
+        sourceRefId: 'du_lich',
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 1000000,
+      );
+      final balances = computeAllPoolBalances([withdraw]);
+      final totalAssetChange = balances.values.fold<int>(0, (s, v) => s + v);
+      expect(totalAssetChange, 0);
+    });
+
+    test('FUND_WITHDRAW reversal: original + reversal triệt tiêu về 0 cho cả fund lẫn member', () {
+      final original = _tx(
+        type: TransactionType.transfer,
+        transferKind: TransferKind.fundWithdraw,
+        sourceKind: PoolKind.fund,
+        sourceRefId: 'du_lich',
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 1000000,
+      );
+      final reversal = buildReversal(
+        original,
+        newId: 'rev-fund-withdraw',
+        clientTxId: 'client-rev-fund-withdraw',
+        now: DateTime(2026, 9, 5),
+      );
+      expect(reversal.sourceKind, PoolKind.memberAvailable);
+      expect(reversal.sourceRefId, 'chong');
+      expect(reversal.destinationKind, PoolKind.fund);
+      expect(reversal.destinationRefId, 'du_lich');
+      expect(reversal.amountMinor, 1000000);
+
+      final balances = computeAllPoolBalances([original, reversal]);
+      expect(poolBalance(balances, PoolKind.fund, 'du_lich'), 0);
+      expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), 0);
     });
   });
 
@@ -597,6 +669,32 @@ void main() {
     });
   });
 
+  group('Phase 8.6 — buildCorrection giữ nguyên recoveryOfTxId (mục 7F)', () {
+    test('sửa amount 1 recovery (450k → 400k) — replacement vẫn trỏ đúng target cũ', () {
+      final recovery = _tx(
+        id: 'recovery-1',
+        type: TransactionType.income,
+        categoryId: 'hoan_tien_thu_hoi',
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 450000,
+        recoveryOfTxId: 'expense-ipad',
+      );
+      final result = buildCorrection(
+        recovery,
+        newAmountMinor: 400000,
+        reversalId: 'rev-1',
+        replacementId: 'repl-1',
+        clientTxId: 'client-1',
+        now: DateTime(2026, 9, 5),
+      );
+      expect(result.replacement.recoveryOfTxId, 'expense-ipad', reason: 'quan hệ recovery KHÔNG được mất khi sửa');
+      expect(result.replacement.amountMinor, 400000);
+      expect(result.reversal.recoveryOfTxId, isNull, reason: 'bản reversal không phải recovery mới, chỉ hoàn tác');
+    });
+  });
+
   group('Status không ảnh hưởng balance (Invariant 9)', () {
     test('2 giao dịch giống hệt nhau, chỉ khác statusId, cho cùng 1 hiệu ứng balance', () {
       final withStatusA = _tx(
@@ -667,6 +765,142 @@ void main() {
 
     test('C — khác currency (mọi field khác giống hệt) → KHÔNG phải cùng logical transaction', () {
       expect(isSameLogicalTransaction(incomeTx(currency: 'VND'), incomeTx(currency: 'USD')), isFalse);
+    });
+  });
+
+  group('Phase 8.6 — isSameLogicalTransaction với recoveryOfTxId (mục 8)', () {
+    Transaction recoveryTx({required String? recoveryOfTxId}) {
+      return Transaction(
+        id: 'tx-recovery-identity-test',
+        type: TransactionType.income,
+        categoryId: 'hoan_tien_thu_hoi',
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 450000,
+        recoveryOfTxId: recoveryOfTxId,
+        transactionDate: DateTime(2026, 9, 1),
+        createdAt: DateTime(2026, 9, 1),
+        clientTxId: 'client-recovery-identity-test',
+      );
+    }
+
+    test('cùng recoveryOfTxId → cùng logical transaction (idempotent retry)', () {
+      expect(
+        isSameLogicalTransaction(recoveryTx(recoveryOfTxId: 'expense-A'), recoveryTx(recoveryOfTxId: 'expense-A')),
+        isTrue,
+      );
+    });
+
+    test('khác recoveryOfTxId (mọi field khác giống hệt) → KHÔNG cùng logical transaction (phải conflict)', () {
+      expect(
+        isSameLogicalTransaction(recoveryTx(recoveryOfTxId: 'expense-A'), recoveryTx(recoveryOfTxId: 'expense-B')),
+        isFalse,
+      );
+    });
+
+    test('recoveryOfTxId null vs khác null → KHÔNG cùng logical transaction', () {
+      expect(
+        isSameLogicalTransaction(recoveryTx(recoveryOfTxId: null), recoveryTx(recoveryOfTxId: 'expense-A')),
+        isFalse,
+      );
+    });
+  });
+
+  group('Phase 8.6 — validateRecoveryRelation (mục 7)', () {
+    Transaction expenseTx({String id = 'expense-1', String? reversedByTxId, String? recoveryOfTxId}) {
+      return _tx(
+        id: id,
+        type: TransactionType.expense,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        amountMinor: 2000000,
+        reversedByTxId: reversedByTxId,
+        recoveryOfTxId: recoveryOfTxId,
+      );
+    }
+
+    Transaction recoveryTx({String id = 'recovery-1', required String recoveryOfTxId, int amountMinor = 450000}) {
+      return _tx(
+        id: id,
+        type: TransactionType.income,
+        categoryId: 'hoan_tien_thu_hoi',
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: amountMinor,
+        recoveryOfTxId: recoveryOfTxId,
+      );
+    }
+
+    test('target là EXPENSE bình thường, chưa reverse, chưa phải recovery → hợp lệ', () {
+      final target = expenseTx();
+      expect(
+        () => validateRecoveryRelation(recoveryTx(recoveryOfTxId: target.id), target),
+        returnsNormally,
+      );
+    });
+
+    test('A — target KHÔNG phải EXPENSE (vd INCOME) → InvalidRecoveryTargetException(targetNotExpense)', () {
+      final target = _tx(
+        id: 'income-1',
+        type: TransactionType.income,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 1000000,
+      );
+      expect(
+        () => validateRecoveryRelation(recoveryTx(recoveryOfTxId: target.id), target),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetNotExpense),
+        ),
+      );
+    });
+
+    test('B — self-link (recoveryOfTxId == chính id của recovery) → InvalidRecoveryTargetException(selfLink)', () {
+      final target = expenseTx();
+      final selfLinked = recoveryTx(id: target.id, recoveryOfTxId: target.id);
+      expect(
+        () => validateRecoveryRelation(selfLinked, target),
+        throwsA(isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.selfLink)),
+      );
+    });
+
+    test('C — recovery chain: target CHÍNH NÓ đã là recovery → InvalidRecoveryTargetException(targetIsRecovery)', () {
+      // Recovery thật luôn type=income (tiền từ EXTERNAL vào) nên đã tự
+      // động bị chặn bởi rule A (targetNotExpense) trước khi tới đây — check
+      // "no chain" này là phòng thủ thêm (defense in depth) cho trường hợp
+      // (giả định, KHÔNG xảy ra trong dữ liệu hợp lệ) 1 EXPENSE lại có sẵn
+      // `recoveryOfTxId` — dựng thủ công đúng case đó để test riêng rule
+      // "no chain" độc lập với rule A.
+      final expenseThatIsSomehowAlsoRecovery = expenseTx(id: 'weird-expense', recoveryOfTxId: 'root-expense');
+      expect(
+        () => validateRecoveryRelation(
+          recoveryTx(id: 'recovery-B', recoveryOfTxId: expenseThatIsSomehowAlsoRecovery.id),
+          expenseThatIsSomehowAlsoRecovery,
+        ),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetIsRecovery),
+        ),
+      );
+    });
+
+    test('target đã bị reversed → InvalidRecoveryTargetException(targetReversed)', () {
+      final target = expenseTx(reversedByTxId: 'some-reversal-id');
+      expect(
+        () => validateRecoveryRelation(recoveryTx(recoveryOfTxId: target.id), target),
+        throwsA(
+          isA<InvalidRecoveryTargetException>().having((e) => e.reason, 'reason', InvalidRecoveryReason.targetReversed),
+        ),
+      );
+    });
+
+    test('D — recovery vượt quá amount gốc (2.000.000) KHÔNG bị chặn (có thể là lãi thật, không tự thêm constraint)', () {
+      final target = expenseTx();
+      final bigRecovery = recoveryTx(recoveryOfTxId: target.id, amountMinor: 2500000);
+      expect(() => validateRecoveryRelation(bigRecovery, target), returnsNormally);
     });
   });
 }

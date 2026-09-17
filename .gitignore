@@ -47,3 +47,8 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 .claude/
+
+# Phase 8.5 — real financial data golden test fixture (private, local-only,
+# never committed — see test/golden_data/README.md).
+test/golden_data/*.json
+test/golden_data/*.csv

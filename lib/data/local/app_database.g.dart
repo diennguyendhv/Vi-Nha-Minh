@@ -1167,6 +1167,17 @@ class $TransactionRowsTable extends TransactionRows
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _recoveryOfTxIdMeta = const VerificationMeta(
+    'recoveryOfTxId',
+  );
+  @override
+  late final GeneratedColumn<String> recoveryOfTxId = GeneratedColumn<String>(
+    'recovery_of_tx_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _clientTxIdMeta = const VerificationMeta(
     'clientTxId',
   );
@@ -1210,6 +1221,7 @@ class $TransactionRowsTable extends TransactionRows
     reversalOfTxId,
     correctsTxId,
     reversedByTxId,
+    recoveryOfTxId,
     clientTxId,
     version,
   ];
@@ -1376,6 +1388,15 @@ class $TransactionRowsTable extends TransactionRows
         ),
       );
     }
+    if (data.containsKey('recovery_of_tx_id')) {
+      context.handle(
+        _recoveryOfTxIdMeta,
+        recoveryOfTxId.isAcceptableOrUnknown(
+          data['recovery_of_tx_id']!,
+          _recoveryOfTxIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('client_tx_id')) {
       context.handle(
         _clientTxIdMeta,
@@ -1474,6 +1495,10 @@ class $TransactionRowsTable extends TransactionRows
         DriftSqlType.string,
         data['${effectivePrefix}reversed_by_tx_id'],
       ),
+      recoveryOfTxId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recovery_of_tx_id'],
+      ),
       clientTxId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}client_tx_id'],
@@ -1510,6 +1535,12 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   final String? reversalOfTxId;
   final String? correctsTxId;
   final String? reversedByTxId;
+
+  /// Phase 8.6 — giao dịch THU HỒI/HOÀN TIỀN trỏ về `id` của giao dịch Chi
+  /// gốc. KHÔNG khai báo FK (giống 3 field self-reference phía trên) — lý
+  /// do tương tự: tương thích sync Firestore Giai đoạn B (eventual
+  /// consistency, bản ghi con có thể tới trước bản gốc).
+  final String? recoveryOfTxId;
   final String clientTxId;
   final int version;
   const TransactionRow({
@@ -1531,6 +1562,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     this.reversalOfTxId,
     this.correctsTxId,
     this.reversedByTxId,
+    this.recoveryOfTxId,
     required this.clientTxId,
     required this.version,
   });
@@ -1570,6 +1602,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     }
     if (!nullToAbsent || reversedByTxId != null) {
       map['reversed_by_tx_id'] = Variable<String>(reversedByTxId);
+    }
+    if (!nullToAbsent || recoveryOfTxId != null) {
+      map['recovery_of_tx_id'] = Variable<String>(recoveryOfTxId);
     }
     map['client_tx_id'] = Variable<String>(clientTxId);
     map['version'] = Variable<int>(version);
@@ -1612,6 +1647,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       reversedByTxId: reversedByTxId == null && nullToAbsent
           ? const Value.absent()
           : Value(reversedByTxId),
+      recoveryOfTxId: recoveryOfTxId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recoveryOfTxId),
       clientTxId: Value(clientTxId),
       version: Value(version),
     );
@@ -1641,6 +1679,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       reversalOfTxId: serializer.fromJson<String?>(json['reversalOfTxId']),
       correctsTxId: serializer.fromJson<String?>(json['correctsTxId']),
       reversedByTxId: serializer.fromJson<String?>(json['reversedByTxId']),
+      recoveryOfTxId: serializer.fromJson<String?>(json['recoveryOfTxId']),
       clientTxId: serializer.fromJson<String>(json['clientTxId']),
       version: serializer.fromJson<int>(json['version']),
     );
@@ -1667,6 +1706,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       'reversalOfTxId': serializer.toJson<String?>(reversalOfTxId),
       'correctsTxId': serializer.toJson<String?>(correctsTxId),
       'reversedByTxId': serializer.toJson<String?>(reversedByTxId),
+      'recoveryOfTxId': serializer.toJson<String?>(recoveryOfTxId),
       'clientTxId': serializer.toJson<String>(clientTxId),
       'version': serializer.toJson<int>(version),
     };
@@ -1691,6 +1731,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     Value<String?> reversalOfTxId = const Value.absent(),
     Value<String?> correctsTxId = const Value.absent(),
     Value<String?> reversedByTxId = const Value.absent(),
+    Value<String?> recoveryOfTxId = const Value.absent(),
     String? clientTxId,
     int? version,
   }) => TransactionRow(
@@ -1720,6 +1761,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     reversedByTxId: reversedByTxId.present
         ? reversedByTxId.value
         : this.reversedByTxId,
+    recoveryOfTxId: recoveryOfTxId.present
+        ? recoveryOfTxId.value
+        : this.recoveryOfTxId,
     clientTxId: clientTxId ?? this.clientTxId,
     version: version ?? this.version,
   );
@@ -1767,6 +1811,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       reversedByTxId: data.reversedByTxId.present
           ? data.reversedByTxId.value
           : this.reversedByTxId,
+      recoveryOfTxId: data.recoveryOfTxId.present
+          ? data.recoveryOfTxId.value
+          : this.recoveryOfTxId,
       clientTxId: data.clientTxId.present
           ? data.clientTxId.value
           : this.clientTxId,
@@ -1795,6 +1842,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           ..write('reversalOfTxId: $reversalOfTxId, ')
           ..write('correctsTxId: $correctsTxId, ')
           ..write('reversedByTxId: $reversedByTxId, ')
+          ..write('recoveryOfTxId: $recoveryOfTxId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version')
           ..write(')'))
@@ -1802,7 +1850,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     type,
     transferKind,
@@ -1821,9 +1869,10 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     reversalOfTxId,
     correctsTxId,
     reversedByTxId,
+    recoveryOfTxId,
     clientTxId,
     version,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1846,6 +1895,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           other.reversalOfTxId == this.reversalOfTxId &&
           other.correctsTxId == this.correctsTxId &&
           other.reversedByTxId == this.reversedByTxId &&
+          other.recoveryOfTxId == this.recoveryOfTxId &&
           other.clientTxId == this.clientTxId &&
           other.version == this.version);
 }
@@ -1869,6 +1919,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
   final Value<String?> reversalOfTxId;
   final Value<String?> correctsTxId;
   final Value<String?> reversedByTxId;
+  final Value<String?> recoveryOfTxId;
   final Value<String> clientTxId;
   final Value<int> version;
   final Value<int> rowid;
@@ -1891,6 +1942,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.reversalOfTxId = const Value.absent(),
     this.correctsTxId = const Value.absent(),
     this.reversedByTxId = const Value.absent(),
+    this.recoveryOfTxId = const Value.absent(),
     this.clientTxId = const Value.absent(),
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1914,6 +1966,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.reversalOfTxId = const Value.absent(),
     this.correctsTxId = const Value.absent(),
     this.reversedByTxId = const Value.absent(),
+    this.recoveryOfTxId = const Value.absent(),
     required String clientTxId,
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1945,6 +1998,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Expression<String>? reversalOfTxId,
     Expression<String>? correctsTxId,
     Expression<String>? reversedByTxId,
+    Expression<String>? recoveryOfTxId,
     Expression<String>? clientTxId,
     Expression<int>? version,
     Expression<int>? rowid,
@@ -1968,6 +2022,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       if (reversalOfTxId != null) 'reversal_of_tx_id': reversalOfTxId,
       if (correctsTxId != null) 'corrects_tx_id': correctsTxId,
       if (reversedByTxId != null) 'reversed_by_tx_id': reversedByTxId,
+      if (recoveryOfTxId != null) 'recovery_of_tx_id': recoveryOfTxId,
       if (clientTxId != null) 'client_tx_id': clientTxId,
       if (version != null) 'version': version,
       if (rowid != null) 'rowid': rowid,
@@ -1993,6 +2048,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Value<String?>? reversalOfTxId,
     Value<String?>? correctsTxId,
     Value<String?>? reversedByTxId,
+    Value<String?>? recoveryOfTxId,
     Value<String>? clientTxId,
     Value<int>? version,
     Value<int>? rowid,
@@ -2016,6 +2072,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       reversalOfTxId: reversalOfTxId ?? this.reversalOfTxId,
       correctsTxId: correctsTxId ?? this.correctsTxId,
       reversedByTxId: reversedByTxId ?? this.reversedByTxId,
+      recoveryOfTxId: recoveryOfTxId ?? this.recoveryOfTxId,
       clientTxId: clientTxId ?? this.clientTxId,
       version: version ?? this.version,
       rowid: rowid ?? this.rowid,
@@ -2079,6 +2136,9 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     if (reversedByTxId.present) {
       map['reversed_by_tx_id'] = Variable<String>(reversedByTxId.value);
     }
+    if (recoveryOfTxId.present) {
+      map['recovery_of_tx_id'] = Variable<String>(recoveryOfTxId.value);
+    }
     if (clientTxId.present) {
       map['client_tx_id'] = Variable<String>(clientTxId.value);
     }
@@ -2112,6 +2172,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
           ..write('reversalOfTxId: $reversalOfTxId, ')
           ..write('correctsTxId: $correctsTxId, ')
           ..write('reversedByTxId: $reversedByTxId, ')
+          ..write('recoveryOfTxId: $recoveryOfTxId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version, ')
           ..write('rowid: $rowid')
@@ -2770,6 +2831,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'ix_transaction_category_status',
     'CREATE INDEX ix_transaction_category_status ON transaction_rows (category_id, status_id)',
   );
+  late final Index ixTransactionRecoveryOf = Index(
+    'ix_transaction_recovery_of',
+    'CREATE INDEX ix_transaction_recovery_of ON transaction_rows (recovery_of_tx_id)',
+  );
   late final Index ixStatusCategory = Index(
     'ix_status_category',
     'CREATE INDEX ix_status_category ON status_rows (category_id)',
@@ -2788,6 +2853,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     ixTransactionSource,
     ixTransactionDestination,
     ixTransactionCategoryStatus,
+    ixTransactionRecoveryOf,
     ixStatusCategory,
   ];
 }
@@ -3706,6 +3772,7 @@ typedef $$TransactionRowsTableCreateCompanionBuilder =
       Value<String?> reversalOfTxId,
       Value<String?> correctsTxId,
       Value<String?> reversedByTxId,
+      Value<String?> recoveryOfTxId,
       required String clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -3730,6 +3797,7 @@ typedef $$TransactionRowsTableUpdateCompanionBuilder =
       Value<String?> reversalOfTxId,
       Value<String?> correctsTxId,
       Value<String?> reversedByTxId,
+      Value<String?> recoveryOfTxId,
       Value<String> clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -3866,6 +3934,11 @@ class $$TransactionRowsTableFilterComposer
 
   ColumnFilters<String> get reversedByTxId => $composableBuilder(
     column: $table.reversedByTxId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get recoveryOfTxId => $composableBuilder(
+    column: $table.recoveryOfTxId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4015,6 +4088,11 @@ class $$TransactionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get recoveryOfTxId => $composableBuilder(
+    column: $table.recoveryOfTxId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => ColumnOrderings(column),
@@ -4151,6 +4229,11 @@ class $$TransactionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get recoveryOfTxId => $composableBuilder(
+    column: $table.recoveryOfTxId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => column,
@@ -4254,6 +4337,7 @@ class $$TransactionRowsTableTableManager
                 Value<String?> reversalOfTxId = const Value.absent(),
                 Value<String?> correctsTxId = const Value.absent(),
                 Value<String?> reversedByTxId = const Value.absent(),
+                Value<String?> recoveryOfTxId = const Value.absent(),
                 Value<String> clientTxId = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4276,6 +4360,7 @@ class $$TransactionRowsTableTableManager
                 reversalOfTxId: reversalOfTxId,
                 correctsTxId: correctsTxId,
                 reversedByTxId: reversedByTxId,
+                recoveryOfTxId: recoveryOfTxId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,
@@ -4300,6 +4385,7 @@ class $$TransactionRowsTableTableManager
                 Value<String?> reversalOfTxId = const Value.absent(),
                 Value<String?> correctsTxId = const Value.absent(),
                 Value<String?> reversedByTxId = const Value.absent(),
+                Value<String?> recoveryOfTxId = const Value.absent(),
                 required String clientTxId,
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4322,6 +4408,7 @@ class $$TransactionRowsTableTableManager
                 reversalOfTxId: reversalOfTxId,
                 correctsTxId: correctsTxId,
                 reversedByTxId: reversedByTxId,
+                recoveryOfTxId: recoveryOfTxId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,

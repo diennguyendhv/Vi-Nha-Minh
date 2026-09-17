@@ -6,14 +6,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/fund.dart';
+import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/usecases/compute_expense_breakdown.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_financial_summary.dart';
 import '../../../domain/usecases/compute_member_outflow_breakdown.dart';
 import '../../../domain/usecases/compute_net_income.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
 import '../../../domain/usecases/compute_status_breakdown.dart';
 import '../../../domain/usecases/compute_three_totals.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/fund_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 
 /// Màn "Tổng hợp" (`docs/design.html` màn 12-13) — 3 tổng tách biệt
@@ -35,21 +40,41 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
   Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final categoriesAsync = ref.watch(categoriesStreamProvider);
+    final fundsAsync = ref.watch(fundsStreamProvider);
+    final assetTypesAsync = ref.watch(savingsAssetTypesStreamProvider);
 
-    if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
+    if (transactionsAsync.isLoading ||
+        categoriesAsync.isLoading ||
+        fundsAsync.isLoading ||
+        assetTypesAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    final error = transactionsAsync.error ?? categoriesAsync.error;
+    final error =
+        transactionsAsync.error ??
+        categoriesAsync.error ??
+        fundsAsync.error ??
+        assetTypesAsync.error;
     if (error != null) return Center(child: Text('Lỗi tải dữ liệu: $error'));
 
     final transactions = transactionsAsync.value ?? const [];
     final categories = categoriesAsync.value ?? const [];
+    final funds = (fundsAsync.value ?? const []).where((f) => f.isActive).toList();
+    final assetTypes = (assetTypesAsync.value ?? const [])
+        .where((a) => a.isActive)
+        .toList();
     final categoryById = {for (final c in categories) c.id: c};
 
     final now = DateTime.now();
     final totals = computeThreeTotals(transactions, categories, month: now);
     final availableBalance = computeMemberAvailableBalance(_member, transactions);
     final memberIncome = computeMemberIncomeTotal(_member, transactions, month: now);
+    final summary = computeFinancialSummary(
+      transactions,
+      categories: categories,
+      funds: funds,
+      assetTypes: assetTypes,
+      month: now,
+    );
 
     // Gộp cả EXPENSE lẫn TRANSFER mà thành viên đang xem là nguồn — 1 bảng
     // duy nhất cho Đầu tư/Tự thưởng/CĐ/DH/Tiết kiệm/Chuyển tiền thành viên
@@ -82,6 +107,13 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
         ),
         const SizedBox(height: 8),
         _StatStrip(label: 'Thu nhập của ${_member.label} tháng ${now.month}', value: memberIncome),
+        const SizedBox(height: 22),
+        const Text(
+          'Tài sản gia đình',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        _FamilyAssetsCard(summary: summary, funds: funds, assetTypes: assetTypes, now: now),
         const SizedBox(height: 22),
         Text(
           'Chi tiêu & chuyển đi của ${_member.label} tháng ${now.month}',
@@ -192,6 +224,138 @@ class _MemberSegmented extends StatelessWidget {
           .toList(),
       selected: {value},
       onSelectionChanged: (s) => onChanged(s.first),
+    );
+  }
+}
+
+/// Bản ĐẦY ĐỦ của Phase 8 `FinancialSummary` — breakdown theo thành viên,
+/// theo `SavingsAssetType`, theo từng `Fund`, cộng các metric tháng. Dùng
+/// chung `computeFinancialSummary` với bản rút gọn ở `home_screen.dart`
+/// (`_AssetOverviewCard`) — KHÔNG tự tính lại bất kỳ tổng nào ở đây, chỉ
+/// đọc field có sẵn trên [FinancialSummary].
+class _FamilyAssetsCard extends StatelessWidget {
+  const _FamilyAssetsCard({
+    required this.summary,
+    required this.funds,
+    required this.assetTypes,
+    required this.now,
+  });
+
+  final FinancialSummary summary;
+  final List<Fund> funds;
+  final List<SavingsAssetType> assetTypes;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: const Offset(0, 4))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('TỔNG TÀI SẢN', style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(
+            Formatters.amount(summary.totalAssets),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 14),
+          const _AssetSectionLabel('Số dư khả dụng'),
+          for (final m in FamilyMember.values)
+            _AssetRow(label: m.label, value: summary.availableByMember[m] ?? 0),
+          _AssetRow(label: 'Tổng', value: summary.totalAvailable, emphasize: true),
+          const SizedBox(height: 12),
+          const _AssetSectionLabel('Tiết kiệm'),
+          for (final m in FamilyMember.values) ...[
+            for (final a in assetTypes)
+              _AssetRow(
+                label: '${m.label} · ${a.name}',
+                value: summary.savingsByMemberAndAssetType[m]?[a.id] ?? 0,
+              ),
+          ],
+          _AssetRow(label: 'Tổng', value: summary.totalSavings, emphasize: true),
+          const SizedBox(height: 12),
+          const _AssetSectionLabel('Quỹ'),
+          if (funds.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4),
+              child: Text('Chưa có quỹ nào', style: TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+            )
+          else
+            for (final f in funds)
+              _AssetRow(label: f.name, value: summary.fundBalances[f.id] ?? 0),
+          _AssetRow(label: 'Tổng', value: summary.totalFunds, emphasize: true),
+          const SizedBox(height: 12),
+          const _AssetSectionLabel('Tháng này'),
+          Row(
+            children: [
+              Expanded(child: _StatStrip(label: 'Thu', value: summary.monthlyIncome)),
+              const SizedBox(width: 8),
+              Expanded(child: _StatStrip(label: 'Chi', value: summary.monthlyExpense)),
+              const SizedBox(width: 8),
+              Expanded(child: _StatStrip(label: 'Còn lại', value: summary.monthlyNet)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AssetSectionLabel extends StatelessWidget {
+  const _AssetSectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text(
+        text.toUpperCase(),
+        style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.4),
+      ),
+    );
+  }
+}
+
+class _AssetRow extends StatelessWidget {
+  const _AssetRow({required this.label, required this.value, this.emphasize = false});
+
+  final String label;
+  final int value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: emphasize ? FontWeight.w800 : FontWeight.w500,
+                color: emphasize ? AppColors.textPrimary : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Text(
+            Formatters.amount(value),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

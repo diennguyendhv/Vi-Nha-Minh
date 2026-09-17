@@ -31,6 +31,7 @@ part 'app_database.g.dart';
   columns: {#destinationKind, #destinationRefId},
 )
 @TableIndex(name: 'ix_transaction_category_status', columns: {#categoryId, #statusId})
+@TableIndex(name: 'ix_transaction_recovery_of', columns: {#recoveryOfTxId})
 class TransactionRows extends Table {
   TextColumn get id => text()();
   TextColumn get type => text()();
@@ -50,6 +51,11 @@ class TransactionRows extends Table {
   TextColumn get reversalOfTxId => text().nullable()();
   TextColumn get correctsTxId => text().nullable()();
   TextColumn get reversedByTxId => text().nullable()();
+  /// Phase 8.6 — giao dịch THU HỒI/HOÀN TIỀN trỏ về `id` của giao dịch Chi
+  /// gốc. KHÔNG khai báo FK (giống 3 field self-reference phía trên) — lý
+  /// do tương tự: tương thích sync Firestore Giai đoạn B (eventual
+  /// consistency, bản ghi con có thể tới trước bản gốc).
+  TextColumn get recoveryOfTxId => text().nullable()();
   TextColumn get clientTxId => text()();
   IntColumn get version => integer().withDefault(const Constant(1))();
 
@@ -130,9 +136,11 @@ class AppDatabase extends _$AppDatabase {
   /// giữ dữ liệu thật: thêm FK (`categoryId`/`statusId`) + unique index
   /// (`clientTxId`) yêu cầu SQLite recreate bảng (FK chỉ khai báo được lúc
   /// `CREATE TABLE`), nên dùng pattern rename → tạo bảng mới → copy dữ liệu
-  /// → xoá bảng cũ, không `DROP` thẳng.
+  /// → xoá bảng cũ, không `DROP` thẳng. Version 5 (Phase 8.6) thêm
+  /// `recovery_of_tx_id` — cùng pattern, cùng lý do (cột mới + index mới
+  /// trên bảng đã có FK/unique index từ v4).
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -158,6 +166,11 @@ class AppDatabase extends _$AppDatabase {
         // chưa kịp tạo). Phát hiện khi code review Phase 2 — sửa theo yêu
         // cầu review, không tự ý đổi thêm gì khác ngoài phạm vi này.
         await transaction(() => _migrateToV4(m));
+      }
+      if (from < 5) {
+        // Cùng lý do atomicity như v3→v4 — rollback sạch nếu copy giữa
+        // chừng lỗi, không để bảng `_v4` tạm sót lại.
+        await transaction(() => _migrateToV5(m));
       }
     },
     beforeOpen: (details) async {
@@ -215,6 +228,44 @@ class AppDatabase extends _$AppDatabase {
       'client_tx_id, version FROM transaction_rows_v3',
     );
     await customStatement('DROP TABLE transaction_rows_v3');
+  }
+
+  /// v4 → v5 (Phase 8.6): thêm cột `recovery_of_tx_id` (TEXT NULL, không FK
+  /// — xem doc-comment trên field) + index `ix_transaction_recovery_of`.
+  /// Cùng pattern rename → tạo bảng mới theo schema hiện tại → copy dữ liệu
+  /// (cột mới mặc định NULL cho mọi row cũ — KHÔNG reinterpret dữ liệu có
+  /// sẵn) → xoá bảng cũ.
+  Future<void> _migrateToV5(Migrator m) async {
+    await customStatement(
+      'ALTER TABLE transaction_rows RENAME TO transaction_rows_v4',
+    );
+    // SQLite giữ nguyên TÊN index qua ALTER TABLE RENAME (index vẫn tên
+    // "ux_transaction_client_tx_id" dù giờ trỏ vào transaction_rows_v4) —
+    // phải drop tường minh trước khi tạo lại cùng tên trên bảng mới, nếu
+    // không CREATE INDEX bên dưới sẽ báo "already exists".
+    await customStatement('DROP INDEX IF EXISTS ux_transaction_client_tx_id');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_source');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_destination');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_category_status');
+    await m.createTable(transactionRows);
+    await m.createIndex(uxTransactionClientTxId);
+    await m.createIndex(ixTransactionSource);
+    await m.createIndex(ixTransactionDestination);
+    await m.createIndex(ixTransactionCategoryStatus);
+    await m.createIndex(ixTransactionRecoveryOf);
+    await customStatement(
+      'INSERT INTO transaction_rows (id, type, transfer_kind, category_id, '
+      'source_kind, source_ref_id, destination_kind, destination_ref_id, '
+      'amount_minor, currency, note, status_id, status_updated_at, '
+      'transaction_date, created_at, reversal_of_tx_id, corrects_tx_id, '
+      'reversed_by_tx_id, recovery_of_tx_id, client_tx_id, version) '
+      'SELECT id, type, transfer_kind, category_id, source_kind, '
+      'source_ref_id, destination_kind, destination_ref_id, amount_minor, '
+      'currency, note, status_id, status_updated_at, transaction_date, '
+      'created_at, reversal_of_tx_id, corrects_tx_id, reversed_by_tx_id, '
+      'NULL, client_tx_id, version FROM transaction_rows_v4',
+    );
+    await customStatement('DROP TABLE transaction_rows_v4');
   }
 }
 

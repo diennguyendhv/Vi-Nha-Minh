@@ -124,6 +124,23 @@ class DefaultCategories {
     type: TransactionType.transfer,
   );
 
+  /// Phase 8.6 — category cho khoản THU HỒI/HOÀN TIỀN gắn với 1 giao dịch
+  /// Chi trước đó (bán lại đồ, hoàn tiền một phần, người khác trả nợ đã
+  /// ứng...). Về mặt kỹ thuật vẫn là `TransactionType.income` (tiền từ
+  /// ngoài hệ thống vào — `typeFromEndpoints`), nhưng `excludeFromTotals =
+  /// true` để KHÔNG tính vào Total Income/monthlyIncome báo cáo — chỉ tăng
+  /// `availableBalance`/Total Assets. Dùng lại ĐÚNG cơ chế `excludeFromTotals`
+  /// đã có từ Phase 1 (giống "Số dư ban đầu"), không phải type/field tài
+  /// chính mới. Generic cho MỌI gia đình — không gắn với bất kỳ workflow
+  /// riêng nào (CLAUDE.md mục 9).
+  static const hoanTienThuHoi = Category(
+    id: 'hoan_tien_thu_hoi',
+    name: 'Hoàn tiền / Thu hồi',
+    color: Color(0xFF5FA88A),
+    type: TransactionType.income,
+    excludeFromTotals: true,
+  );
+
   static const all = <Category>[
     soDuBanDau,
     thuNhap,
@@ -135,6 +152,7 @@ class DefaultCategories {
     chuyenTienThanhVien,
     napQuy,
     tietKiem,
+    hoanTienThuHoi,
   ];
 
   static const quickNotes = <String>[

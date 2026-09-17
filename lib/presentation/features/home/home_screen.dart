@@ -8,8 +8,11 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_financial_summary.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/fund_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/transaction_detail_screen.dart';
@@ -21,27 +24,57 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final categoriesAsync = ref.watch(categoriesStreamProvider);
+    final fundsAsync = ref.watch(fundsStreamProvider);
+    final assetTypesAsync = ref.watch(savingsAssetTypesStreamProvider);
 
-    if (transactionsAsync.isLoading || categoriesAsync.isLoading) {
+    if (transactionsAsync.isLoading ||
+        categoriesAsync.isLoading ||
+        fundsAsync.isLoading ||
+        assetTypesAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
-    final error = transactionsAsync.error ?? categoriesAsync.error;
+    final error =
+        transactionsAsync.error ??
+        categoriesAsync.error ??
+        fundsAsync.error ??
+        assetTypesAsync.error;
     if (error != null) {
       return Center(child: Text('Lỗi tải dữ liệu: $error'));
     }
 
+    final transactions = transactionsAsync.value ?? const [];
+    final categories = categoriesAsync.value ?? const [];
+    final funds = (fundsAsync.value ?? const []).where((f) => f.isActive).toList();
+    final assetTypes = (assetTypesAsync.value ?? const [])
+        .where((a) => a.isActive)
+        .toList();
+
+    final summary = computeFinancialSummary(
+      transactions,
+      categories: categories,
+      funds: funds,
+      assetTypes: assetTypes,
+      month: DateTime.now(),
+    );
+
     return _HomeContent(
-      transactions: transactionsAsync.value ?? const [],
-      categories: categoriesAsync.value ?? const [],
+      transactions: transactions,
+      categories: categories,
+      summary: summary,
     );
   }
 }
 
 class _HomeContent extends StatelessWidget {
-  const _HomeContent({required this.transactions, required this.categories});
+  const _HomeContent({
+    required this.transactions,
+    required this.categories,
+    required this.summary,
+  });
 
   final List<Transaction> transactions;
   final List<Category> categories;
+  final FinancialSummary summary;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +138,8 @@ class _HomeContent extends StatelessWidget {
             Expanded(child: _MemberCard(financials: chongFinancials)),
           ],
         ),
+        const SizedBox(height: 20),
+        _AssetOverviewCard(summary: summary),
         const SizedBox(height: 26),
         const Text(
           'Giao dịch gần đây',
@@ -113,6 +148,126 @@ class _HomeContent extends StatelessWidget {
         const SizedBox(height: 8),
         _TransactionList(sorted: visible, categoryById: categoryById),
       ],
+    );
+  }
+}
+
+/// "Tổng quan tài sản" — bản RÚT GỌN của Phase 8 `FinancialSummary` cho
+/// Trang chủ (`computeFinancialSummary`, dùng chung 1 nguồn với
+/// `summary_screen.dart`, KHÔNG tự tính lại). Chỉ hiện tổng, không hiện
+/// breakdown từng Quỹ/loại tài sản — xem bản đầy đủ ở tab "Tổng hợp".
+class _AssetOverviewCard extends StatelessWidget {
+  const _AssetOverviewCard({required this.summary});
+
+  final FinancialSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'TỔNG TÀI SẢN',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            Formatters.amount(summary.totalAssets),
+            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniStat(label: 'Số dư khả dụng', value: summary.totalAvailable),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniStat(label: 'Tiết kiệm', value: summary.totalSavings),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniStat(label: 'Quỹ', value: summary.totalFunds),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniStat(
+                  label: 'Thu tháng ${now.month}',
+                  value: summary.monthlyIncome,
+                  color: AppColors.accent,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniStat(
+                  label: 'Chi tháng ${now.month}',
+                  value: summary.monthlyExpense,
+                  color: AppColors.expenseAmount,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MiniStat(label: 'Còn lại', value: summary.monthlyNet),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({required this.label, required this.value, this.color});
+
+  final String label;
+  final int value;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.chipBackground,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          const SizedBox(height: 2),
+          Text(
+            Formatters.amount(value),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w800,
+              color: color ?? AppColors.textPrimary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
