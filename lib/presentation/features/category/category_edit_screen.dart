@@ -6,6 +6,7 @@ import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/status_providers.dart';
 
@@ -78,6 +79,10 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   /// Id của bước trạng thái mà tên vừa nhập trùng (đang dùng hoặc ngừng sử
   /// dụng) — hiện thông báo thay vì âm thầm tạo bản trùng.
   String? _duplicateStatusId;
+
+  /// Danh mục CÙNG LOẠI, CÙNG TÊN với tên vừa nhập khi TẠO MỚI (đang dùng hoặc
+  /// đã ngừng) — hiện thông báo/"Sử dụng lại" thay vì âm thầm tạo bản trùng.
+  Category? _duplicateCategory;
   late final String _categoryId = widget.categoryId ?? IdGenerator.generate();
 
   bool get _isNew => widget.categoryId == null;
@@ -233,6 +238,16 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
       return;
     }
 
+    if (_isNew) {
+      final clash = allCategories.where(
+        (c) => c.type == _type && _norm(c.name) == _norm(name),
+      );
+      if (clash.isNotEmpty) {
+        setState(() => _duplicateCategory = clash.first);
+        return;
+      }
+    }
+
     final category = Category(
       id: _categoryId,
       name: name,
@@ -282,9 +297,60 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// "Ngừng sử dụng" danh mục (ẩn khỏi bộ chọn; giao dịch cũ vẫn đọc được).
   Future<void> _delete() async {
     await ref.read(categoryRepositoryProvider).softDeleteCategory(_categoryId);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// "Sử dụng lại" danh mục cùng tên đã ngừng: giữ NGUYÊN id, không tạo bản mới.
+  Future<void> _reuseDuplicateCategory(Category category) async {
+    await ref
+        .read(categoryRepositoryProvider)
+        .updateCategory(category.copyWith(isActive: true));
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  /// "Xóa hẳn" 1 bước đã ngừng và chưa từng dùng: xoá thật khỏi DB rồi bỏ khỏi
+  /// danh sách nháp (không cần bấm Lưu).
+  Future<void> _deleteStatusPermanently(Status status) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Xóa hẳn "${status.name}"?'),
+        content: const Text('Trạng thái sẽ biến mất và không thể khôi phục.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_status'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa hẳn'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(statusRepositoryProvider).deleteStatusPermanently(status.id);
+    } on StatusNotDeletableException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Trạng thái này vừa được dùng nên không thể xóa.'),
+          ),
+        );
+      }
+      return;
+    }
+    setState(() {
+      _statuses = _statuses.where((s) => s.id != status.id).toList();
+      _originalStatuses = _originalStatuses
+          .where((s) => s.id != status.id)
+          .toList();
+    });
   }
 
   @override
@@ -309,7 +375,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
             TextButton(
               onPressed: _delete,
               child: const Text(
-                'Xoá',
+                'Ngừng sử dụng',
                 style: TextStyle(color: AppColors.expenseAmount),
               ),
             ),
@@ -327,7 +393,12 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
             key: const Key('category_name'),
             controller: _nameController,
             onChanged: (_) {
-              if (_nameError) setState(() => _nameError = false);
+              if (_nameError || _duplicateCategory != null) {
+                setState(() {
+                  _nameError = false;
+                  _duplicateCategory = null;
+                });
+              }
             },
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
@@ -411,6 +482,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
             ),
           ),
           if (_advancedOpen) ..._advancedSection(),
+          if (_duplicateCategory != null) _duplicateCategoryNotice(),
           const SizedBox(height: 12),
           ElevatedButton(
             key: const Key('category_save'),
@@ -422,6 +494,35 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
             ),
             child: const Text('Lưu danh mục'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _duplicateCategoryNotice() {
+    final c = _duplicateCategory!;
+    return Padding(
+      key: const Key('category_duplicate_notice'),
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              c.isActive
+                  ? 'Đã có danh mục tên này.'
+                  : 'Danh mục này đã tồn tại nhưng đang ngừng sử dụng.',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.expenseAmount,
+              ),
+            ),
+          ),
+          if (!c.isActive)
+            _StatusAction(
+              key: const Key('category_duplicate_reuse'),
+              label: 'Sử dụng lại',
+              onPressed: () => _reuseDuplicateCategory(c),
+            ),
         ],
       ),
     );
@@ -486,6 +587,17 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   List<Widget> _statusSection() {
     final active = _statuses.where((s) => s.isActive).toList();
     final stopped = _statuses.where((s) => !s.isActive).toList();
+    final deletable = ref.watch(deletableStatusIdsProvider).valueOrNull ?? {};
+    // Chỉ bước ĐÃ LƯU là ngừng sử dụng mới có thể xoá hẳn (bước vừa bấm
+    // "Ngừng sử dụng" trong bản nháp thì phải Lưu trước).
+    bool canDelete(Status s) =>
+        deletable.contains(s.id) &&
+        _originalStatuses.any((o) => o.id == s.id && !o.isActive);
+    final hasUsedStopped = stopped.any(
+      (s) =>
+          _originalStatuses.any((o) => o.id == s.id && !o.isActive) &&
+          !deletable.contains(s.id),
+    );
     final duplicate = _duplicateStatusId == null
         ? null
         : _statuses.where((s) => s.id == _duplicateStatusId).firstOrNull;
@@ -588,7 +700,22 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
                   label: 'Sử dụng lại',
                   onPressed: () => _reuseStatus(s),
                 ),
+                if (canDelete(s))
+                  _StatusAction(
+                    key: Key('status_delete_${s.id}'),
+                    label: 'Xóa hẳn',
+                    onPressed: () => _deleteStatusPermanently(s),
+                  ),
               ],
+            ),
+          ),
+        if (hasUsedStopped)
+          const Padding(
+            key: Key('status_used_note'),
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Bước đã dùng trong lịch sử không thể xóa hẳn.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
             ),
           ),
       ],

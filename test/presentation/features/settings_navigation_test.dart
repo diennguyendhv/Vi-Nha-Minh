@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart' show Key;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -157,13 +158,13 @@ void main() {
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.byType(SettingsScreen), findsNothing);
-    expect(find.text('TỔNG TÀI SẢN'), findsOneWidget);
+    expect(find.byKey(const Key('home_household_spending')), findsOneWidget);
 
     for (final label in ['Giao dịch', 'Danh mục', 'Tổng hợp', 'Trang chủ']) {
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull, reason: 'tab $label');
     }
-    expect(find.text('TỔNG TÀI SẢN'), findsOneWidget);
+    expect(find.byKey(const Key('home_household_spending')), findsOneWidget);
   });
 }

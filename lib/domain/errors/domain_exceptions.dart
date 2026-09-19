@@ -62,6 +62,31 @@ class SavingsAssetTypeNotEmptyException implements Exception {
       'SavingsAssetTypeNotEmptyException: loại tài sản $assetTypeId vẫn còn thành viên có số dư khác 0';
 }
 
+/// Ném ra khi cố xoá hẳn 1 danh mục không đủ điều kiện: còn đang dùng, là danh
+/// mục hệ thống, đã từng có giao dịch (kể cả giao dịch đã hoàn tác — vẫn là 1
+/// dòng trong sổ), hoặc danh mục khác đang trỏ tới nó. Danh mục như vậy chỉ
+/// được ngừng sử dụng, không được xoá cứng.
+class CategoryNotDeletableException implements Exception {
+  const CategoryNotDeletableException(this.categoryId);
+
+  final String categoryId;
+
+  @override
+  String toString() =>
+      'CategoryNotDeletableException: danh mục $categoryId không đủ điều kiện xoá hẳn';
+}
+
+/// Tương tự [CategoryNotDeletableException] cho 1 bước trạng thái.
+class StatusNotDeletableException implements Exception {
+  const StatusNotDeletableException(this.statusId);
+
+  final String statusId;
+
+  @override
+  String toString() =>
+      'StatusNotDeletableException: trạng thái $statusId không đủ điều kiện xoá hẳn';
+}
+
 /// Ném ra khi `amountMinor` không hợp lệ — Invariant 12
 /// (`docs/financial-core-v2.md` mục 18): luôn phải dương, không chấp nhận 0
 /// hay số âm. Đây là validate THẬT ở tầng Financial Engine (không bị strip

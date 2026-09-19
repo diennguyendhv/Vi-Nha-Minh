@@ -5,6 +5,7 @@ import '../../../core/constants/advanced_system_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import 'category_edit_screen.dart';
 
@@ -78,9 +79,131 @@ class CategoryListScreen extends ConsumerWidget {
               (c) => c.isBusinessExpense,
             ),
           ),
+          _StoppedSection(
+            categories: categories
+                .where(
+                  (c) =>
+                      !c.isActive &&
+                      c.type != TransactionType.transfer &&
+                      !AdvancedSystemCategories.contains(c.id),
+                )
+                .toList(),
+          ),
         ],
       ),
     );
+  }
+}
+
+/// "Ngừng sử dụng (n)" — danh mục đã ngừng. "Sử dụng lại" giữ NGUYÊN id;
+/// "Xóa hẳn" chỉ hiện khi danh mục chưa từng được dùng trong giao dịch nào
+/// (người dùng không cần biết soft/hard delete — chỉ thấy nút khi an toàn).
+class _StoppedSection extends ConsumerWidget {
+  const _StoppedSection({required this.categories});
+
+  final List<Category> categories;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (categories.isEmpty) return const SizedBox.shrink();
+    final deletable = ref.watch(deletableCategoryIdsProvider).valueOrNull ?? {};
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: const Key('category_stopped_section'),
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            'Ngừng sử dụng (${categories.length})',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textMuted,
+            ),
+          ),
+          children: [
+            for (final c in categories)
+              ListTile(
+                key: Key('stopped_category_${c.id}'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: CircleAvatar(radius: 9, backgroundColor: c.color),
+                title: Text(
+                  c.name,
+                  style: const TextStyle(color: AppColors.textMuted),
+                ),
+                subtitle: deletable.contains(c.id)
+                    ? null
+                    : const Text(
+                        'Đã được dùng trong lịch sử nên không thể xóa.',
+                        style: TextStyle(fontSize: 11.5),
+                      ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      key: Key('reuse_category_${c.id}'),
+                      onPressed: () => ref
+                          .read(categoryRepositoryProvider)
+                          .updateCategory(c.copyWith(isActive: true)),
+                      child: const Text('Sử dụng lại'),
+                    ),
+                    if (deletable.contains(c.id))
+                      TextButton(
+                        key: Key('delete_category_${c.id}'),
+                        onPressed: () => _confirmDelete(context, ref, c),
+                        child: const Text(
+                          'Xóa hẳn',
+                          style: TextStyle(color: AppColors.expenseAmount),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Category category,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Xóa hẳn "${category.name}"?'),
+        content: const Text('Danh mục sẽ biến mất và không thể khôi phục.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_category'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa hẳn'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref
+          .read(categoryRepositoryProvider)
+          .deleteCategoryPermanently(category.id);
+    } on CategoryNotDeletableException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Danh mục này vừa được dùng nên không thể xóa.'),
+          ),
+        );
+      }
+    }
   }
 }
 

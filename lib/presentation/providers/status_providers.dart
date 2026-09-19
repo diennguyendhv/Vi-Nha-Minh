@@ -17,3 +17,8 @@ final statusesStreamProvider = StreamProvider.family<List<Status>, String>((
   final repository = ref.watch(statusRepositoryProvider);
   return repository.watchStatuses(categoryId);
 });
+
+/// Id bước trạng thái đã ngừng sử dụng VÀ an toàn để xoá hẳn.
+final deletableStatusIdsProvider = StreamProvider<Set<String>>((ref) {
+  return ref.watch(statusRepositoryProvider).watchDeletableStatusIds();
+});

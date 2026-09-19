@@ -100,3 +100,8 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 
 ## 12. Phase 8.8 — Đơn giản hoá sản phẩm (4 nhóm Thu/Chi)
 Người dùng chỉ thấy 2 tầng: 4 nhóm chính cố định (Doanh thu · Khoản thu khác · Chi tiêu · Chi phí kinh doanh) → danh mục con tự tạo. Nhóm Thu suy từ `excludeFromTotals`; nhóm Chi suy từ `Category.groupKey` (`business_expense`, schema v7). KHÔNG phân nhóm theo tên/Ghi chú. Vay & Cho vay và Hoàn tiền/Thu hồi là tính năng nâng cao: engine giữ nguyên, entry point UI ẩn sau `advancedFeaturesEnabledProvider` (mặc định tắt) + `AdvancedSystemCategories` (ID hệ thống). Chi tiết ở `docs/phase-8.8-simplification-audit.md` và `docs/financial-core-v2.md` cuối file.
+
+## 13. Vòng đời Danh mục/Trạng thái & Trang chủ tối giản
+- **UNUSED master data → xóa hẳn được; USED → chỉ ngừng sử dụng.** Category/Status đã ngừng và chưa từng được giao dịch nào tham chiếu (kể cả đã hoàn tác) có thể xóa khỏi DB (`deleteCategoryPermanently` / `deleteStatusPermanently`, kiểm tra lại trong 1 DB transaction; Category còn cần: không phải Chuyển/danh mục hệ thống nâng cao, không ai trỏ `linkedExpenseCategoryId`, các bước con chưa từng dùng). Đã dùng → KHÔNG hard-delete, lịch sử vẫn resolve tên. UI không dùng thuật ngữ kỹ thuật; chỉ hiện "Xóa hẳn" khi an toàn. Không bao giờ chạm giao dịch/ledger.
+- **Trang chủ = 8 câu trả lời nhanh**, không phải báo cáo: Thu nhập tháng này / Số dư hiện tại / Tiết kiệm của Vợ và Chồng, Chi tiêu gia đình, Quỹ tiền ăn (id ổn định `DefaultFunds.anUongId`). Dùng lại `computeMemberNetIncome`, `computeMemberFinancials`, `computeGroupedTotals(...).spending`, `computeFundBalance` — không tự tính lại. Tổng tài sản/Net Worth/Vay/Recovery… chỉ ẩn ở UI (Engine giữ nguyên).
+

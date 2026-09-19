@@ -19,4 +19,13 @@ abstract class StatusRepository {
 
   /// "Sử dụng lại" 1 bước đã ẩn (`isActive = true`).
   Future<void> reactivateStatus(String statusId);
+
+  /// Id các bước trạng thái ĐÃ NGỪNG SỬ DỤNG và chưa từng được giao dịch nào
+  /// tham chiếu (kể cả giao dịch đã hoàn tác) — an toàn để xoá hẳn.
+  Stream<Set<String>> watchDeletableStatusIds();
+
+  /// Xoá HẲN 1 bước đã ngừng sử dụng và chưa từng dùng. Kiểm tra lại trong 1
+  /// transaction DB; ném [StatusNotDeletableException] nếu không đủ điều
+  /// kiện. Không ảnh hưởng balance, không chạm giao dịch.
+  Future<void> deleteStatusPermanently(String statusId);
 }

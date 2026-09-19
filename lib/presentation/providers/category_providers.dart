@@ -18,3 +18,9 @@ final categoriesStreamProvider = StreamProvider<List<Category>>((ref) {
   final repository = ref.watch(categoryRepositoryProvider);
   return repository.watchCategories();
 });
+
+/// Id danh mục đã ngừng sử dụng VÀ an toàn để xoá hẳn (xem
+/// `CategoryRepository.watchDeletableCategoryIds`).
+final deletableCategoryIdsProvider = StreamProvider<Set<String>>((ref) {
+  return ref.watch(categoryRepositoryProvider).watchDeletableCategoryIds();
+});

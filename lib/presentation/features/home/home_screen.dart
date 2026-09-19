@@ -1,26 +1,40 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/default_funds.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../domain/engine/financial_engine.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/transaction.dart';
-import '../../../domain/entities/transaction_type.dart';
-import '../../../domain/usecases/compute_financial_summary.dart';
+import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
+import '../../../domain/usecases/compute_pool_balance.dart';
+import '../../../domain/usecases/explore_transactions.dart';
+import '../../providers/app_state_providers.dart';
 import '../../providers/category_providers.dart';
-import '../../providers/fund_providers.dart';
-import '../../providers/obligation_providers.dart';
-import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/feature_providers.dart';
-import '../../widgets/category_label.dart';
+import '../../providers/fund_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../add_transaction/add_transaction_sheet.dart';
+import '../fund/fund_detail_screen.dart';
 import '../loans/loans_screen.dart';
 import '../settings/settings_screen.dart';
-import '../transactions/transaction_detail_screen.dart';
 
+/// Trang chủ — KHÔNG phải báo cáo kế toán, chỉ trả lời nhanh 8 câu hỏi thật:
+/// Vợ / Chồng tháng này kiếm được bao nhiêu · đang có bao nhiêu tiền dùng
+/// được · đang có bao nhiêu Tiết kiệm · gia đình đã Chi tiêu bao nhiêu · Quỹ
+/// tiền ăn còn bao nhiêu.
+///
+/// Mọi số lấy từ CÙNG nguồn sự thật với Tổng hợp/Financial Engine, không tự
+/// tính lại: Thu nhập = `computeMemberNetIncome`; Chi tiêu gia đình =
+/// `computeGroupedTotals(...).spending`; Số dư/Tiết kiệm =
+/// `computeMemberFinancials` (pool của Engine, KHÔNG suy ra từ Thu − Chi vì
+/// Chuyển/Tiết kiệm/Quỹ làm công thức đó lệch); Quỹ = `computeFundBalance`.
+///
+/// Tổng tài sản / Tài sản ròng / Vay / Phải thu-trả / Doanh thu / Chi phí kinh
+/// doanh… vẫn được Engine tính và có ở Tổng hợp; chỉ KHÔNG hiện ở đây.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -29,370 +43,193 @@ class HomeScreen extends ConsumerWidget {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final categoriesAsync = ref.watch(categoriesStreamProvider);
     final fundsAsync = ref.watch(fundsStreamProvider);
-    final assetTypesAsync = ref.watch(savingsAssetTypesStreamProvider);
-    final obligationsAsync = ref.watch(obligationsStreamProvider);
 
     if (transactionsAsync.isLoading ||
         categoriesAsync.isLoading ||
-        fundsAsync.isLoading ||
-        assetTypesAsync.isLoading ||
-        obligationsAsync.isLoading) {
+        fundsAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     final error =
-        transactionsAsync.error ??
-        categoriesAsync.error ??
-        fundsAsync.error ??
-        assetTypesAsync.error ??
-        obligationsAsync.error;
+        transactionsAsync.error ?? categoriesAsync.error ?? fundsAsync.error;
     if (error != null) {
       return Center(child: Text('Lỗi tải dữ liệu: $error'));
     }
 
-    final transactions = transactionsAsync.value ?? const [];
-    final categories = categoriesAsync.value ?? const [];
-    final funds = (fundsAsync.value ?? const [])
-        .where((f) => f.isActive)
-        .toList();
-    final assetTypes = (assetTypesAsync.value ?? const [])
-        .where((a) => a.isActive)
-        .toList();
-    final obligations = obligationsAsync.value ?? const [];
-
-    final summary = computeFinancialSummary(
-      transactions,
-      categories: categories,
-      funds: funds,
-      assetTypes: assetTypes,
-      obligations: obligations,
-      month: DateTime.now(),
-    );
-
     return _HomeContent(
-      transactions: transactions,
-      categories: categories,
-      summary: summary,
+      transactions: transactionsAsync.value ?? const [],
+      categories: categoriesAsync.value ?? const [],
+      funds: fundsAsync.value ?? const [],
       showLoans: ref.watch(advancedFeaturesEnabledProvider),
     );
   }
 }
 
-class _HomeContent extends StatelessWidget {
+class _HomeContent extends ConsumerStatefulWidget {
   const _HomeContent({
     required this.transactions,
     required this.categories,
-    required this.summary,
+    required this.funds,
     required this.showLoans,
   });
 
   final List<Transaction> transactions;
   final List<Category> categories;
-  final FinancialSummary summary;
+  final List<Fund> funds;
 
   /// Lối tắt Vay & Cho vay chỉ hiện khi bật tính năng nâng cao.
   final bool showLoans;
 
   @override
+  ConsumerState<_HomeContent> createState() => _HomeContentState();
+}
+
+class _HomeContentState extends ConsumerState<_HomeContent> {
+  /// Chặn bấm liên tiếp mở trùng màn/sheet: tap thứ hai bị bỏ qua cho tới khi
+  /// màn vừa mở đóng lại.
+  bool _busy = false;
+
+  Future<void> _once(Future<void> Function() action) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await action();
+    } finally {
+      _busy = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final voFinancials = computeMemberFinancials(FamilyMember.vo, transactions);
-    final chongFinancials = computeMemberFinancials(
-      FamilyMember.chong,
+    final now = DateTime.now();
+    final month = DateTime(now.year, now.month);
+    final transactions = widget.transactions;
+    final categories = widget.categories;
+
+    final members = [
+      for (final m in FamilyMember.values)
+        (
+          member: m,
+          income: computeMemberNetIncome(
+            m,
+            transactions,
+            categories,
+            month: month,
+          ),
+          financials: computeMemberFinancials(m, transactions),
+        ),
+    ];
+    final spending = computeGroupedTotals(
       transactions,
-    );
-    final categoryById = {for (final c in categories) c.id: c};
-    final visible = transactions.where(isVisible).toList()
-      ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
-    final monthLabel = 'Tháng ${DateTime.now().month}';
+      categories,
+      month: month,
+    ).spending;
+
+    Fund? foodFund;
+    for (final f in widget.funds) {
+      if (f.id == DefaultFunds.anUongId && f.isActive) foodFund = f;
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Xin chào,',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Ví Nhà Mình · $monthLabel',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-              ),
-              child: const _AvatarBadge(),
-            ),
-          ],
-        ),
+        _Header(monthLabel: 'Tháng ${now.month}'),
         const SizedBox(height: 20),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: _MemberCard(financials: voFinancials)),
-            const SizedBox(width: 12),
-            Expanded(child: _MemberCard(financials: chongFinancials)),
-          ],
-        ),
-        const SizedBox(height: 20),
-        _AssetOverviewCard(summary: summary),
-        if (showLoans) ...[
-          const SizedBox(height: 12),
-          _LoansShortcutCard(summary: summary),
+        for (final m in members) ...[
+          _MemberCard(
+            member: m.member,
+            income: m.income,
+            balance: m.financials.balance,
+            savings: m.financials.savingsTotal,
+          ),
+          const SizedBox(height: 14),
         ],
-        const SizedBox(height: 26),
-        const Text(
-          'Giao dịch gần đây',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+        _SpendingCard(
+          monthLabel: 'Tháng ${now.month}',
+          amount: spending,
+          onDetail: () =>
+              ref.read(currentTabProvider.notifier).state = AppTab.summary,
         ),
-        const SizedBox(height: 8),
-        _TransactionList(sorted: visible, categoryById: categoryById),
+        if (foodFund != null) ...[
+          const SizedBox(height: 14),
+          _FoodFundCard(
+            fund: foodFund,
+            balance: computeFundBalance(foodFund.id, transactions),
+            onOpen: () => _once(
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => FundDetailScreen(fundId: foodFund!.id),
+                ),
+              ),
+            ),
+            onTopUp: () => _once(
+              () => showAddTransactionSheet(
+                context,
+                initialType: EntryType.chuyen,
+                initialTransferSubKind: TransferSubKind.fund,
+                initialFundId: foodFund!.id,
+              ),
+            ),
+          ),
+        ],
+        if (widget.showLoans) ...[
+          const SizedBox(height: 14),
+          _LoansShortcutCard(
+            onTap: () => _once(
+              () => Navigator.of(
+                context,
+              ).push(MaterialPageRoute<void>(builder: (_) => const LoansScreen())),
+            ),
+          ),
+        ],
       ],
     );
   }
 }
 
-/// "Tổng quan tài sản" — bản RÚT GỌN của Phase 8 `FinancialSummary` cho
-/// Trang chủ (`computeFinancialSummary`, dùng chung 1 nguồn với
-/// `summary_screen.dart`, KHÔNG tự tính lại). Chỉ hiện tổng, không hiện
-/// breakdown từng Quỹ/loại tài sản — xem bản đầy đủ ở tab "Tổng hợp".
-class _AssetOverviewCard extends StatelessWidget {
-  const _AssetOverviewCard({required this.summary});
+class _Header extends StatelessWidget {
+  const _Header({required this.monthLabel});
 
-  final FinancialSummary summary;
+  final String monthLabel;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadow,
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'TỔNG TÀI SẢN',
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            Formatters.amount(summary.totalAssets),
-            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
-          ),
-          // Phase 8.8 — chỉ hiện khi có Payable, tránh người dùng tưởng vừa
-          // "giàu thêm" sau khi đi vay (audit mục 24) — Receivable đã nằm
-          // TRONG totalAssets rồi nên không hiện dòng riêng ở đây (mục 25:
-          // không cộng lại lần 2).
-          if (summary.totalPayables > 0) ...[
-            const SizedBox(height: 2),
-            Text(
-              'Tài sản ròng: ${Formatters.amount(summary.netWorth)}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          Row(
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: _MiniStat(
-                  label: 'Số dư khả dụng',
-                  value: summary.totalAvailable,
+              const Text(
+                'Xin chào,',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniStat(
-                  label: 'Tiết kiệm',
-                  value: summary.totalSavings,
+              const SizedBox(height: 2),
+              Text(
+                'Ví Nhà Mình · $monthLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.2,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniStat(label: 'Quỹ', value: summary.totalFunds),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _MiniStat(
-                  label: 'Thu tháng ${now.month}',
-                  value: summary.monthlyIncome,
-                  color: AppColors.accent,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniStat(
-                  label: 'Chi tháng ${now.month}',
-                  value: summary.monthlyExpense,
-                  color: AppColors.expenseAmount,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _MiniStat(label: 'Còn lại', value: summary.monthlyNet),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Phase 8.8 — entry point cho màn "Vay & Cho vay" (mục 3) — card riêng,
-/// KHÔNG đổi bottom navigation. `totalReceivables`/`totalPayables` đọc
-/// thẳng từ [FinancialSummary] đã tính sẵn (Phase 8.7), KHÔNG tự cộng lại
-/// (mục 3: "Không duplicate financial calculation trong UI").
-class _LoansShortcutCard extends StatelessWidget {
-  const _LoansShortcutCard({required this.summary});
-
-  final FinancialSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: (_) => const LoansScreen())),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.shadow,
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.handshake_rounded,
-                color: AppColors.accent,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Vay & Cho vay',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Phải thu ${Formatters.amount(summary.totalReceivables)} · Phải trả ${Formatters.amount(summary.totalPayables)}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11.5,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-          ],
+        const SizedBox(width: 12),
+        GestureDetector(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          ),
+          child: const _AvatarBadge(),
         ),
-      ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({required this.label, required this.value, this.color});
-
-  final String label;
-  final int value;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.chipBackground,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            Formatters.amount(value),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              color: color ?? AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -422,16 +259,16 @@ class _AvatarBadge extends StatelessWidget {
   }
 }
 
-class _MemberCard extends StatelessWidget {
-  const _MemberCard({required this.financials});
+/// Thẻ nền chung — 1 kiểu duy nhất cho mọi khối trên Trang chủ.
+class _Card extends StatelessWidget {
+  const _Card({super.key, required this.child, this.onTap});
 
-  final MemberFinancials financials;
+  final Widget child;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final isNegative = financials.balance < 0;
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -443,63 +280,161 @@ class _MemberCard extends StatelessWidget {
           ),
         ],
       ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: onTap,
+          child: Padding(padding: const EdgeInsets.all(18), child: child),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 11,
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.5,
+      ),
+    );
+  }
+}
+
+/// Vợ / Chồng: 3 dòng — Thu nhập tháng này, Số dư hiện tại, Tiết kiệm. Không
+/// phải nút (chỉ là số), nên không có hành động chạm.
+class _MemberCard extends StatelessWidget {
+  const _MemberCard({
+    required this.member,
+    required this.income,
+    required this.balance,
+    required this.savings,
+  });
+
+  final FamilyMember member;
+  final int income;
+  final int balance;
+  final int savings;
+
+  @override
+  Widget build(BuildContext context) {
+    final key = member.name;
+    return _Card(
+      key: Key('home_member_$key'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            financials.member.label.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Số dư còn lại',
-            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-          Text(
-            Formatters.amount(financials.balance),
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: isNegative
-                  ? AppColors.expenseAmount
-                  : AppColors.textPrimary,
-            ),
+          _SectionLabel(member.label),
+          const SizedBox(height: 12),
+          _StatRow(
+            valueKey: Key('home_income_$key'),
+            label: 'Thu nhập tháng này',
+            value: income,
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.incomeTile,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Tiết kiệm',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                Text(
-                  Formatters.amount(financials.savingsTotal),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Xem theo từng loại tài sản ở Cài đặt › Tiết kiệm',
-                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
-                ),
-              ],
+          _StatRow(
+            valueKey: Key('home_balance_$key'),
+            label: 'Số dư hiện tại',
+            value: balance,
+            negativeIsRed: true,
+          ),
+          const SizedBox(height: 10),
+          _StatRow(
+            valueKey: Key('home_savings_$key'),
+            label: 'Tiết kiệm',
+            value: savings,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatRow extends StatelessWidget {
+  const _StatRow({
+    required this.valueKey,
+    required this.label,
+    required this.value,
+    this.negativeIsRed = false,
+  });
+
+  final Key valueKey;
+  final String label;
+  final int value;
+  final bool negativeIsRed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+        ),
+        Text(
+          Formatters.amount(value),
+          key: valueKey,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            color: negativeIsRed && value < 0
+                ? AppColors.expenseAmount
+                : AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SpendingCard extends StatelessWidget {
+  const _SpendingCard({
+    required this.monthLabel,
+    required this.amount,
+    required this.onDetail,
+  });
+
+  final String monthLabel;
+  final int amount;
+  final VoidCallback onDetail;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      key: const Key('home_household_spending'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionLabel('Chi tiêu gia đình'),
+          const SizedBox(height: 4),
+          Text(
+            monthLabel,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            Formatters.amount(amount),
+            key: const Key('home_spending_amount'),
+            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              key: const Key('home_spending_detail'),
+              onPressed: onDetail,
+              child: const Text('Xem chi tiết'),
             ),
           ),
         ],
@@ -508,142 +443,82 @@ class _MemberCard extends StatelessWidget {
   }
 }
 
-class _TransactionList extends StatelessWidget {
-  const _TransactionList({required this.sorted, required this.categoryById});
+class _FoodFundCard extends StatelessWidget {
+  const _FoodFundCard({
+    required this.fund,
+    required this.balance,
+    required this.onOpen,
+    required this.onTopUp,
+  });
 
-  final List<Transaction> sorted;
-  final Map<String, Category> categoryById;
+  final Fund fund;
+  final int balance;
+  final VoidCallback onOpen;
+  final VoidCallback onTopUp;
 
   @override
   Widget build(BuildContext context) {
-    if (sorted.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 20),
-        child: Text(
-          'Chưa có giao dịch nào — bấm nút + để ghi khoản đầu tiên.',
-          style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-        ),
-      );
-    }
-    String? lastDateLabel;
-    final children = <Widget>[];
-    for (final t in sorted.take(10)) {
-      final dateLabel = Formatters.dayMonth(t.transactionDate);
-      if (dateLabel != lastDateLabel) {
-        lastDateLabel = dateLabel;
-        children.add(
-          Padding(
-            padding: const EdgeInsets.only(top: 16, bottom: 4),
-            child: Text(
-              dateLabel,
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textMuted,
-                letterSpacing: 0.5,
-              ),
+    return _Card(
+      key: const Key('home_food_fund'),
+      onTap: onOpen,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionLabel(fund.name),
+                const SizedBox(height: 6),
+                Text(
+                  balance > 0 ? Formatters.amount(balance) : 'Đã hết',
+                  key: const Key('home_food_fund_amount'),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (balance > 0)
+                  const Text(
+                    'Còn lại',
+                    style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+              ],
             ),
           ),
-        );
-      }
-      children.add(
-        _TransactionRow(transaction: t, category: categoryById[t.categoryId]),
-      );
-    }
-    return Column(children: children);
+          OutlinedButton(
+            key: const Key('home_food_fund_topup'),
+            onPressed: onTopUp,
+            child: const Text('Nạp quỹ'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
-class _TransactionRow extends StatelessWidget {
-  const _TransactionRow({required this.transaction, required this.category});
+/// Chỉ hiện khi bật tính năng nâng cao (mặc định tắt).
+class _LoansShortcutCard extends StatelessWidget {
+  const _LoansShortcutCard({required this.onTap});
 
-  final Transaction transaction;
-  final Category? category;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = category?.color ?? AppColors.textMuted;
-    final name = categoryDisplayLabel(category);
-    final initial = category == null || category!.name.isEmpty
-        ? '?'
-        : category!.name.substring(0, 1).toUpperCase();
-    final isIncome = transaction.type == TransactionType.income;
-    final isTransfer = transaction.type == TransactionType.transfer;
-    final amountColor = isTransfer
-        ? AppColors.textSecondary
-        : (isIncome ? AppColors.accent : AppColors.textPrimary);
-    final sign = isTransfer ? '⇄ ' : (isIncome ? '+ ' : '- ');
-    final amountText = '$sign${Formatters.amount(transaction.amountMinor)}';
-    final participant = transactionMemberLabel(transaction) ?? '';
-    final subtitle = transaction.note.isEmpty
-        ? participant
-        : (participant.isEmpty
-              ? transaction.note
-              : '${transaction.note} · $participant');
-
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              TransactionDetailScreen(transactionId: transaction.id),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.divider)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
+    return _Card(
+      key: const Key('home_loans_shortcut'),
+      onTap: onTap,
+      child: const Row(
+        children: [
+          Icon(Icons.handshake_rounded, color: AppColors.accent, size: 20),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Vay & Cho vay',
+              style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13.5,
-                    ),
-                  ),
-                  if (subtitle.isNotEmpty)
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Text(
-              amountText,
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 13.5,
-                color: amountColor,
-              ),
-            ),
-          ],
-        ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+        ],
       ),
     );
   }

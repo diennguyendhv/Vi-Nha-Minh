@@ -182,6 +182,12 @@ class _StaticCategoryRepository implements CategoryRepository {
   Future<void> updateCategory(Category category) async {}
   @override
   Future<void> softDeleteCategory(String categoryId) async {}
+
+  @override
+  Stream<Set<String>> watchDeletableCategoryIds() => Stream.value(const {});
+
+  @override
+  Future<void> deleteCategoryPermanently(String categoryId) async {}
 }
 
 class _StaticFundRepository implements FundRepository {

@@ -31,6 +31,12 @@ class _FakeCategoryRepository implements CategoryRepository {
   Future<void> updateCategory(Category category) async => updated.add(category);
   @override
   Future<void> softDeleteCategory(String categoryId) async {}
+
+  @override
+  Stream<Set<String>> watchDeletableCategoryIds() => Stream.value(const {});
+
+  @override
+  Future<void> deleteCategoryPermanently(String categoryId) async {}
 }
 
 class _FakeStatusRepository implements StatusRepository {
@@ -49,6 +55,14 @@ class _FakeStatusRepository implements StatusRepository {
   Future<void> softDeleteStatus(String statusId) async => calls.add('hide:$statusId');
   @override
   Future<void> reactivateStatus(String statusId) async => calls.add('reuse:$statusId');
+
+  /// Bước "an toàn để xoá hẳn" do test đặt (mặc định: không bước nào).
+  Set<String> deletable = {};
+  @override
+  Stream<Set<String>> watchDeletableStatusIds() => Stream.value(deletable);
+  @override
+  Future<void> deleteStatusPermanently(String statusId) async =>
+      calls.add('purge:$statusId');
 }
 
 /// Nếu màn này chạm vào ledger (ghi giao dịch) test sẽ ném lỗi ngay.
@@ -74,6 +88,7 @@ Future<_Repos> _pump(
   List<Category>? categories,
   TransactionType? initialType,
   bool initialSecondGroup = false,
+  Set<String> deletableStatuses = const {},
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -81,7 +96,7 @@ Future<_Repos> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final cats = _FakeCategoryRepository(categories ?? _threeStepCategories);
-  final statuses = _FakeStatusRepository();
+  final statuses = _FakeStatusRepository()..deletable = deletableStatuses;
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -462,9 +477,60 @@ void main() {
       tester.widget<SegmentedButton<bool>>(find.byKey(const Key('category_group'))).selected,
       {true},
     );
-    await tester.enterText(find.byKey(const Key('category_name')), 'Khác');
+    await tester.enterText(find.byKey(const Key('category_name')), 'Thưởng thêm');
     await _tapSave(tester);
     expect(repos.cats.added.single.excludeFromTotals, isTrue);
+  });
+
+  group('Tạo danh mục mới — chống trùng với danh mục đang dùng / đã ngừng', () {
+    final stoppedSinhHoat = <Category>[
+      for (final c in DefaultCategories.all)
+        c.id == 'sinh_hoat' ? c.copyWith(isActive: false) : c,
+    ];
+
+    testWidgets('Tên trùng danh mục ĐANG DÙNG cùng loại → báo "Đã có", không tạo', (tester) async {
+      final repos = await _pump(tester);
+      await tester.enterText(find.byKey(const Key('category_name')), '  sinh HOẠT ');
+      await _tapSave(tester);
+
+      expect(find.text('Đã có danh mục tên này.'), findsOneWidget);
+      expect(find.byKey(const Key('category_duplicate_reuse')), findsNothing);
+      expect(repos.cats.added, isEmpty);
+    });
+
+    testWidgets('Tên trùng danh mục ĐÃ NGỪNG → gợi ý "Sử dụng lại": giữ NGUYÊN id, không tạo bản mới', (tester) async {
+      final repos = await _pump(tester, categories: stoppedSinhHoat);
+      await tester.enterText(find.byKey(const Key('category_name')), 'Sinh hoạt');
+      await _tapSave(tester);
+
+      expect(find.text('Danh mục này đã tồn tại nhưng đang ngừng sử dụng.'), findsOneWidget);
+      expect(repos.cats.added, isEmpty, reason: 'không âm thầm tạo duplicate');
+
+      await tester.tap(find.byKey(const Key('category_duplicate_reuse')));
+      await tester.pumpAndSettle();
+      expect(repos.cats.added, isEmpty);
+      expect(repos.cats.updated.single.id, 'sinh_hoat', reason: 'reactivate cùng id');
+      expect(repos.cats.updated.single.isActive, isTrue);
+    });
+
+    testWidgets('Cùng tên nhưng KHÁC loại (Thu ↔ Chi) không bị coi là trùng', (tester) async {
+      final repos = await _pump(tester);
+      await _selectType(tester, 'Thu');
+      await tester.enterText(find.byKey(const Key('category_name')), 'Sinh hoạt');
+      await _tapSave(tester);
+      expect(repos.cats.added.single.name, 'Sinh hoạt');
+      expect(repos.cats.added.single.type, TransactionType.income);
+    });
+
+    testWidgets('Thông báo trùng biến mất khi gõ lại tên', (tester) async {
+      await _pump(tester);
+      await tester.enterText(find.byKey(const Key('category_name')), 'Sinh hoạt');
+      await _tapSave(tester);
+      expect(find.text('Đã có danh mục tên này.'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('category_name')), 'Sinh hoạt 2');
+      await tester.pump();
+      expect(find.text('Đã có danh mục tên này.'), findsNothing);
+    });
   });
 
   testWidgets('G — Tên rỗng: hiện "Nhập tên danh mục", không lưu', (tester) async {
@@ -490,9 +556,14 @@ void main() {
       ],
     );
 
-    Future<_Repos> pumpChoDi(WidgetTester tester, {Set<String> stopped = const {}}) => _pump(
+    Future<_Repos> pumpChoDi(
+      WidgetTester tester, {
+      Set<String> stopped = const {},
+      Set<String> deletable = const {},
+    }) => _pump(
       tester,
       categoryId: 'cho_di',
+      deletableStatuses: deletable,
       categories: [for (final c in DefaultCategories.all) c.id == 'cho_di' ? choDiWith(stopped: stopped) : c],
     );
 
@@ -507,7 +578,16 @@ void main() {
         expect(find.byKey(Key('status_edit_$id')), findsOneWidget);
         expect(find.byKey(Key('status_stop_$id')), findsOneWidget);
       }
-      expect(find.text('Ngừng sử dụng'), findsNWidgets(3), reason: 'nút ở 3 dòng, không còn chữ "Xoá" cho bước');
+      expect(
+        find.descendant(of: find.byType(ListView), matching: find.text('Ngừng sử dụng')),
+        findsNWidgets(3),
+        reason: 'nút ở 3 dòng, không còn chữ "Xoá" cho bước',
+      );
+      expect(
+        find.descendant(of: find.byType(AppBar), matching: find.text('Ngừng sử dụng')),
+        findsOneWidget,
+        reason: 'nút ngừng sử dụng cả danh mục ở thanh trên',
+      );
       expect(find.byIcon(Icons.close), findsNothing);
     });
 
@@ -542,6 +622,59 @@ void main() {
       expect(repos.statuses.calls, contains('reuse:cho_di_da_gui'));
       expect(repos.statuses.calls.where((c) => c.startsWith('add:')), isEmpty);
       expect(repos.cats.updated.single.statuses.where((s) => s.id == 'cho_di_da_gui').single.isActive, isTrue);
+    });
+
+    testWidgets('Xóa hẳn: chỉ hiện ở bước ĐÃ NGỪNG + chưa từng dùng; bước đã dùng chỉ có [Sử dụng lại] + 1 dòng giải thích', (tester) async {
+      await pumpChoDi(
+        tester,
+        stopped: {'cho_di_chua_chuan_bi', 'cho_di_da_gui'},
+        deletable: {'cho_di_da_gui'},
+      );
+
+      expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsOneWidget);
+      expect(find.byKey(const Key('status_delete_cho_di_chua_chuan_bi')), findsNothing, reason: 'đã dùng lịch sử');
+      expect(find.byKey(const Key('status_reuse_cho_di_chua_chuan_bi')), findsOneWidget);
+      expect(find.byKey(const Key('status_used_note')), findsOneWidget);
+      expect(find.byKey(const Key('status_delete_cho_di_da_chuan_bi')), findsNothing, reason: 'còn đang dùng');
+      expect(find.textContaining('foreign'), findsNothing);
+      expect(find.textContaining('constraint'), findsNothing);
+    });
+
+    testWidgets('Xóa hẳn: xác nhận → purge đúng id, biến khỏi danh sách, KHÔNG ghi ledger; Huỷ thì không xoá', (tester) async {
+      final repos = await pumpChoDi(
+        tester,
+        stopped: {'cho_di_da_gui'},
+        deletable: {'cho_di_da_gui'},
+      );
+
+      await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Huỷ'));
+      await tester.pumpAndSettle();
+      expect(repos.statuses.calls.where((c) => c.startsWith('purge:')), isEmpty);
+      expect(find.byKey(const Key('status_cho_di_da_gui')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm_delete_status')));
+      await tester.pumpAndSettle();
+
+      expect(repos.statuses.calls, contains('purge:cho_di_da_gui'));
+      expect(find.byKey(const Key('status_cho_di_da_gui')), findsNothing);
+      expect(find.textContaining('Ngừng sử dụng ('), findsNothing);
+
+      await _tapSave(tester);
+      expect(repos.statuses.calls.where((c) => c.contains('cho_di_da_gui') && !c.startsWith('purge:')), isEmpty);
+      expect(repos.cats.updated.single.statuses.map((s) => s.id), isNot(contains('cho_di_da_gui')));
+    });
+
+    testWidgets('Bước vừa bấm "Ngừng sử dụng" trong bản nháp (chưa Lưu) KHÔNG có Xóa hẳn dù id nằm trong danh sách an toàn', (tester) async {
+      await pumpChoDi(tester, deletable: {'cho_di_da_gui'});
+
+      await tester.tap(find.byKey(const Key('status_stop_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('status_reuse_cho_di_da_gui')), findsOneWidget);
+      expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsNothing);
     });
 
     testWidgets('Đổi tên (Sửa) → chỉ renameStatus với ĐÚNG id cũ, không add/ngừng', (tester) async {

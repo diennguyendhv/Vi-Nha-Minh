@@ -1027,42 +1027,26 @@ erDiagram
           <div class="phone-notch"></div>
           <div class="phone-head">Trang chủ <span class="sub">Th 9, 2026</span></div>
           <div class="phone-body">
-            <div class="member-row">
-              <div class="member-card">
-                <div class="name">Vợ</div>
-                <div class="bal">4.850.000 đ</div>
-                <div class="mini"><span>Tiết kiệm</span><span>9.200.000 đ</span></div>
-              </div>
-              <div class="member-card">
-                <div class="name">Chồng</div>
-                <div class="bal">6.120.000 đ</div>
-                <div class="mini"><span>Tiết kiệm</span><span>6.000.000 đ</span></div>
-              </div>
+            <div class="member-card" style="margin-bottom:8px">
+              <div class="name">VỢ</div>
+              <div class="mini"><span>Thu nhập tháng này</span><span>4.039.000 đ</span></div>
+              <div class="mini"><span>Số dư hiện tại</span><span>10.180.000 đ</span></div>
+              <div class="mini"><span>Tiết kiệm</span><span>4.740.000 đ</span></div>
             </div>
-            <div class="service-grid">
-              <div class="service-tile"><span class="ic" style="background:var(--jade-soft);color:var(--jade)">+</span>Thêm</div>
-              <div class="service-tile"><span class="ic" style="background:var(--amber-soft);color:var(--amber-dark)">Q</span>Quỹ</div>
-              <div class="service-tile"><span class="ic" style="background:var(--slate-soft);color:var(--slate)">NS</span>Ngân sách</div>
-              <div class="service-tile"><span class="ic" style="background:var(--rust-soft);color:var(--rust)">TK</span>Tiết kiệm</div>
+            <div class="member-card" style="margin-bottom:8px">
+              <div class="name">CHỒNG</div>
+              <div class="mini"><span>Thu nhập tháng này</span><span>17.330.000 đ</span></div>
+              <div class="mini"><span>Số dư hiện tại</span><span>15.315.000 đ</span></div>
+              <div class="mini"><span>Tiết kiệm</span><span>70.500.000 đ</span></div>
             </div>
-            <div class="stat-strip"><span>Tỷ lệ tiết kiệm tháng này</span><span class="v">31%</span></div>
-            <div>
-              <div class="section-label">Gần đây</div>
-              <div class="tx-row">
-                <span class="tx-dot" style="background:var(--ink-soft)"></span>
-                <div class="tx-main"><div class="n">Đi chợ</div><div class="m">Sinh hoạt · Vợ · 14/09</div></div>
-                <div class="tx-amt neg">-275.000</div>
-              </div>
-              <div class="tx-row">
-                <span class="tx-dot" style="background:var(--ink-soft)"></span>
-                <div class="tx-main"><div class="n">Ăn sáng</div><div class="m">Sinh hoạt · Chồng · 14/09</div></div>
-                <div class="tx-amt neg">-45.000</div>
-              </div>
-              <div class="tx-row">
-                <span class="tx-dot" style="background:var(--slate)"></span>
-                <div class="tx-main"><div class="n">Lương tháng 9</div><div class="m">Thu nhập · Chồng · 13/09</div></div>
-                <div class="tx-amt pos">+16.000.000</div>
-              </div>
+            <div class="member-card" style="margin-bottom:8px">
+              <div class="name">CHI TIÊU GIA ĐÌNH · Tháng 9</div>
+              <div class="bal">21.535.000 đ</div>
+              <div class="mini"><span></span><span style="color:var(--jade)">Xem chi tiết</span></div>
+            </div>
+            <div class="member-card">
+              <div class="name">QUỸ TIỀN ĂN</div>
+              <div class="mini"><span>Còn lại 420.000 đ</span><span style="color:var(--jade)">Nạp quỹ</span></div>
             </div>
             <div class="bottom-nav">
               <div class="tab active"><span class="ic"></span>Trang chủ</div>
@@ -1469,6 +1453,8 @@ erDiagram
       <li><b>Công thức báo cáo (chỉ đọc):</b> Thu nhập ròng = Doanh thu − Chi phí kinh doanh; Dòng tiền = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí KD. Financial Engine (số dư, Total Assets) không đổi. Thu nhập ròng theo Vợ/Chồng tính theo người nhận doanh thu và người chi chi phí kinh doanh.</li>
       <li><b>Ẩn khỏi UI mặc định:</b> Vay &amp; Cho vay, Hoàn tiền/Thu hồi (engine + lịch sử giữ nguyên). Ghi chú là ô trống, không chip gợi ý.</li>
       <li><b>Summary = truy vết:</b> mặc định Thu nhập ròng Vợ · Chồng + Chi tiêu gia đình; Explorer lọc kết hợp theo Thời gian · Thành viên · Nhóm chính · Danh mục · Trạng thái · Tìm trong Note, có tổng của kết quả đang xem và "Xoá bộ lọc". Mỗi dòng: ngày · Vợ/Chồng · Nhóm · Danh mục · số tiền · Note · trạng thái.</li>
+      <li><b>Trang chủ tối giản (không phải báo cáo kế toán):</b> Vợ / Chồng: Thu nhập tháng này (= Thu nhập ròng, cùng nguồn với Tổng hợp) · Số dư hiện tại (pool khả dụng của Financial Engine, KHÔNG suy ra từ Thu − Chi) · Tiết kiệm (tổng các pool tiết kiệm của người đó). Chi tiêu gia đình = chỉ nhóm Chi tiêu (không Chi phí KD/Chuyển/Vay); "Xem chi tiết" → tab Tổng hợp. Quỹ tiền ăn (nhận diện bằng id ổn định <code>an_uong</code>): Còn lại / "Đã hết" + Nạp quỹ. ẨN khỏi Trang chủ (chỉ ẩn UI, Engine vẫn tính): Tổng tài sản, Tài sản ròng, Vay &amp; Cho vay, Phải thu/Phải trả, Thu hồi, Doanh thu, Chi phí KD, Khoản thu khác, Giao dịch gần đây (đã có tab Giao dịch).</li>
+      <li><b>Vòng đời Danh mục / Trạng thái:</b> Đang sử dụng: Sửa · Ngừng sử dụng. Ngừng sử dụng: Sử dụng lại (giữ nguyên id) · Xóa hẳn — CHỈ hiện khi chưa từng có giao dịch nào tham chiếu (kể cả giao dịch đã hoàn tác; danh mục còn cần các bước con chưa từng dùng, không ai trỏ tới, không phải danh mục hệ thống). Đã dùng trong lịch sử → chỉ Ngừng sử dụng, kèm lời giải thích "Đã được dùng trong lịch sử nên không thể xóa." Tạo mới trùng tên với mục đã ngừng → gợi ý "Sử dụng lại", không tạo bản sao.</li>
     </ul>
   </section>
 
@@ -2606,6 +2592,11 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 
 ## 12. Phase 8.8 — Đơn giản hoá sản phẩm (4 nhóm Thu/Chi)
 Người dùng chỉ thấy 2 tầng: 4 nhóm chính cố định (Doanh thu · Khoản thu khác · Chi tiêu · Chi phí kinh doanh) → danh mục con tự tạo. Nhóm Thu suy từ `excludeFromTotals`; nhóm Chi suy từ `Category.groupKey` (`business_expense`, schema v7). KHÔNG phân nhóm theo tên/Ghi chú. Vay & Cho vay và Hoàn tiền/Thu hồi là tính năng nâng cao: engine giữ nguyên, entry point UI ẩn sau `advancedFeaturesEnabledProvider` (mặc định tắt) + `AdvancedSystemCategories` (ID hệ thống). Chi tiết ở `docs/phase-8.8-simplification-audit.md` và `docs/financial-core-v2.md` cuối file.
+
+## 13. Vòng đời Danh mục/Trạng thái & Trang chủ tối giản
+- **UNUSED master data → xóa hẳn được; USED → chỉ ngừng sử dụng.** Category/Status đã ngừng và chưa từng được giao dịch nào tham chiếu (kể cả đã hoàn tác) có thể xóa khỏi DB (`deleteCategoryPermanently` / `deleteStatusPermanently`, kiểm tra lại trong 1 DB transaction; Category còn cần: không phải Chuyển/danh mục hệ thống nâng cao, không ai trỏ `linkedExpenseCategoryId`, các bước con chưa từng dùng). Đã dùng → KHÔNG hard-delete, lịch sử vẫn resolve tên. UI không dùng thuật ngữ kỹ thuật; chỉ hiện "Xóa hẳn" khi an toàn. Không bao giờ chạm giao dịch/ledger.
+- **Trang chủ = 8 câu trả lời nhanh**, không phải báo cáo: Thu nhập tháng này / Số dư hiện tại / Tiết kiệm của Vợ và Chồng, Chi tiêu gia đình, Quỹ tiền ăn (id ổn định `DefaultFunds.anUongId`). Dùng lại `computeMemberNetIncome`, `computeMemberFinancials`, `computeGroupedTotals(...).spending`, `computeFundBalance` — không tự tính lại. Tổng tài sản/Net Worth/Vay/Recovery… chỉ ẩn ở UI (Engine giữ nguyên).
+
 </script>
 
 <footer>
