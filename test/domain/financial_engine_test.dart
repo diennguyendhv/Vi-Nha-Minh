@@ -358,16 +358,16 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         amountMinor: 2000000,
       );
       final convert = _tx(
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
         amountMinor: 1500000,
       );
       final balances = computeAllPoolBalances([topup, convert]);
@@ -376,7 +376,7 @@ void main() {
         poolBalance(
           balances,
           PoolKind.memberSavingsAsset,
-          savingsAssetRefId('savings_cash', FamilyMember.vo),
+          savingsAssetRefId('savings_bank', FamilyMember.vo),
         ),
         500000,
       );
@@ -384,7 +384,7 @@ void main() {
         poolBalance(
           balances,
           PoolKind.memberSavingsAsset,
-          savingsAssetRefId('savings_bank', FamilyMember.vo),
+          savingsAssetRefId('savings_gold', FamilyMember.vo),
         ),
         1500000,
       );
@@ -408,7 +408,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
         amountMinor: 2000000,
       );
       final total = computeMemberSavingsTotal(FamilyMember.vo, [stocksTopup, bankTopup]);
@@ -468,9 +468,9 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         amountMinor: 500000,
       );
       expect(() => validateNewTransaction(tx), throwsA(isA<SameSourceDestinationException>()));
@@ -481,9 +481,9 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_cash', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
         amountMinor: 500000,
       );
       expect(() => validateNewTransaction(tx), returnsNormally);

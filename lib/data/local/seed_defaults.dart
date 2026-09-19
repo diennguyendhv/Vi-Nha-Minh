@@ -7,7 +7,7 @@ import 'app_database.dart';
 
 /// Chạy đúng 1 lần — lúc file DB được tạo mới (`AppDatabase.migration`,
 /// `beforeOpen` với `details.wasCreated`). Insert 10 category seed (+status
-/// con), 1 quỹ mặc định, và 2 loại tài sản tiết kiệm mặc định, đúng bảng
+/// con), 1 quỹ mặc định, và 4 loại tài sản tiết kiệm mặc định, đúng bảng
 /// seed trong `spec.md`.
 Future<void> seedDefaults(AppDatabase db) async {
   await db.batch((batch) {
@@ -21,6 +21,7 @@ Future<void> seedDefaults(AppDatabase db) async {
           statsEnabled: Value(c.statsEnabled),
           excludeFromTotals: Value(c.excludeFromTotals),
           linkedExpenseCategoryId: Value(c.linkedExpenseCategoryId),
+          groupKey: Value(c.groupKey),
           isDefault: const Value(true),
           isActive: const Value(true),
         ),

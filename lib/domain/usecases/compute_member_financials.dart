@@ -8,7 +8,7 @@ class MemberFinancials {
   final FamilyMember member;
   final int balance;
 
-  /// Cộng dồn MỌI loại tài sản tiết kiệm (Tiền mặt, Ngân hàng, Chứng
+  /// Cộng dồn MỌI loại tài sản tiết kiệm (Gửi ngân hàng, Vàng, Chứng
   /// khoán...) — xem breakdown từng loại qua `savings_screen.dart` /
   /// `compute_pool_balance.computeMemberSavingsByAssetType`.
   final int savingsTotal;

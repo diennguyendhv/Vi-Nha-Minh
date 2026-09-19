@@ -62,7 +62,7 @@ Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nh
 
 **Tài khoản theo từng thành viên (riêng biệt, không gộp chung)** — đây là điểm khác biệt lớn nhất so với mô hình "một quỹ chung" ban đầu: sheet thật tính **Số dư** và **Tiết kiệm** riêng cho Vợ và cho Chồng (cột `K`/`N` "Tổng hợp"), dựa vào cột "Người tiêu" của từng giao dịch. App giữ đúng cơ chế này cho MỌI thành viên, không riêng Vợ/Chồng.
 
-**Tiết kiệm chia nhiều "loại tài sản" tự do, không cố định 2 loại (đã tổng quát hoá):** ban đầu chỉ tính tiền mặt/ngân hàng, nhưng thực tế có thể tiết kiệm dưới nhiều hình thức khác (chứng khoán, bất động sản, vàng...) — nên **loại tài sản tiết kiệm là dữ liệu gia đình tự tạo** (`SavingsAssetType`: id/tên/màu, giống hệt cách `Fund` là dữ liệu, chỉ khác là mỗi loại tách riêng CHO TỪNG thành viên). Seed sẵn 2 loại mặc định "Tiền mặt"/"Ngân hàng" để giữ trải nghiệm quen thuộc, nhưng xoá/thêm được như bất kỳ dữ liệu nào khác qua màn "Tiết kiệm" (Cài đặt) — xoá được khi cả 2 thành viên đều về 0 ở loại đó. Xem `docs/financial-core-v2.md` mục 9.
+**Tiết kiệm chia nhiều "loại tài sản" tự do, không cố định 2 loại (đã tổng quát hoá):** ban đầu chỉ tính tiền mặt/ngân hàng, nhưng thực tế có thể tiết kiệm dưới nhiều hình thức khác (chứng khoán, bất động sản, vàng...) — nên **loại tài sản tiết kiệm là dữ liệu gia đình tự tạo** (`SavingsAssetType`: id/tên/màu, giống hệt cách `Fund` là dữ liệu, chỉ khác là mỗi loại tách riêng CHO TỪNG thành viên). Seed sẵn 4 loại mặc định "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" (tiền mặt và tiền tài khoản ngân hàng dùng hằng ngày là tiền khả dụng, KHÔNG phải loại tiết kiệm), nhưng xoá/thêm được như bất kỳ dữ liệu nào khác qua màn "Tiết kiệm" (Cài đặt) — xoá được khi cả 2 thành viên đều về 0 ở loại đó. Xem `docs/financial-core-v2.md` mục 9.
 
 **Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `families/{familyId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn B bên dưới (làm cùng lúc với phần mời/tham gia thật), **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
 
@@ -184,11 +184,11 @@ families/{familyId}/months/{yearMonth}/transactions/{txId}
 - **Xoá quỹ chỉ được phép khi `balance = 0`.** Phải rút hết quỹ trước bằng giao dịch `TRANSFER(FUND_WITHDRAW)` (`source = FUND` → `destination = MEMBER_AVAILABLE`, đảo chiều của `FUND_TOPUP`), sau đó mới soft-delete (`isActive = false`) — không xoá cứng, không tự ý quy tiền còn lại cho ai. Màn Quỹ — Chi tiết (`docs/design.html` màn 15) chặn nút "Xoá quỹ" và giải thích rõ nếu `balance ≠ 0`.
 - **Màn Quỹ/Tiết kiệm chỉ để xem số dư + lịch sử, không nhập giao dịch trực tiếp.** Các nút "Nạp quỹ"/"Ghi khoản mua"/"Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" đều mở màn Thêm giao dịch (`docs/design.html` màn 09) điền sẵn loại giao dịch/nguồn-đích tương ứng — chỉ có 1 nơi tạo giao dịch duy nhất trong app, tránh 2 luồng code trùng nhau cho cùng 1 việc.
 
-**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Loại tài sản tiết kiệm (`SavingsAssetType`: Tiền mặt, Ngân hàng, Chứng khoán, Bất động sản...) là **dữ liệu gia đình tự tạo, không giới hạn số lượng** — xem `docs/financial-core-v2.md` mục 9. Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
+**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Loại tài sản tiết kiệm (`SavingsAssetType`: Gửi ngân hàng, Vàng, Chứng khoán, Bất động sản...) là **dữ liệu gia đình tự tạo, không giới hạn số lượng** — xem `docs/financial-core-v2.md` mục 9. Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
 
 - `SAVINGS_TOPUP` — nạp tiết kiệm vào 1 loại tài sản: `source = MEMBER_AVAILABLE` → `destination = MEMBER_SAVINGS_ASSET(loại X, người nạp)`.
 - `SAVINGS_WITHDRAW` — rút về ví chính (mở qua màn Thêm giao dịch, loại "Chuyển"): `source = MEMBER_SAVINGS_ASSET(loại X, người rút)` → `destination = MEMBER_AVAILABLE`.
-- `SAVINGS_CONVERT` — chuyển đổi giữa 2 loại tài sản bất kỳ (vd Tiền mặt → Ngân hàng, hoặc Ngân hàng → Chứng khoán, không riêng "gửi ngân hàng"): `source = MEMBER_SAVINGS_ASSET(loại X)` → `destination = MEMBER_SAVINGS_ASSET(loại Y)`, cùng 1 thành viên.
+- `SAVINGS_CONVERT` — chuyển đổi giữa 2 loại tài sản bất kỳ (vd Gửi ngân hàng → Vàng, hoặc Vàng → Chứng khoán): `source = MEMBER_SAVINGS_ASSET(loại X)` → `destination = MEMBER_SAVINGS_ASSET(loại Y)`, cùng 1 thành viên.
 
 Cả 3 đều **không đổi Tổng tài sản**, chỉ đổi chỗ tiền đang nằm — qua **chính màn Thêm giao dịch** (loại "Chuyển" → "Tiết kiệm"), không phải 1 form/màn hình riêng: chọn loại hình + loại tài sản, nhập số tiền + ghi chú, `transactionDate`/`createdAt` hệ thống tự gán.
 
@@ -205,6 +205,28 @@ match /families/{familyId}/{document=**} {
 ```
 
 ---
+
+## Phase 8.8 — Đơn giản hoá sản phẩm: 4 nhóm Thu/Chi & Summary/Explorer (đã duyệt, schema v7)
+
+**Ngôn ngữ người dùng chỉ còn 2 tầng:** 4 NHÓM CHÍNH cố định (hệ thống định nghĩa, không xoá/đổi được) → danh mục con do gia đình tự thêm/sửa/ngừng sử dụng.
+
+| Nhóm chính | Là gì | Biểu diễn trong dữ liệu |
+|---|---|---|
+| **Doanh thu** | Tiền thật kiếm được | `type = income` và `excludeFromTotals = false` |
+| **Khoản thu khác** | Tiền vào không phải doanh thu (Số dư ban đầu, người khác trả lại, thu hồi vốn khi bán lại…) | `type = income` và `excludeFromTotals = true` |
+| **Chi tiêu** | Chi phí cuộc sống/gia đình | `type = expense` và `groupKey = NULL` |
+| **Chi phí kinh doanh** | Chi phí để tạo ra doanh thu | `type = expense` và `groupKey = business_expense` |
+
+- Schema v7 chỉ thêm cột nullable `category_rows.group_key` (giá trị hợp lệ duy nhất `business_expense`). Không phân nhóm theo tên/Ghi chú. Đổi nhóm 1 danh mục chỉ đổi BÁO CÁO — giao dịch giữ nguyên `categoryId`, số dư/Total Assets không đổi (Financial Engine không đọc `groupKey`).
+- **Công thức (báo cáo, chỉ đọc):** Thu nhập ròng = Doanh thu − Chi phí kinh doanh (KHÔNG trừ Chi tiêu, KHÔNG cộng Khoản thu khác); Dòng tiền Thu/Chi = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí kinh doanh. Thu nhập ròng của từng thành viên = Doanh thu nhận về ví/tiết kiệm của người đó − Chi phí kinh doanh người đó chi. `Chi tiêu + Chi phí kinh doanh = Total External Expense`, `Doanh thu = Total Income` của Financial Core.
+- **Chuyển** chỉ là "từ đâu → đến đâu" (Vợ → Chồng, Tiết kiệm, Quỹ); không có danh mục Cho vay trong bộ chọn.
+- **Tính năng nâng cao ẩn khỏi UI mặc định** (engine + lịch sử giữ nguyên): Vay & Cho vay, Hoàn tiền/Thu hồi. Nhận diện bằng ID hệ thống (`AdvancedSystemCategories`) + cờ `advancedFeaturesEnabledProvider` (mặc định tắt). Giao dịch cũ của chúng vẫn hiển thị trong lịch sử.
+- **Seed DB mới tối giản:** Doanh thu: Thu nhập · Khoản thu khác: Số dư ban đầu, Khác · Chi tiêu: Sinh hoạt, Đầu tư, Tự thưởng, CĐ, DH · Chi phí kinh doanh: Chi phí kinh doanh. CĐ và DH có bộ 4 trạng thái riêng đúng như đang dùng thật: CĐ = CCB → ĐCB → ĐG → ĐD; DH = CCB → ĐCB → ĐD → ĐG. DB đã tồn tại không bị reseed.
+- **Ghi chú (Note)** là ô trống đơn giản (không chip gợi ý, không câu ví dụ) — Category là nhóm thống kê, Note mô tả giao dịch cụ thể; app không bao giờ parse Note.
+
+### Summary / Transaction Explorer (Phase 8.8 — scope kế tiếp)
+- **Home** = trả lời nhanh. **Summary** = truy vết tiền thật: mặc định chỉ Thu nhập ròng tháng này của Vợ, của Chồng và Chi tiêu gia đình; bên dưới là Explorer.
+- **Explorer** lọc kết hợp (giao, không phải hợp): Thời gian (Hôm nay / Tháng này / Tháng trước / khoảng ngày), Thành viên (Tất cả / Vợ / Chồng — chip nhanh), Nhóm chính, Danh mục (phụ thuộc nhóm), Trạng thái (chỉ khi danh mục có trạng thái), Tìm trong Note (không phân biệt hoa/thường, khớp một phần). Có "Xoá bộ lọc". Mỗi dòng: ngày · Vợ/Chồng · Nhóm · Danh mục · số tiền · Note · trạng thái; Chuyển hiện "Vợ → Chồng". Đầu kết quả: số giao dịch, tổng tiền vào, tổng tiền ra, khoảng ngày. Chỉ hiển thị bản ghi đang hiệu lực (reversal/bản gốc đã hoàn tác ẩn; chi tiết vẫn xem được lịch sử).
 
 ## Lộ trình chi tiết theo mô hình thác nước
 
@@ -269,8 +291,8 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 43. **Form nạp tiền vào quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `TRANSFER(FUND_TOPUP)`: `source = MEMBER_AVAILABLE` → `destination = FUND`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, số dư người nạp giảm đúng, Tổng tài sản không đổi.
 44. **Form ghi khoản chi tích quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `EXPENSE` với `source = FUND` (thay vì `MEMBER_AVAILABLE`), chặn chọn quỹ nếu `amountMinor` > số dư quỹ. Chạy: ghi thử "đi chợ 150.000đ" tích quỹ. Test: **chỉ** số dư quỹ giảm đúng — số dư người mua giữ nguyên (không trừ kép, xem test case 7 ở `docs/financial-core-v2.md`).
 45. **Cloud Function cache `balance` lên `funds/{fundId}`** — đã gộp chung vào phase 36 (`applyEffect` cập nhật mọi pool cùng lúc) — Chạy/Test: xác nhận lại `balance` quỹ khớp tổng tính tay sau nhiều giao dịch liên tiếp.
-46. **Nối số dư theo từng loại tài sản tiết kiệm với dữ liệu thật** — Code: đổi nguồn `savingsByAssetType` (map theo `assetTypeId`) sang Cloud Function tính theo `transferKind` (`SAVINGS_TOPUP`/`SAVINGS_WITHDRAW`/`SAVINGS_CONVERT`). Chạy: thêm giao dịch Tiết kiệm `SAVINGS_CONVERT` (vd Tiền mặt → Ngân hàng). Test: đúng loại tài sản đích tăng, loại tài sản nguồn giảm đúng, `availableBalance` không đổi.
-47. **Màn hình Tiết kiệm — Quản lý** (`docs/design.html` màn 16) — Code: `presentation/features/savings/`, nút "Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" trên từng loại tài sản mở lại màn Thêm giao dịch (09) với loại "Chuyển" → "Tiết kiệm" điền sẵn hành động + loại tài sản tương ứng — **không dựng form nhập riêng**, đúng nguyên tắc chỉ 1 nơi tạo giao dịch duy nhất trong app (giống Quỹ ở phase 42-44). Chạy: rút thử 500.000 về ví chính, chuyển thử 10.000.000 từ "Tiền mặt" sang "Ngân hàng". Test: `SAVINGS_WITHDRAW` cộng đúng vào `availableBalance`; `SAVINGS_CONVERT` chỉ đổi chỗ giữa 2 loại tài sản tự chọn, Tổng tài sản không đổi.
+46. **Nối số dư theo từng loại tài sản tiết kiệm với dữ liệu thật** — Code: đổi nguồn `savingsByAssetType` (map theo `assetTypeId`) sang Cloud Function tính theo `transferKind` (`SAVINGS_TOPUP`/`SAVINGS_WITHDRAW`/`SAVINGS_CONVERT`). Chạy: thêm giao dịch Tiết kiệm `SAVINGS_CONVERT` (vd Gửi ngân hàng → Vàng). Test: đúng loại tài sản đích tăng, loại tài sản nguồn giảm đúng, `availableBalance` không đổi.
+47. **Màn hình Tiết kiệm — Quản lý** (`docs/design.html` màn 16) — Code: `presentation/features/savings/`, nút "Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" trên từng loại tài sản mở lại màn Thêm giao dịch (09) với loại "Chuyển" → "Tiết kiệm" điền sẵn hành động + loại tài sản tương ứng — **không dựng form nhập riêng**, đúng nguyên tắc chỉ 1 nơi tạo giao dịch duy nhất trong app (giống Quỹ ở phase 42-44). Chạy: rút thử 500.000 về ví chính, chuyển thử 10.000.000 từ "Gửi ngân hàng" sang "Vàng". Test: `SAVINGS_WITHDRAW` cộng đúng vào `availableBalance`; `SAVINGS_CONVERT` chỉ đổi chỗ giữa 2 loại tài sản tự chọn, Tổng tài sản không đổi.
 
 ### Giai đoạn D — Trạng thái & Tổng hợp tháng (9 phase, đánh số 48-56)
 

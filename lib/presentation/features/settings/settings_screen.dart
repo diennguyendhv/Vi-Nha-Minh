@@ -13,148 +13,149 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final biometricLock = ref.watch(biometricLockProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-      children: [
-        const Text(
-          'Cài đặt',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.2,
-          ),
-        ),
-        const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadow,
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(
-                  color: AppColors.accent,
-                  shape: BoxShape.circle,
+    // Màn này được push thành route riêng từ avatar ở Trang chủ (không còn
+    // nằm dưới `Scaffold` của `AppShell`), nên PHẢI tự có `Scaffold` — nếu
+    // không `InkWell` của từng dòng ném "No Material widget found" (F23).
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cài đặt')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadow,
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
-                child: const Text(
-                  'GĐ',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Text(
+                    'GĐ',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Sổ chung: Gia đình',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14.5,
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sổ chung: Gia đình',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14.5,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Vợ · Chồng đang đồng bộ',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                      Text(
+                        'Vợ · Chồng đang đồng bộ',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.accentDark, AppColors.accent],
+              ],
             ),
-            borderRadius: BorderRadius.circular(20),
           ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Nâng cấp Premium',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14.5,
-                ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.accentDark, AppColors.accent],
               ),
-              SizedBox(height: 4),
-              Text(
-                'Mở khoá nhiều sổ, báo cáo xu hướng nhiều tháng và sao lưu không giới hạn.',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12.5,
-                  height: 1.5,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Nâng cấp Premium',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                  ),
                 ),
-              ),
-            ],
+                SizedBox(height: 4),
+                Text(
+                  'Mở khoá nhiều sổ, báo cáo xu hướng nhiều tháng và sao lưu không giới hạn.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12.5,
+                    height: 1.5,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.shadow,
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              _SettingsRow(
-                label: 'Quỹ',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const FundListScreen()),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadow,
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              const Divider(height: 1, color: AppColors.divider),
-              _SettingsRow(
-                label: 'Tiết kiệm',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const SavingsScreen()),
+              ],
+            ),
+            child: Column(
+              children: [
+                _SettingsRow(
+                  label: 'Quỹ',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const FundListScreen(),
+                    ),
+                  ),
                 ),
-              ),
-              const Divider(height: 1, color: AppColors.divider),
-              const _SettingsRow(label: 'Ngân sách theo tháng'),
-              const Divider(height: 1, color: AppColors.divider),
-              _BiometricRow(
-                enabled: biometricLock,
-                onChanged: (value) =>
-                    ref.read(biometricLockProvider.notifier).state = value,
-              ),
-            ],
+                const Divider(height: 1, color: AppColors.divider),
+                _SettingsRow(
+                  label: 'Tiết kiệm',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const SavingsScreen(),
+                    ),
+                  ),
+                ),
+                const Divider(height: 1, color: AppColors.divider),
+                const _SettingsRow(label: 'Ngân sách theo tháng'),
+                const Divider(height: 1, color: AppColors.divider),
+                _BiometricRow(
+                  enabled: biometricLock,
+                  onChanged: (value) =>
+                      ref.read(biometricLockProvider.notifier).state = value,
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

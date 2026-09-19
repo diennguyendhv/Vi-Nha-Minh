@@ -37,6 +37,19 @@ class FundNotEmptyException implements Exception {
       'FundNotEmptyException: quỹ $fundId còn $balance đ, phải rút hết trước khi xoá';
 }
 
+/// Phase 8.7 — ném ra khi cố soft-delete 1 `Counterparty` mà còn `Obligation`
+/// đang mở (outstanding > 0) tham chiếu tới. Cùng tinh thần
+/// `FundNotEmptyException` — phải tất toán hết trước khi xoá.
+class CounterpartyHasOpenObligationsException implements Exception {
+  const CounterpartyHasOpenObligationsException(this.counterpartyId);
+
+  final String counterpartyId;
+
+  @override
+  String toString() =>
+      'CounterpartyHasOpenObligationsException: counterpartyId=$counterpartyId còn khoản vay đang mở';
+}
+
 /// Ném ra khi cố xoá 1 loại tài sản tiết kiệm mà ít nhất 1 thành viên vẫn
 /// còn số dư khác 0 ở loại đó.
 class SavingsAssetTypeNotEmptyException implements Exception {
@@ -262,4 +275,75 @@ class InvalidRecoveryTargetException implements Exception {
   @override
   String toString() =>
       'InvalidRecoveryTargetException($reason): target=$targetId';
+}
+
+/// Phase 8.7 — ném ra khi không tìm thấy giao dịch TẠO khoản vay (hình dạng
+/// đúng theo `direction`, còn `isVisible`) cho 1 `obligationId` — cần thiết
+/// trước khi tất toán/tính outstanding (không có "principal gốc" thì không
+/// có gì để tất toán).
+class ObligationCreationNotFoundException implements Exception {
+  const ObligationCreationNotFoundException(this.obligationId);
+
+  final String obligationId;
+
+  @override
+  String toString() =>
+      'ObligationCreationNotFoundException: không tìm thấy giao dịch tạo khoản vay cho obligationId=$obligationId';
+}
+
+/// Ném ra khi cố hoàn tác/sửa giao dịch TẠO khoản vay trong khi đã tồn tại
+/// >= 1 lần tất toán (settlement) còn hiệu lực — audit Phase 8.7 mục L/M,
+/// cùng tinh thần `FundNotEmptyException` ("tất toán hết trước khi hoàn
+/// tác/sửa khoản vay gốc", không cascade-xoá lịch sử tất toán).
+class ObligationHasSettlementsException implements Exception {
+  const ObligationHasSettlementsException(this.obligationId);
+
+  final String obligationId;
+
+  @override
+  String toString() =>
+      'ObligationHasSettlementsException: obligationId=$obligationId đã có tất toán, phải hoàn tác hết tất toán trước';
+}
+
+/// Ném ra khi cố sửa (correction) 1 lần tất toán KHÔNG PHẢI lần tất toán
+/// MỚI NHẤT còn hiệu lực của 1 khoản vay — decision đã approve Phase 8.7
+/// (audit "atomicity + idempotency" mục M): chỉ cho sửa lần tất toán gần
+/// nhất, tránh phải recompute lại phân bổ gốc/lãi của các lần tất toán sau
+/// nó.
+class NotLatestSettlementException implements Exception {
+  const NotLatestSettlementException(this.settlementLegId, this.obligationId);
+
+  final String settlementLegId;
+  final String obligationId;
+
+  @override
+  String toString() =>
+      'NotLatestSettlementException: $settlementLegId không phải tất toán mới nhất của obligationId=$obligationId';
+}
+
+/// Phase 8.7 — phát hiện "half-settlement": 1 trong 2 leg (principal/lãi)
+/// của cùng 1 lần tất toán tồn tại trong DB nhưng leg còn lại thì không.
+/// Theo thiết kế, `settleObligation` ghi cả 2 leg atomic trong 1
+/// `_db.transaction()` nên trạng thái này KHÔNG THỂ xảy ra qua đường ghi
+/// bình thường — nếu phát hiện, coi là dữ liệu hỏng (audit "atomicity +
+/// idempotency" mục 4/D), KHÔNG tự ý ghi nốt leg còn thiếu (outstanding có
+/// thể đã đổi do giao dịch khác chen giữa), chỉ báo lỗi rõ ràng.
+class SettlementIntegrityException implements Exception {
+  const SettlementIntegrityException({
+    required this.obligationId,
+    required this.clientTxId,
+    required this.missingLeg,
+  });
+
+  final String obligationId;
+  final String clientTxId;
+
+  /// 'principal' hoặc 'interest' — leg nào đang bị thiếu.
+  final String missingLeg;
+
+  @override
+  String toString() =>
+      'SettlementIntegrityException: obligationId=$obligationId, '
+      'clientTxId=$clientTxId thiếu leg "$missingLeg" — dữ liệu nửa vời, '
+      'không tự sửa';
 }

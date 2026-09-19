@@ -32,6 +32,8 @@ part 'app_database.g.dart';
 )
 @TableIndex(name: 'ix_transaction_category_status', columns: {#categoryId, #statusId})
 @TableIndex(name: 'ix_transaction_recovery_of', columns: {#recoveryOfTxId})
+@TableIndex(name: 'ix_transaction_obligation', columns: {#obligationId})
+@TableIndex(name: 'ix_transaction_settlement_group', columns: {#settlementGroupId})
 class TransactionRows extends Table {
   TextColumn get id => text()();
   TextColumn get type => text()();
@@ -56,8 +58,45 @@ class TransactionRows extends Table {
   /// do tương tự: tương thích sync Firestore Giai đoạn B (eventual
   /// consistency, bản ghi con có thể tới trước bản gốc).
   TextColumn get recoveryOfTxId => text().nullable()();
+  /// Phase 8.7 — giao dịch này thuộc `Obligation.id` nào (Cho vay/Đi vay).
+  /// KHÔNG khai báo FK — cùng lý do 3 field self-reference + `recovery_of_tx_id`
+  /// ở trên (tương thích sync Firestore Giai đoạn B, eventual consistency).
+  TextColumn get obligationId => text().nullable()();
+  /// Phase 8.7 — ghép cặp 2 leg (gốc + lãi) của CÙNG 1 lần tất toán
+  /// Receivable. `null` khi tất toán chỉ có 1 dòng. Xem doc-comment field
+  /// tương ứng ở `domain/entities/transaction.dart` — field BẮT BUỘC lưu
+  /// riêng (không suy ra được từ `clientTxId`).
+  TextColumn get settlementGroupId => text().nullable()();
   TextColumn get clientTxId => text()();
   IntColumn get version => integer().withDefault(const Constant(1))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Phase 8.7 — 1 bên ngoài gia đình liên quan Cho vay/Đi vay. Metadata
+/// thuần, giống hệt `FundRows` (KHÔNG cache số liệu tài chính nào).
+class CounterpartyRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get displayName => text()();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// Phase 8.7 — neo giữ metadata 1 khoản vay/cho vay (`Obligation`). KHÔNG
+/// cache `originalPrincipal`/`outstanding` — tính động từ
+/// `TransactionRows.obligationId` (xem `compute_obligation_summary.dart`).
+@TableIndex(name: 'ix_obligation_counterparty', columns: {#counterpartyId})
+class ObligationRows extends Table {
+  TextColumn get id => text()();
+  TextColumn get counterpartyId =>
+      text().references(CounterpartyRows, #id)();
+  TextColumn get direction => text()();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  TextColumn get note => text().withDefault(const Constant(''))();
+  BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -73,6 +112,10 @@ class CategoryRows extends Table {
   BoolColumn get excludeFromTotals =>
       boolean().withDefault(const Constant(false))();
   TextColumn get linkedExpenseCategoryId => text().nullable()();
+
+  /// v7: phân loại báo cáo cho danh mục Chi (`business_expense` hoặc NULL =
+  /// Chi tiêu). Thêm bằng `ADD COLUMN` — không đụng dữ liệu cũ.
+  TextColumn get groupKey => text().nullable()();
   BoolColumn get isDefault => boolean().withDefault(const Constant(true))();
   BoolColumn get isActive => boolean().withDefault(const Constant(true))();
 
@@ -106,7 +149,7 @@ class FundRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Loại tài sản tiết kiệm tự đặt (Tiền mặt, Ngân hàng, Chứng khoán, Bất
+/// Loại tài sản tiết kiệm tự đặt (Gửi ngân hàng, Vàng, Chứng khoán, Bất
 /// động sản...) — mỗi loại là 1 pool riêng CHO TỪNG thành viên (khác
 /// `FundRows`, dùng chung cả nhà). KHÔNG cache balance, tương tự `FundRows`.
 class SavingsAssetTypeRows extends Table {
@@ -120,7 +163,15 @@ class SavingsAssetTypeRows extends Table {
 }
 
 @DriftDatabase(
-  tables: [TransactionRows, CategoryRows, StatusRows, FundRows, SavingsAssetTypeRows],
+  tables: [
+    TransactionRows,
+    CategoryRows,
+    StatusRows,
+    FundRows,
+    SavingsAssetTypeRows,
+    CounterpartyRows,
+    ObligationRows,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -138,9 +189,13 @@ class AppDatabase extends _$AppDatabase {
   /// `CREATE TABLE`), nên dùng pattern rename → tạo bảng mới → copy dữ liệu
   /// → xoá bảng cũ, không `DROP` thẳng. Version 5 (Phase 8.6) thêm
   /// `recovery_of_tx_id` — cùng pattern, cùng lý do (cột mới + index mới
-  /// trên bảng đã có FK/unique index từ v4).
+  /// trên bảng đã có FK/unique index từ v4). Version 6 (Phase 8.7) thêm 2
+  /// bảng mới `counterparty_rows`/`obligation_rows` (thuần cộng thêm,
+  /// `createTable` không cần rename gì) + 2 cột mới trên `transaction_rows`
+  /// (`obligation_id`, `settlement_group_id`) — cùng pattern rename →
+  /// recreate → copy → drop như v4→v5 (bảng đã có FK/unique index từ v4).
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -171,6 +226,15 @@ class AppDatabase extends _$AppDatabase {
         // Cùng lý do atomicity như v3→v4 — rollback sạch nếu copy giữa
         // chừng lỗi, không để bảng `_v4` tạm sót lại.
         await transaction(() => _migrateToV5(m));
+      }
+      if (from < 6) {
+        await transaction(() => _migrateToV6(m));
+      }
+      if (from < 7) {
+        // v6 → v7: chỉ ADD COLUMN nullable (`category_rows.group_key`). Dữ
+        // liệu cũ giữ nguyên; danh mục Chi hiện có mặc định NULL (= Chi
+        // tiêu) — không UPDATE theo tên/Ghi chú, không viết lại giao dịch.
+        await m.addColumn(categoryRows, categoryRows.groupKey);
       }
     },
     beforeOpen: (details) async {
@@ -266,6 +330,53 @@ class AppDatabase extends _$AppDatabase {
       'NULL, client_tx_id, version FROM transaction_rows_v4',
     );
     await customStatement('DROP TABLE transaction_rows_v4');
+  }
+
+  /// v5 → v6 (Phase 8.7): thêm 2 bảng mới (`CounterpartyRows`/
+  /// `ObligationRows` — `createTable` thẳng, KHÔNG có dữ liệu cũ cần copy)
+  /// + 2 cột mới trên `transaction_rows` (`obligation_id`,
+  /// `settlement_group_id`, cả 2 TEXT NULL, không FK — cùng lý do các field
+  /// self-reference khác). Cùng pattern rename → recreate → copy → drop như
+  /// v4→v5 cho `transaction_rows` (cột mới mặc định NULL cho MỌI row cũ —
+  /// KHÔNG reinterpret dữ liệu có sẵn, kể cả dòng "Chị hằng mượn tiền về
+  /// quê" trong golden 2026 — vẫn giữ nguyên là Expense bình thường, không
+  /// tự gắn `obligationId`).
+  Future<void> _migrateToV6(Migrator m) async {
+    await m.createTable(counterpartyRows);
+    await m.createTable(obligationRows);
+    await m.createIndex(ixObligationCounterparty);
+
+    await customStatement(
+      'ALTER TABLE transaction_rows RENAME TO transaction_rows_v5',
+    );
+    await customStatement('DROP INDEX IF EXISTS ux_transaction_client_tx_id');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_source');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_destination');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_category_status');
+    await customStatement('DROP INDEX IF EXISTS ix_transaction_recovery_of');
+    await m.createTable(transactionRows);
+    await m.createIndex(uxTransactionClientTxId);
+    await m.createIndex(ixTransactionSource);
+    await m.createIndex(ixTransactionDestination);
+    await m.createIndex(ixTransactionCategoryStatus);
+    await m.createIndex(ixTransactionRecoveryOf);
+    await m.createIndex(ixTransactionObligation);
+    await m.createIndex(ixTransactionSettlementGroup);
+    await customStatement(
+      'INSERT INTO transaction_rows (id, type, transfer_kind, category_id, '
+      'source_kind, source_ref_id, destination_kind, destination_ref_id, '
+      'amount_minor, currency, note, status_id, status_updated_at, '
+      'transaction_date, created_at, reversal_of_tx_id, corrects_tx_id, '
+      'reversed_by_tx_id, recovery_of_tx_id, obligation_id, '
+      'settlement_group_id, client_tx_id, version) '
+      'SELECT id, type, transfer_kind, category_id, source_kind, '
+      'source_ref_id, destination_kind, destination_ref_id, amount_minor, '
+      'currency, note, status_id, status_updated_at, transaction_date, '
+      'created_at, reversal_of_tx_id, corrects_tx_id, reversed_by_tx_id, '
+      'recovery_of_tx_id, NULL, NULL, client_tx_id, version '
+      'FROM transaction_rows_v5',
+    );
+    await customStatement('DROP TABLE transaction_rows_v5');
   }
 }
 

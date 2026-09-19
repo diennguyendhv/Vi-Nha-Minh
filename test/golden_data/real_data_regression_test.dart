@@ -167,7 +167,7 @@ void main() {
     });
   });
 
-  group('7 — 70 triệu chuyển sang Ngân hàng (SAVINGS_CONVERT asset-type split)', () {
+  group('7 — 70 triệu chuyển sang Gửi ngân hàng (SAVINGS_CONVERT asset-type split)', () {
     test('Savings tổng không đổi, chỉ đổi chỗ giữa 2 loại tài sản, Total Assets không đổi', () {
       final topup = tx(
         type: TransactionType.transfer,

@@ -9,6 +9,7 @@ import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../../widgets/category_label.dart';
 import 'transaction_detail_screen.dart';
 
 /// Màn "Danh sách" (`docs/design.html` màn 10) — nhóm theo ngày kèm tổng
@@ -18,7 +19,8 @@ class TransactionListScreen extends ConsumerStatefulWidget {
   const TransactionListScreen({super.key});
 
   @override
-  ConsumerState<TransactionListScreen> createState() => _TransactionListScreenState();
+  ConsumerState<TransactionListScreen> createState() =>
+      _TransactionListScreenState();
 }
 
 class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
@@ -30,24 +32,29 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final categoryById = {for (final c in categories) c.id: c};
 
-    final inMonth = transactions
-        .where(
-          (t) =>
-              isVisible(t) &&
-              t.transactionDate.year == _month.year &&
-              t.transactionDate.month == _month.month,
-        )
-        .toList()
-      ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+    final inMonth =
+        transactions
+            .where(
+              (t) =>
+                  isVisible(t) &&
+                  t.transactionDate.year == _month.year &&
+                  t.transactionDate.month == _month.month,
+            )
+            .toList()
+          ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
     // STT theo đúng thứ tự thời gian ghi trong tháng (cũ nhất = 1), dù danh
     // sách hiển thị mới nhất lên đầu — khớp cách đánh số 1 sổ ghi chép thật.
-    final chronological = [...inMonth]..sort((a, b) => a.transactionDate.compareTo(b.transactionDate));
-    final sttById = {for (var i = 0; i < chronological.length; i++) chronological[i].id: i + 1};
+    final chronological = [...inMonth]
+      ..sort((a, b) => a.transactionDate.compareTo(b.transactionDate));
+    final sttById = {
+      for (var i = 0; i < chronological.length; i++) chronological[i].id: i + 1,
+    };
 
     final grouped = <DateTime, List<Transaction>>{};
     for (final t in inMonth) {
@@ -93,7 +100,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     itemCount: days.length,
                     itemBuilder: (context, i) {
                       final day = days[i];
@@ -120,7 +130,10 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 ),
                                 Text(
                                   Formatters.amount(dayTotal),
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ],
                             ),
@@ -150,8 +163,20 @@ int _signedAmount(Transaction t) {
   };
 }
 
+/// "ghi chú · Vợ" (hoặc chỉ ghi chú / chỉ Vợ/Chồng / "Vợ → Chồng" khi chuyển).
+String? _subtitle(Transaction t) {
+  final member = transactionMemberLabel(t);
+  final note = t.note;
+  if (note.isEmpty) return member;
+  return member == null ? note : '$note · $member';
+}
+
 class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.transaction, required this.category, this.stt});
+  const _TransactionTile({
+    required this.transaction,
+    required this.category,
+    this.stt,
+  });
 
   final Transaction transaction;
   final Category? category;
@@ -172,19 +197,26 @@ class _TransactionTile extends StatelessWidget {
       leading: CircleAvatar(
         backgroundColor: category?.color ?? AppColors.textMuted,
         child: Text(
-          (category?.name.isNotEmpty ?? false) ? category!.name.substring(0, 1) : '?',
+          (category?.name.isNotEmpty ?? false)
+              ? category!.name.substring(0, 1)
+              : '?',
           style: const TextStyle(color: Colors.white, fontSize: 12),
         ),
       ),
-      title: Text('${stt != null ? '$stt. ' : ''}${category?.name ?? 'Đã xoá danh mục'}'),
-      subtitle: transaction.note.isEmpty ? null : Text(transaction.note),
+      title: Text(
+        '${stt != null ? '$stt. ' : ''}${categoryDisplayLabel(category)}',
+      ),
+      subtitle: _subtitle(transaction) == null
+          ? null
+          : Text(_subtitle(transaction)!),
       trailing: Text(
         '$sign ${Formatters.amount(transaction.amountMinor)}',
         style: TextStyle(fontWeight: FontWeight.w800, color: color),
       ),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => TransactionDetailScreen(transactionId: transaction.id),
+          builder: (_) =>
+              TransactionDetailScreen(transactionId: transaction.id),
         ),
       ),
     );

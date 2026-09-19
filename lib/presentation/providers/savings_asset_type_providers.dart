@@ -6,13 +6,13 @@ import '../../domain/repositories/savings_asset_type_repository.dart';
 import 'database_provider.dart';
 import 'transaction_providers.dart';
 
-final savingsAssetTypeRepositoryProvider = Provider<SavingsAssetTypeRepository>((
-  ref,
-) {
-  final db = ref.watch(appDatabaseProvider);
-  final transactionRepository = ref.watch(transactionRepositoryProvider);
-  return LocalSavingsAssetTypeRepository(db, transactionRepository);
-});
+final savingsAssetTypeRepositoryProvider = Provider<SavingsAssetTypeRepository>(
+  (ref) {
+    final db = ref.watch(appDatabaseProvider);
+    final transactionRepository = ref.watch(transactionRepositoryProvider);
+    return LocalSavingsAssetTypeRepository(db, transactionRepository);
+  },
+);
 
 final savingsAssetTypesStreamProvider = StreamProvider<List<SavingsAssetType>>((
   ref,

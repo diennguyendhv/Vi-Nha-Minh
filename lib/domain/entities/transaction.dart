@@ -33,6 +33,8 @@ class Transaction {
     this.correctsTxId,
     this.reversedByTxId,
     this.recoveryOfTxId,
+    this.obligationId,
+    this.settlementGroupId,
     required this.clientTxId,
     this.version = 1,
   });
@@ -99,6 +101,34 @@ class Transaction {
   /// danh sách recovery IDs trên bản gốc).
   final String? recoveryOfTxId;
 
+  /// Phase 8.7 — giao dịch này thuộc về `Obligation.id` nào (Cho vay/Đi vay).
+  /// Gắn trên CẢ giao dịch tạo khoản vay LẪN mọi giao dịch tất toán
+  /// (settlement) — vai trò (tạo hay tất toán) suy ra từ HÌNH DẠNG giao
+  /// dịch (`type`/`sourceKind`/`destinationKind`), không cần field riêng.
+  /// `applyEffect`/`typeFromEndpoints` hoàn toàn không đọc field này — chỉ
+  /// là metadata quan hệ, cùng nguyên tắc `recoveryOfTxId` (Phase 8.6),
+  /// nhưng KHÔNG dùng chung field vì 2 quan hệ khác semantics (xem audit
+  /// Phase 8.7 mục 23 — không merge chỉ vì công thức nhìn giống nhau).
+  final String? obligationId;
+
+  /// Phase 8.7 — ghép cặp các "leg" của CÙNG 1 lần tất toán khi 1 lần tất
+  /// toán sinh ra >1 dòng ledger (Receivable thu hồi vượt gốc: 1 dòng
+  /// TRANSFER trả gốc + 1 dòng INCOME phần lãi). Dòng principal (leg neo)
+  /// TỰ TRỎ vào chính `id` của nó; dòng interest trỏ vào `id` của dòng
+  /// principal. `null` khi tất toán chỉ có 1 dòng (không lãi) — không cần
+  /// ghép cặp.
+  ///
+  /// BẮT BUỘC phải là field lưu trữ riêng (không suy ra được từ
+  /// `clientTxId` suffix) — đã audit kỹ ở Phase 8.7 "atomicity +
+  /// idempotency": `clientTxId` của dòng thay thế sau 1 lần correction
+  /// KHÔNG còn giữ liên hệ chuỗi với `clientTxId` gốc (`buildCorrection`
+  /// luôn sinh `clientTxId` MỚI cho bản thay thế), nên suy luận bằng string
+  /// suffix sẽ gãy ngay sau lần sửa đầu tiên. `clientTxId` vẫn là
+  /// idempotency identity (chống double-submit); `settlementGroupId` là
+  /// business relationship identity (ghép cặp/reverse/correct) — 2 vai trò
+  /// tách biệt, không dùng lẫn cho nhau.
+  final String? settlementGroupId;
+
   /// Idempotency key chống double-submit (bấm Lưu 2 lần).
   final String clientTxId;
 
@@ -135,6 +165,8 @@ class Transaction {
       correctsTxId: correctsTxId,
       reversedByTxId: reversedByTxId ?? this.reversedByTxId,
       recoveryOfTxId: recoveryOfTxId,
+      obligationId: obligationId,
+      settlementGroupId: settlementGroupId,
       clientTxId: clientTxId,
       version: version ?? this.version,
     );

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -47,6 +48,38 @@ class _ControllableTransactionRepository implements TransactionRepository {
     String? memberRefId,
     DateTime? transactionDate,
     String? statusId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})> settleObligation({
+    required String obligationId,
+    required ObligationDirection direction,
+    required String memberRefId,
+    required int amountMinor,
+    required DateTime transactionDate,
+    String note = '',
+    required String categoryId,
+    required String interestCategoryId,
+    required String principalId,
+    required String principalClientTxId,
+    required String interestId,
+    required String interestClientTxId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> reverseObligationSettlement(String anyLegTransactionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})> correctObligationSettlement(
+    String anyLegTransactionId, {
+    required int newAmountMinor,
+    required String categoryId,
+    required String interestCategoryId,
+    required String newPrincipalId,
+    required String newPrincipalClientTxId,
+    required String newInterestId,
+    required String newInterestClientTxId,
   }) => throw UnimplementedError();
 }
 

@@ -3,6 +3,8 @@ import 'package:drift/native.dart' show SqliteException;
 
 import '../../core/utils/id_generator.dart';
 import '../../domain/engine/financial_engine.dart';
+import '../../domain/engine/obligation_settlement.dart';
+import '../../domain/entities/obligation_direction.dart';
 import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/transaction.dart' as domain;
 import '../../domain/entities/transaction_type.dart';
@@ -46,6 +48,8 @@ class LocalTransactionRepository implements TransactionRepository {
       correctsTxId: row.correctsTxId,
       reversedByTxId: row.reversedByTxId,
       recoveryOfTxId: row.recoveryOfTxId,
+      obligationId: row.obligationId,
+      settlementGroupId: row.settlementGroupId,
       clientTxId: row.clientTxId,
       version: row.version,
     );
@@ -72,6 +76,8 @@ class LocalTransactionRepository implements TransactionRepository {
       correctsTxId: Value(t.correctsTxId),
       reversedByTxId: Value(t.reversedByTxId),
       recoveryOfTxId: Value(t.recoveryOfTxId),
+      obligationId: Value(t.obligationId),
+      settlementGroupId: Value(t.settlementGroupId),
       clientTxId: t.clientTxId,
       version: Value(t.version),
     );
@@ -428,6 +434,345 @@ class LocalTransactionRepository implements TransactionRepository {
                 : const Value.absent(),
           ),
         );
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
+  }
+
+  /// Phase 8.7 — direction suy ra từ HÌNH DẠNG toàn bộ leg trong 1 group
+  /// (không cần `ObligationRepository`): nếu bất kỳ leg nào chạm
+  /// `PoolKind.receivable` → receivable, ngược lại → payable. Phải xét CẢ
+  /// group (không chỉ 1 leg) vì leg lãi Receivable (income,
+  /// external→memberAvailable) trùng hình dạng giao dịch TẠO Payable — chỉ
+  /// phân biệt được khi nhìn thấy leg principal (sourceKind=receivable)
+  /// trong cùng group.
+  ObligationDirection _inferDirection(List<domain.Transaction> groupLegs) {
+    final touchesReceivable = groupLegs.any(
+      (t) =>
+          t.sourceKind == PoolKind.receivable ||
+          t.destinationKind == PoolKind.receivable,
+    );
+    return touchesReceivable
+        ? ObligationDirection.receivable
+        : ObligationDirection.payable;
+  }
+
+  @override
+  Future<({domain.Transaction principal, domain.Transaction? interest})> settleObligation({
+    required String obligationId,
+    required ObligationDirection direction,
+    required String memberRefId,
+    required int amountMinor,
+    required DateTime transactionDate,
+    String note = '',
+    required String categoryId,
+    required String interestCategoryId,
+    required String principalId,
+    required String principalClientTxId,
+    required String interestId,
+    required String interestClientTxId,
+  }) async {
+    if (amountMinor <= 0) {
+      throw InvalidAmountException(amountMinor);
+    }
+    try {
+      return await _db.transaction(() async {
+        final existing = await _allTransactions();
+
+        final creation = findObligationCreationTransaction(
+          direction,
+          obligationId,
+          existing,
+        );
+        if (creation == null) {
+          throw ObligationCreationNotFoundException(obligationId);
+        }
+
+        final balances = computeAllPoolBalances(existing);
+        final outstanding = computeObligationOutstanding(
+          direction,
+          obligationId,
+          existing,
+          balances,
+        );
+
+        final legs = buildObligationSettlementLegs(
+          direction: direction,
+          obligationId: obligationId,
+          memberRefId: memberRefId,
+          outstanding: outstanding,
+          paymentAmount: amountMinor,
+          categoryId: categoryId,
+          interestCategoryId: interestCategoryId,
+          currency: creation.currency,
+          principalId: principalId,
+          principalClientTxId: principalClientTxId,
+          interestId: interestId,
+          interestClientTxId: interestClientTxId,
+          transactionDate: transactionDate,
+          now: DateTime.now(),
+          note: note,
+        );
+
+        // Idempotency + defensive half-state audit (mục "atomicity +
+        // idempotency" Phase 8.7) — kiểm tra CẢ 2 clientTxId bất kể lần này
+        // có tính ra leg interest hay không, để bắt được half-state hỏng từ
+        // 1 lần chạy trước.
+        //
+        // QUAN TRỌNG: so khớp dựa vào field ỔN ĐỊNH của CHÍNH command
+        // (`obligationId`/`amountMinor`) — KHÔNG so với `legs` (vừa build ở
+        // trên từ `outstanding` ĐỌC HIỆN TẠI). Lý do: nếu lần gọi ĐẦU đã
+        // thành công, outstanding lúc RETRY đã khác (bị chính lần ghi đó
+        // làm giảm) → `legs` build lại ở retry sẽ KHÔNG khớp payload đã ghi
+        // trước đó dù đây là 1 retry hợp lệ — bug đã phát hiện khi viết
+        // test, sửa bằng cách so trực tiếp với input command (ổn định qua
+        // mọi lần gọi lại), không phụ thuộc trạng thái ledger tại thời điểm
+        // gọi.
+        final existingPrincipalRow = await _findByClientTxId(
+          principalClientTxId,
+        );
+        final existingInterestRow = await _findByClientTxId(
+          interestClientTxId,
+        );
+
+        if (existingPrincipalRow != null && existingInterestRow != null) {
+          final matches =
+              existingPrincipalRow.obligationId == obligationId &&
+              existingInterestRow.obligationId == obligationId &&
+              existingInterestRow.settlementGroupId == existingPrincipalRow.id &&
+              existingPrincipalRow.amountMinor + existingInterestRow.amountMinor ==
+                  amountMinor;
+          if (matches) {
+            return (principal: existingPrincipalRow, interest: existingInterestRow);
+          }
+          throw ClientTxIdConflictException(
+            clientTxId: principalClientTxId,
+            existing: existingPrincipalRow,
+            attempted: legs.principal,
+          );
+        }
+        if (existingPrincipalRow != null && existingInterestRow == null) {
+          final matchesSingleLeg =
+              existingPrincipalRow.obligationId == obligationId &&
+              existingPrincipalRow.settlementGroupId == null &&
+              existingPrincipalRow.amountMinor == amountMinor;
+          if (matchesSingleLeg) {
+            return (principal: existingPrincipalRow, interest: null);
+          }
+          throw SettlementIntegrityException(
+            obligationId: obligationId,
+            clientTxId: principalClientTxId,
+            missingLeg: 'interest',
+          );
+        }
+        if (existingPrincipalRow == null && existingInterestRow != null) {
+          throw SettlementIntegrityException(
+            obligationId: obligationId,
+            clientTxId: principalClientTxId,
+            missingLeg: 'principal',
+          );
+        }
+
+        // Neither leg tồn tại — ghi mới, atomic trong CHÍNH transaction này.
+        _assertWontGoNegative(legs.principal, balances);
+        try {
+          await _db.into(_db.transactionRows).insert(_toCompanion(legs.principal));
+          if (legs.interest != null) {
+            await _db.into(_db.transactionRows).insert(_toCompanion(legs.interest!));
+          }
+          return (principal: legs.principal, interest: legs.interest);
+        } on SqliteException catch (e) {
+          if (!_isClientTxIdUniqueViolation(e)) rethrow;
+          final racedPrincipal = await _findByClientTxId(principalClientTxId);
+          final racedInterest = await _findByClientTxId(interestClientTxId);
+          if (racedPrincipal != null &&
+              isSameLogicalTransaction(racedPrincipal, legs.principal) &&
+              (legs.interest == null ||
+                  (racedInterest != null &&
+                      isSameLogicalTransaction(racedInterest, legs.interest!)))) {
+            return (principal: racedPrincipal, interest: racedInterest);
+          }
+          throw ClientTxIdConflictException(
+            clientTxId: principalClientTxId,
+            existing: racedPrincipal ?? legs.principal,
+            attempted: legs.principal,
+          );
+        }
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
+  }
+
+  @override
+  Future<void> reverseObligationSettlement(String anyLegTransactionId) async {
+    try {
+      await _db.transaction(() async {
+        final existing = await _allTransactions();
+        domain.Transaction? tx;
+        for (final t in existing) {
+          if (t.id == anyLegTransactionId) {
+            tx = t;
+            break;
+          }
+        }
+        if (tx == null || tx.reversalOfTxId != null) {
+          throw TransactionNotFoundException(anyLegTransactionId);
+        }
+
+        final groupId = tx.settlementGroupId ?? tx.id;
+        final groupLegs = existing
+            .where((t) => t.id == groupId || t.settlementGroupId == groupId)
+            .toList();
+        if (groupLegs.isEmpty) {
+          throw TransactionNotFoundException(anyLegTransactionId);
+        }
+        for (final leg in groupLegs) {
+          if (leg.reversedByTxId != null) {
+            throw AlreadyReversedException(leg.id, leg.reversedByTxId!);
+          }
+        }
+
+        final now = DateTime.now();
+        final reversals = buildObligationSettlementReversal(
+          groupLegs,
+          newIds: [for (final _ in groupLegs) IdGenerator.generate()],
+          clientTxIds: [for (final _ in groupLegs) IdGenerator.generate()],
+          now: now,
+        );
+
+        for (var i = 0; i < groupLegs.length; i++) {
+          await _db.into(_db.transactionRows).insert(_toCompanion(reversals[i]));
+          await (_db.update(
+            _db.transactionRows,
+          )..where((r) => r.id.equals(groupLegs[i].id))).write(
+            TransactionRowsCompanion(reversedByTxId: Value(reversals[i].id)),
+          );
+        }
+      });
+    } on SqliteException catch (e) {
+      throw _mapSqliteException(e);
+    }
+  }
+
+  @override
+  Future<({domain.Transaction principal, domain.Transaction? interest})> correctObligationSettlement(
+    String anyLegTransactionId, {
+    required int newAmountMinor,
+    required String categoryId,
+    required String interestCategoryId,
+    required String newPrincipalId,
+    required String newPrincipalClientTxId,
+    required String newInterestId,
+    required String newInterestClientTxId,
+  }) async {
+    if (newAmountMinor <= 0) {
+      throw InvalidAmountException(newAmountMinor);
+    }
+    try {
+      return await _db.transaction(() async {
+        final existing = await _allTransactions();
+        domain.Transaction? tx;
+        for (final t in existing) {
+          if (t.id == anyLegTransactionId) {
+            tx = t;
+            break;
+          }
+        }
+        if (tx == null || tx.reversalOfTxId != null || tx.obligationId == null) {
+          throw TransactionNotFoundException(anyLegTransactionId);
+        }
+
+        final obligationId = tx.obligationId!;
+        final groupId = tx.settlementGroupId ?? tx.id;
+        final groupLegs = existing
+            .where((t) => t.id == groupId || t.settlementGroupId == groupId)
+            .toList();
+        if (groupLegs.isEmpty) {
+          throw TransactionNotFoundException(anyLegTransactionId);
+        }
+        for (final leg in groupLegs) {
+          if (leg.reversedByTxId != null) {
+            throw AlreadyReversedException(leg.id, leg.reversedByTxId!);
+          }
+        }
+
+        final direction = _inferDirection(groupLegs);
+        final anchors = listObligationSettlementAnchors(
+          direction,
+          obligationId,
+          existing,
+        );
+        if (anchors.isEmpty || anchors.last.id != groupId) {
+          throw NotLatestSettlementException(anyLegTransactionId, obligationId);
+        }
+
+        final memberRefId = direction == ObligationDirection.receivable
+            ? groupLegs.firstWhere((t) => t.sourceKind == PoolKind.receivable).destinationRefId!
+            : groupLegs.first.sourceRefId!;
+
+        final now = DateTime.now();
+        final reversals = buildObligationSettlementReversal(
+          groupLegs,
+          newIds: [for (final _ in groupLegs) IdGenerator.generate()],
+          clientTxIds: [for (final _ in groupLegs) IdGenerator.generate()],
+          now: now,
+        );
+
+        // Áp hiệu ứng reversal vào 1 bản sao working-list để tính LẠI
+        // outstanding SAU khi khôi phục group cũ — chưa ghi DB, chỉ tính
+        // toán thuần (giống pattern `updateTransaction` áp reversal vào
+        // `balances` trước khi check số dư mới).
+        final workingList = [...existing, ...reversals];
+        final creation = findObligationCreationTransaction(
+          direction,
+          obligationId,
+          workingList,
+        );
+        if (creation == null) {
+          throw ObligationCreationNotFoundException(obligationId);
+        }
+        final workingBalances = computeAllPoolBalances(workingList);
+        final restoredOutstanding = computeObligationOutstanding(
+          direction,
+          obligationId,
+          workingList,
+          workingBalances,
+        );
+
+        final newLegs = buildObligationSettlementLegs(
+          direction: direction,
+          obligationId: obligationId,
+          memberRefId: memberRefId,
+          outstanding: restoredOutstanding,
+          paymentAmount: newAmountMinor,
+          categoryId: categoryId,
+          interestCategoryId: interestCategoryId,
+          currency: creation.currency,
+          principalId: newPrincipalId,
+          principalClientTxId: newPrincipalClientTxId,
+          interestId: newInterestId,
+          interestClientTxId: newInterestClientTxId,
+          transactionDate: tx.transactionDate,
+          now: now,
+          note: tx.note,
+        );
+        _assertWontGoNegative(newLegs.principal, workingBalances);
+
+        for (var i = 0; i < groupLegs.length; i++) {
+          await _db.into(_db.transactionRows).insert(_toCompanion(reversals[i]));
+          await (_db.update(
+            _db.transactionRows,
+          )..where((r) => r.id.equals(groupLegs[i].id))).write(
+            TransactionRowsCompanion(reversedByTxId: Value(reversals[i].id)),
+          );
+        }
+        await _db.into(_db.transactionRows).insert(_toCompanion(newLegs.principal));
+        if (newLegs.interest != null) {
+          await _db.into(_db.transactionRows).insert(_toCompanion(newLegs.interest!));
+        }
+        return (principal: newLegs.principal, interest: newLegs.interest);
       });
     } on SqliteException catch (e) {
       throw _mapSqliteException(e);

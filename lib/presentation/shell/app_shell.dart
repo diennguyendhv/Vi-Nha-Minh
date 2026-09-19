@@ -110,7 +110,10 @@ class _AddButton extends StatelessWidget {
         width: 46,
         height: 46,
         margin: const EdgeInsets.symmetric(horizontal: 4),
-        decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
+        decoration: const BoxDecoration(
+          color: AppColors.accent,
+          shape: BoxShape.circle,
+        ),
         child: const Icon(Icons.add_rounded, color: Colors.white, size: 26),
       ),
     );
@@ -145,7 +148,11 @@ class _BarItem extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               label,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),

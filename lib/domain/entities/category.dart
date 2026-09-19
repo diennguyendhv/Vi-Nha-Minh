@@ -19,6 +19,7 @@ class Category {
     this.statsEnabled = false,
     this.excludeFromTotals = false,
     this.linkedExpenseCategoryId,
+    this.groupKey,
     this.isDefault = true,
     this.isActive = true,
   });
@@ -28,12 +29,32 @@ class Category {
   final Color color;
   final TransactionType type;
 
-  /// Các bước trạng thái do CHÍNH gia đình đặt ra cho hạng mục này, theo
-  /// đúng thứ tự (`sortOrder`). Rỗng nghĩa là hạng mục này không theo dõi
-  /// trạng thái. Không bao giờ ảnh hưởng balance.
+  /// TẤT CẢ các bước trạng thái do CHÍNH gia đình đặt ra cho hạng mục này
+  /// (kể cả bước đã ẩn `isActive == false`), theo đúng thứ tự (`sortOrder`).
+  /// Giữ cả bước đã ẩn để giao dịch lịch sử vẫn resolve được tên và để màn
+  /// quản lý cho phép "Sử dụng lại". Không bao giờ ảnh hưởng balance.
+  ///
+  /// Khi TẠO giao dịch mới hoặc chọn bước cho giao dịch, dùng
+  /// [activeStatuses] — KHÔNG dùng danh sách này.
   final List<Status> statuses;
 
-  bool get hasStatus => statuses.isNotEmpty;
+  /// Các bước đang dùng — chỉ những bước này được chọn cho giao dịch mới.
+  List<Status> get activeStatuses => statuses.where((s) => s.isActive).toList();
+
+  /// Hạng mục có workflow dùng được cho giao dịch mới (còn ít nhất 1 bước
+  /// đang dùng). Rỗng/toàn bộ bước đã ẩn nghĩa là giao dịch mới không có
+  /// trạng thái; giao dịch cũ vẫn giữ `statusId` của nó.
+  bool get hasStatus => statuses.any((s) => s.isActive);
+
+  /// Tra bước trạng thái theo id trong TẤT CẢ các bước (kể cả đã ẩn) — để
+  /// hiển thị tên cho giao dịch lịch sử.
+  Status? statusById(String? id) {
+    if (id == null) return null;
+    for (final s in statuses) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
 
   /// Bật/tắt việc danh mục này có hiện ở màn Tổng hợp trạng thái hay không.
   final bool statsEnabled;
@@ -47,6 +68,18 @@ class Category {
   /// `type == expense` khác để tính "Thu nhập ròng" hiển thị — KHÔNG đổi
   /// applyEffect/Total Income/Total External Expense. Xem mục 11, 17.
   final String? linkedExpenseCategoryId;
+
+  /// Phân loại BÁO CÁO cho danh mục Chi (schema v7): `null` = Chi tiêu,
+  /// [CategoryGroupKey.businessExpense] = Chi phí kinh doanh. Chỉ có nghĩa
+  /// với `type == expense`; KHÔNG ảnh hưởng số dư/ledger, không bao giờ suy
+  /// từ tên hay Ghi chú. Nhóm của danh mục Thu lấy từ [excludeFromTotals]
+  /// (false = Doanh thu, true = Khoản thu khác) — không có cột thứ hai.
+  final String? groupKey;
+
+  /// Chi phí kinh doanh (Chi + [groupKey] == business_expense).
+  bool get isBusinessExpense =>
+      type == TransactionType.expense &&
+      groupKey == CategoryGroupKey.businessExpense;
 
   /// Danh mục hệ thống seed sẵn (9-10 hạng mục mặc định). Danh mục `type ==
   /// transfer` luôn `isDefault == true` và không cho tự tạo/xoá qua UI.
@@ -66,6 +99,7 @@ class Category {
     bool? statsEnabled,
     bool? excludeFromTotals,
     Object? linkedExpenseCategoryId = _unset,
+    Object? groupKey = _unset,
     bool? isDefault,
     bool? isActive,
   }) {
@@ -80,10 +114,18 @@ class Category {
       linkedExpenseCategoryId: identical(linkedExpenseCategoryId, _unset)
           ? this.linkedExpenseCategoryId
           : linkedExpenseCategoryId as String?,
+      groupKey: identical(groupKey, _unset) ? this.groupKey : groupKey as String?,
       isDefault: isDefault ?? this.isDefault,
       isActive: isActive ?? this.isActive,
     );
   }
+}
+
+/// Giá trị hợp lệ của [Category.groupKey] (schema v7).
+class CategoryGroupKey {
+  CategoryGroupKey._();
+
+  static const businessExpense = 'business_expense';
 }
 
 const _unset = Object();

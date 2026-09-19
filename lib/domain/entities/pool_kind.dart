@@ -8,7 +8,7 @@ enum PoolKind {
   /// refId = FamilyMember.name — tiền có thể chi của 1 thành viên.
   memberAvailable,
 
-  /// 1 loại tài sản tiết kiệm CỦA 1 thành viên cụ thể (Tiền mặt, Ngân hàng,
+  /// 1 loại tài sản tiết kiệm CỦA 1 thành viên cụ thể (Gửi ngân hàng, Vàng,
   /// Chứng khoán, Bất động sản...) — không còn cố định 2 pool cash/bank
   /// như bản trước. refId là khoá ghép `savingsAssetRefId(assetTypeId,
   /// member)`, xem hàm bên dưới. Tạo được bao nhiêu loại tài sản tuỳ gia
@@ -18,6 +18,22 @@ enum PoolKind {
   /// refId = Fund.id — 1 quỹ cụ thể, DÙNG CHUNG cả nhà (khác savings, vốn
   /// tách riêng cho từng thành viên).
   fund,
+
+  /// Phase 8.7 — refId = Obligation.id (`direction == receivable`): tiền đã
+  /// cho vay, vẫn là TÀI SẢN của gia đình (chỉ đổi hình thái từ tiền mặt
+  /// sang "quyền đòi nợ") — KHÔNG phải Expense (`docs/financial-core-v2.md`
+  /// nguyên tắc mới, xem audit Phase 8.7). Cho vay = TRANSFER
+  /// `memberAvailable → receivable`; thu hồi = TRANSFER ngược lại
+  /// (+ 1 dòng INCOME riêng nếu thu vượt gốc — phần lãi). Pool này LUÔN
+  /// được cộng vào `totalAssets` (đã tự động đúng nhờ `totalAssets` là tổng
+  /// mọi pool — xem `compute_financial_summary.dart`).
+  ///
+  /// Payable (đi vay) CỐ TÌNH KHÔNG có PoolKind riêng — mô hình hoá bằng 1
+  /// dòng INCOME/EXPENSE thường + `Transaction.obligationId`, vì Total
+  /// Assets ĐƯỢC PHÉP tăng khi đi vay (khác Receivable) nên không cần bảo
+  /// toàn qua 1 pool nội bộ — xem `docs/domain/obligation_settlement.dart`
+  /// và audit Phase 8.7 (mục D).
+  receivable,
 
   /// Bên ngoài hệ thống — refId luôn null.
   external,

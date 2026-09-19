@@ -88,6 +88,17 @@ class $CategoryRowsTable extends CategoryRows
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _groupKeyMeta = const VerificationMeta(
+    'groupKey',
+  );
+  @override
+  late final GeneratedColumn<String> groupKey = GeneratedColumn<String>(
+    'group_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDefaultMeta = const VerificationMeta(
     'isDefault',
   );
@@ -127,6 +138,7 @@ class $CategoryRowsTable extends CategoryRows
     statsEnabled,
     excludeFromTotals,
     linkedExpenseCategoryId,
+    groupKey,
     isDefault,
     isActive,
   ];
@@ -198,6 +210,12 @@ class $CategoryRowsTable extends CategoryRows
         ),
       );
     }
+    if (data.containsKey('group_key')) {
+      context.handle(
+        _groupKeyMeta,
+        groupKey.isAcceptableOrUnknown(data['group_key']!, _groupKeyMeta),
+      );
+    }
     if (data.containsKey('is_default')) {
       context.handle(
         _isDefaultMeta,
@@ -247,6 +265,10 @@ class $CategoryRowsTable extends CategoryRows
         DriftSqlType.string,
         data['${effectivePrefix}linked_expense_category_id'],
       ),
+      groupKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_key'],
+      ),
       isDefault: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_default'],
@@ -272,6 +294,10 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
   final bool statsEnabled;
   final bool excludeFromTotals;
   final String? linkedExpenseCategoryId;
+
+  /// v7: phân loại báo cáo cho danh mục Chi (`business_expense` hoặc NULL =
+  /// Chi tiêu). Thêm bằng `ADD COLUMN` — không đụng dữ liệu cũ.
+  final String? groupKey;
   final bool isDefault;
   final bool isActive;
   const CategoryRow({
@@ -282,6 +308,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     required this.statsEnabled,
     required this.excludeFromTotals,
     this.linkedExpenseCategoryId,
+    this.groupKey,
     required this.isDefault,
     required this.isActive,
   });
@@ -299,6 +326,9 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
         linkedExpenseCategoryId,
       );
     }
+    if (!nullToAbsent || groupKey != null) {
+      map['group_key'] = Variable<String>(groupKey);
+    }
     map['is_default'] = Variable<bool>(isDefault);
     map['is_active'] = Variable<bool>(isActive);
     return map;
@@ -315,6 +345,9 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       linkedExpenseCategoryId: linkedExpenseCategoryId == null && nullToAbsent
           ? const Value.absent()
           : Value(linkedExpenseCategoryId),
+      groupKey: groupKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(groupKey),
       isDefault: Value(isDefault),
       isActive: Value(isActive),
     );
@@ -335,6 +368,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       linkedExpenseCategoryId: serializer.fromJson<String?>(
         json['linkedExpenseCategoryId'],
       ),
+      groupKey: serializer.fromJson<String?>(json['groupKey']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
       isActive: serializer.fromJson<bool>(json['isActive']),
     );
@@ -352,6 +386,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       'linkedExpenseCategoryId': serializer.toJson<String?>(
         linkedExpenseCategoryId,
       ),
+      'groupKey': serializer.toJson<String?>(groupKey),
       'isDefault': serializer.toJson<bool>(isDefault),
       'isActive': serializer.toJson<bool>(isActive),
     };
@@ -365,6 +400,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     bool? statsEnabled,
     bool? excludeFromTotals,
     Value<String?> linkedExpenseCategoryId = const Value.absent(),
+    Value<String?> groupKey = const Value.absent(),
     bool? isDefault,
     bool? isActive,
   }) => CategoryRow(
@@ -377,6 +413,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     linkedExpenseCategoryId: linkedExpenseCategoryId.present
         ? linkedExpenseCategoryId.value
         : this.linkedExpenseCategoryId,
+    groupKey: groupKey.present ? groupKey.value : this.groupKey,
     isDefault: isDefault ?? this.isDefault,
     isActive: isActive ?? this.isActive,
   );
@@ -397,6 +434,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
       linkedExpenseCategoryId: data.linkedExpenseCategoryId.present
           ? data.linkedExpenseCategoryId.value
           : this.linkedExpenseCategoryId,
+      groupKey: data.groupKey.present ? data.groupKey.value : this.groupKey,
       isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
       isActive: data.isActive.present ? data.isActive.value : this.isActive,
     );
@@ -412,6 +450,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
           ..write('statsEnabled: $statsEnabled, ')
           ..write('excludeFromTotals: $excludeFromTotals, ')
           ..write('linkedExpenseCategoryId: $linkedExpenseCategoryId, ')
+          ..write('groupKey: $groupKey, ')
           ..write('isDefault: $isDefault, ')
           ..write('isActive: $isActive')
           ..write(')'))
@@ -427,6 +466,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
     statsEnabled,
     excludeFromTotals,
     linkedExpenseCategoryId,
+    groupKey,
     isDefault,
     isActive,
   );
@@ -441,6 +481,7 @@ class CategoryRow extends DataClass implements Insertable<CategoryRow> {
           other.statsEnabled == this.statsEnabled &&
           other.excludeFromTotals == this.excludeFromTotals &&
           other.linkedExpenseCategoryId == this.linkedExpenseCategoryId &&
+          other.groupKey == this.groupKey &&
           other.isDefault == this.isDefault &&
           other.isActive == this.isActive);
 }
@@ -453,6 +494,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
   final Value<bool> statsEnabled;
   final Value<bool> excludeFromTotals;
   final Value<String?> linkedExpenseCategoryId;
+  final Value<String?> groupKey;
   final Value<bool> isDefault;
   final Value<bool> isActive;
   final Value<int> rowid;
@@ -464,6 +506,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
     this.statsEnabled = const Value.absent(),
     this.excludeFromTotals = const Value.absent(),
     this.linkedExpenseCategoryId = const Value.absent(),
+    this.groupKey = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.isActive = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -476,6 +519,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
     this.statsEnabled = const Value.absent(),
     this.excludeFromTotals = const Value.absent(),
     this.linkedExpenseCategoryId = const Value.absent(),
+    this.groupKey = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.isActive = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -491,6 +535,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
     Expression<bool>? statsEnabled,
     Expression<bool>? excludeFromTotals,
     Expression<String>? linkedExpenseCategoryId,
+    Expression<String>? groupKey,
     Expression<bool>? isDefault,
     Expression<bool>? isActive,
     Expression<int>? rowid,
@@ -504,6 +549,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
       if (excludeFromTotals != null) 'exclude_from_totals': excludeFromTotals,
       if (linkedExpenseCategoryId != null)
         'linked_expense_category_id': linkedExpenseCategoryId,
+      if (groupKey != null) 'group_key': groupKey,
       if (isDefault != null) 'is_default': isDefault,
       if (isActive != null) 'is_active': isActive,
       if (rowid != null) 'rowid': rowid,
@@ -518,6 +564,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
     Value<bool>? statsEnabled,
     Value<bool>? excludeFromTotals,
     Value<String?>? linkedExpenseCategoryId,
+    Value<String?>? groupKey,
     Value<bool>? isDefault,
     Value<bool>? isActive,
     Value<int>? rowid,
@@ -531,6 +578,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
       excludeFromTotals: excludeFromTotals ?? this.excludeFromTotals,
       linkedExpenseCategoryId:
           linkedExpenseCategoryId ?? this.linkedExpenseCategoryId,
+      groupKey: groupKey ?? this.groupKey,
       isDefault: isDefault ?? this.isDefault,
       isActive: isActive ?? this.isActive,
       rowid: rowid ?? this.rowid,
@@ -563,6 +611,9 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
         linkedExpenseCategoryId.value,
       );
     }
+    if (groupKey.present) {
+      map['group_key'] = Variable<String>(groupKey.value);
+    }
     if (isDefault.present) {
       map['is_default'] = Variable<bool>(isDefault.value);
     }
@@ -585,6 +636,7 @@ class CategoryRowsCompanion extends UpdateCompanion<CategoryRow> {
           ..write('statsEnabled: $statsEnabled, ')
           ..write('excludeFromTotals: $excludeFromTotals, ')
           ..write('linkedExpenseCategoryId: $linkedExpenseCategoryId, ')
+          ..write('groupKey: $groupKey, ')
           ..write('isDefault: $isDefault, ')
           ..write('isActive: $isActive, ')
           ..write('rowid: $rowid')
@@ -1178,6 +1230,29 @@ class $TransactionRowsTable extends TransactionRows
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _obligationIdMeta = const VerificationMeta(
+    'obligationId',
+  );
+  @override
+  late final GeneratedColumn<String> obligationId = GeneratedColumn<String>(
+    'obligation_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _settlementGroupIdMeta = const VerificationMeta(
+    'settlementGroupId',
+  );
+  @override
+  late final GeneratedColumn<String> settlementGroupId =
+      GeneratedColumn<String>(
+        'settlement_group_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _clientTxIdMeta = const VerificationMeta(
     'clientTxId',
   );
@@ -1222,6 +1297,8 @@ class $TransactionRowsTable extends TransactionRows
     correctsTxId,
     reversedByTxId,
     recoveryOfTxId,
+    obligationId,
+    settlementGroupId,
     clientTxId,
     version,
   ];
@@ -1397,6 +1474,24 @@ class $TransactionRowsTable extends TransactionRows
         ),
       );
     }
+    if (data.containsKey('obligation_id')) {
+      context.handle(
+        _obligationIdMeta,
+        obligationId.isAcceptableOrUnknown(
+          data['obligation_id']!,
+          _obligationIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('settlement_group_id')) {
+      context.handle(
+        _settlementGroupIdMeta,
+        settlementGroupId.isAcceptableOrUnknown(
+          data['settlement_group_id']!,
+          _settlementGroupIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('client_tx_id')) {
       context.handle(
         _clientTxIdMeta,
@@ -1499,6 +1594,14 @@ class $TransactionRowsTable extends TransactionRows
         DriftSqlType.string,
         data['${effectivePrefix}recovery_of_tx_id'],
       ),
+      obligationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}obligation_id'],
+      ),
+      settlementGroupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}settlement_group_id'],
+      ),
       clientTxId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}client_tx_id'],
@@ -1541,6 +1644,17 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   /// do tương tự: tương thích sync Firestore Giai đoạn B (eventual
   /// consistency, bản ghi con có thể tới trước bản gốc).
   final String? recoveryOfTxId;
+
+  /// Phase 8.7 — giao dịch này thuộc `Obligation.id` nào (Cho vay/Đi vay).
+  /// KHÔNG khai báo FK — cùng lý do 3 field self-reference + `recovery_of_tx_id`
+  /// ở trên (tương thích sync Firestore Giai đoạn B, eventual consistency).
+  final String? obligationId;
+
+  /// Phase 8.7 — ghép cặp 2 leg (gốc + lãi) của CÙNG 1 lần tất toán
+  /// Receivable. `null` khi tất toán chỉ có 1 dòng. Xem doc-comment field
+  /// tương ứng ở `domain/entities/transaction.dart` — field BẮT BUỘC lưu
+  /// riêng (không suy ra được từ `clientTxId`).
+  final String? settlementGroupId;
   final String clientTxId;
   final int version;
   const TransactionRow({
@@ -1563,6 +1677,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     this.correctsTxId,
     this.reversedByTxId,
     this.recoveryOfTxId,
+    this.obligationId,
+    this.settlementGroupId,
     required this.clientTxId,
     required this.version,
   });
@@ -1605,6 +1721,12 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     }
     if (!nullToAbsent || recoveryOfTxId != null) {
       map['recovery_of_tx_id'] = Variable<String>(recoveryOfTxId);
+    }
+    if (!nullToAbsent || obligationId != null) {
+      map['obligation_id'] = Variable<String>(obligationId);
+    }
+    if (!nullToAbsent || settlementGroupId != null) {
+      map['settlement_group_id'] = Variable<String>(settlementGroupId);
     }
     map['client_tx_id'] = Variable<String>(clientTxId);
     map['version'] = Variable<int>(version);
@@ -1650,6 +1772,12 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       recoveryOfTxId: recoveryOfTxId == null && nullToAbsent
           ? const Value.absent()
           : Value(recoveryOfTxId),
+      obligationId: obligationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(obligationId),
+      settlementGroupId: settlementGroupId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(settlementGroupId),
       clientTxId: Value(clientTxId),
       version: Value(version),
     );
@@ -1680,6 +1808,10 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       correctsTxId: serializer.fromJson<String?>(json['correctsTxId']),
       reversedByTxId: serializer.fromJson<String?>(json['reversedByTxId']),
       recoveryOfTxId: serializer.fromJson<String?>(json['recoveryOfTxId']),
+      obligationId: serializer.fromJson<String?>(json['obligationId']),
+      settlementGroupId: serializer.fromJson<String?>(
+        json['settlementGroupId'],
+      ),
       clientTxId: serializer.fromJson<String>(json['clientTxId']),
       version: serializer.fromJson<int>(json['version']),
     );
@@ -1707,6 +1839,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       'correctsTxId': serializer.toJson<String?>(correctsTxId),
       'reversedByTxId': serializer.toJson<String?>(reversedByTxId),
       'recoveryOfTxId': serializer.toJson<String?>(recoveryOfTxId),
+      'obligationId': serializer.toJson<String?>(obligationId),
+      'settlementGroupId': serializer.toJson<String?>(settlementGroupId),
       'clientTxId': serializer.toJson<String>(clientTxId),
       'version': serializer.toJson<int>(version),
     };
@@ -1732,6 +1866,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     Value<String?> correctsTxId = const Value.absent(),
     Value<String?> reversedByTxId = const Value.absent(),
     Value<String?> recoveryOfTxId = const Value.absent(),
+    Value<String?> obligationId = const Value.absent(),
+    Value<String?> settlementGroupId = const Value.absent(),
     String? clientTxId,
     int? version,
   }) => TransactionRow(
@@ -1764,6 +1900,10 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     recoveryOfTxId: recoveryOfTxId.present
         ? recoveryOfTxId.value
         : this.recoveryOfTxId,
+    obligationId: obligationId.present ? obligationId.value : this.obligationId,
+    settlementGroupId: settlementGroupId.present
+        ? settlementGroupId.value
+        : this.settlementGroupId,
     clientTxId: clientTxId ?? this.clientTxId,
     version: version ?? this.version,
   );
@@ -1814,6 +1954,12 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       recoveryOfTxId: data.recoveryOfTxId.present
           ? data.recoveryOfTxId.value
           : this.recoveryOfTxId,
+      obligationId: data.obligationId.present
+          ? data.obligationId.value
+          : this.obligationId,
+      settlementGroupId: data.settlementGroupId.present
+          ? data.settlementGroupId.value
+          : this.settlementGroupId,
       clientTxId: data.clientTxId.present
           ? data.clientTxId.value
           : this.clientTxId,
@@ -1843,6 +1989,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           ..write('correctsTxId: $correctsTxId, ')
           ..write('reversedByTxId: $reversedByTxId, ')
           ..write('recoveryOfTxId: $recoveryOfTxId, ')
+          ..write('obligationId: $obligationId, ')
+          ..write('settlementGroupId: $settlementGroupId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version')
           ..write(')'))
@@ -1870,6 +2018,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     correctsTxId,
     reversedByTxId,
     recoveryOfTxId,
+    obligationId,
+    settlementGroupId,
     clientTxId,
     version,
   ]);
@@ -1896,6 +2046,8 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           other.correctsTxId == this.correctsTxId &&
           other.reversedByTxId == this.reversedByTxId &&
           other.recoveryOfTxId == this.recoveryOfTxId &&
+          other.obligationId == this.obligationId &&
+          other.settlementGroupId == this.settlementGroupId &&
           other.clientTxId == this.clientTxId &&
           other.version == this.version);
 }
@@ -1920,6 +2072,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
   final Value<String?> correctsTxId;
   final Value<String?> reversedByTxId;
   final Value<String?> recoveryOfTxId;
+  final Value<String?> obligationId;
+  final Value<String?> settlementGroupId;
   final Value<String> clientTxId;
   final Value<int> version;
   final Value<int> rowid;
@@ -1943,6 +2097,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.correctsTxId = const Value.absent(),
     this.reversedByTxId = const Value.absent(),
     this.recoveryOfTxId = const Value.absent(),
+    this.obligationId = const Value.absent(),
+    this.settlementGroupId = const Value.absent(),
     this.clientTxId = const Value.absent(),
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1967,6 +2123,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.correctsTxId = const Value.absent(),
     this.reversedByTxId = const Value.absent(),
     this.recoveryOfTxId = const Value.absent(),
+    this.obligationId = const Value.absent(),
+    this.settlementGroupId = const Value.absent(),
     required String clientTxId,
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1999,6 +2157,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Expression<String>? correctsTxId,
     Expression<String>? reversedByTxId,
     Expression<String>? recoveryOfTxId,
+    Expression<String>? obligationId,
+    Expression<String>? settlementGroupId,
     Expression<String>? clientTxId,
     Expression<int>? version,
     Expression<int>? rowid,
@@ -2023,6 +2183,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       if (correctsTxId != null) 'corrects_tx_id': correctsTxId,
       if (reversedByTxId != null) 'reversed_by_tx_id': reversedByTxId,
       if (recoveryOfTxId != null) 'recovery_of_tx_id': recoveryOfTxId,
+      if (obligationId != null) 'obligation_id': obligationId,
+      if (settlementGroupId != null) 'settlement_group_id': settlementGroupId,
       if (clientTxId != null) 'client_tx_id': clientTxId,
       if (version != null) 'version': version,
       if (rowid != null) 'rowid': rowid,
@@ -2049,6 +2211,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Value<String?>? correctsTxId,
     Value<String?>? reversedByTxId,
     Value<String?>? recoveryOfTxId,
+    Value<String?>? obligationId,
+    Value<String?>? settlementGroupId,
     Value<String>? clientTxId,
     Value<int>? version,
     Value<int>? rowid,
@@ -2073,6 +2237,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       correctsTxId: correctsTxId ?? this.correctsTxId,
       reversedByTxId: reversedByTxId ?? this.reversedByTxId,
       recoveryOfTxId: recoveryOfTxId ?? this.recoveryOfTxId,
+      obligationId: obligationId ?? this.obligationId,
+      settlementGroupId: settlementGroupId ?? this.settlementGroupId,
       clientTxId: clientTxId ?? this.clientTxId,
       version: version ?? this.version,
       rowid: rowid ?? this.rowid,
@@ -2139,6 +2305,12 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     if (recoveryOfTxId.present) {
       map['recovery_of_tx_id'] = Variable<String>(recoveryOfTxId.value);
     }
+    if (obligationId.present) {
+      map['obligation_id'] = Variable<String>(obligationId.value);
+    }
+    if (settlementGroupId.present) {
+      map['settlement_group_id'] = Variable<String>(settlementGroupId.value);
+    }
     if (clientTxId.present) {
       map['client_tx_id'] = Variable<String>(clientTxId.value);
     }
@@ -2173,6 +2345,8 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
           ..write('correctsTxId: $correctsTxId, ')
           ..write('reversedByTxId: $reversedByTxId, ')
           ..write('recoveryOfTxId: $recoveryOfTxId, ')
+          ..write('obligationId: $obligationId, ')
+          ..write('settlementGroupId: $settlementGroupId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version, ')
           ..write('rowid: $rowid')
@@ -2804,6 +2978,689 @@ class SavingsAssetTypeRowsCompanion
   }
 }
 
+class $CounterpartyRowsTable extends CounterpartyRows
+    with TableInfo<$CounterpartyRowsTable, CounterpartyRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CounterpartyRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, displayName, isActive];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'counterparty_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CounterpartyRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayNameMeta);
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CounterpartyRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CounterpartyRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+    );
+  }
+
+  @override
+  $CounterpartyRowsTable createAlias(String alias) {
+    return $CounterpartyRowsTable(attachedDatabase, alias);
+  }
+}
+
+class CounterpartyRow extends DataClass implements Insertable<CounterpartyRow> {
+  final String id;
+  final String displayName;
+  final bool isActive;
+  const CounterpartyRow({
+    required this.id,
+    required this.displayName,
+    required this.isActive,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['display_name'] = Variable<String>(displayName);
+    map['is_active'] = Variable<bool>(isActive);
+    return map;
+  }
+
+  CounterpartyRowsCompanion toCompanion(bool nullToAbsent) {
+    return CounterpartyRowsCompanion(
+      id: Value(id),
+      displayName: Value(displayName),
+      isActive: Value(isActive),
+    );
+  }
+
+  factory CounterpartyRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CounterpartyRow(
+      id: serializer.fromJson<String>(json['id']),
+      displayName: serializer.fromJson<String>(json['displayName']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'displayName': serializer.toJson<String>(displayName),
+      'isActive': serializer.toJson<bool>(isActive),
+    };
+  }
+
+  CounterpartyRow copyWith({String? id, String? displayName, bool? isActive}) =>
+      CounterpartyRow(
+        id: id ?? this.id,
+        displayName: displayName ?? this.displayName,
+        isActive: isActive ?? this.isActive,
+      );
+  CounterpartyRow copyWithCompanion(CounterpartyRowsCompanion data) {
+    return CounterpartyRow(
+      id: data.id.present ? data.id.value : this.id,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CounterpartyRow(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('isActive: $isActive')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, displayName, isActive);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CounterpartyRow &&
+          other.id == this.id &&
+          other.displayName == this.displayName &&
+          other.isActive == this.isActive);
+}
+
+class CounterpartyRowsCompanion extends UpdateCompanion<CounterpartyRow> {
+  final Value<String> id;
+  final Value<String> displayName;
+  final Value<bool> isActive;
+  final Value<int> rowid;
+  const CounterpartyRowsCompanion({
+    this.id = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CounterpartyRowsCompanion.insert({
+    required String id,
+    required String displayName,
+    this.isActive = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       displayName = Value(displayName);
+  static Insertable<CounterpartyRow> custom({
+    Expression<String>? id,
+    Expression<String>? displayName,
+    Expression<bool>? isActive,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (displayName != null) 'display_name': displayName,
+      if (isActive != null) 'is_active': isActive,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CounterpartyRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? displayName,
+    Value<bool>? isActive,
+    Value<int>? rowid,
+  }) {
+    return CounterpartyRowsCompanion(
+      id: id ?? this.id,
+      displayName: displayName ?? this.displayName,
+      isActive: isActive ?? this.isActive,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CounterpartyRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('displayName: $displayName, ')
+          ..write('isActive: $isActive, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ObligationRowsTable extends ObligationRows
+    with TableInfo<$ObligationRowsTable, ObligationRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ObligationRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _counterpartyIdMeta = const VerificationMeta(
+    'counterpartyId',
+  );
+  @override
+  late final GeneratedColumn<String> counterpartyId = GeneratedColumn<String>(
+    'counterparty_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES counterparty_rows (id)',
+    ),
+  );
+  static const VerificationMeta _directionMeta = const VerificationMeta(
+    'direction',
+  );
+  @override
+  late final GeneratedColumn<String> direction = GeneratedColumn<String>(
+    'direction',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dueDateMeta = const VerificationMeta(
+    'dueDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dueDate = GeneratedColumn<DateTime>(
+    'due_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _isActiveMeta = const VerificationMeta(
+    'isActive',
+  );
+  @override
+  late final GeneratedColumn<bool> isActive = GeneratedColumn<bool>(
+    'is_active',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_active" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    counterpartyId,
+    direction,
+    dueDate,
+    note,
+    isActive,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'obligation_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ObligationRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('counterparty_id')) {
+      context.handle(
+        _counterpartyIdMeta,
+        counterpartyId.isAcceptableOrUnknown(
+          data['counterparty_id']!,
+          _counterpartyIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_counterpartyIdMeta);
+    }
+    if (data.containsKey('direction')) {
+      context.handle(
+        _directionMeta,
+        direction.isAcceptableOrUnknown(data['direction']!, _directionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_directionMeta);
+    }
+    if (data.containsKey('due_date')) {
+      context.handle(
+        _dueDateMeta,
+        dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('is_active')) {
+      context.handle(
+        _isActiveMeta,
+        isActive.isAcceptableOrUnknown(data['is_active']!, _isActiveMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ObligationRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ObligationRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      counterpartyId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}counterparty_id'],
+      )!,
+      direction: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}direction'],
+      )!,
+      dueDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due_date'],
+      ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      )!,
+      isActive: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_active'],
+      )!,
+    );
+  }
+
+  @override
+  $ObligationRowsTable createAlias(String alias) {
+    return $ObligationRowsTable(attachedDatabase, alias);
+  }
+}
+
+class ObligationRow extends DataClass implements Insertable<ObligationRow> {
+  final String id;
+  final String counterpartyId;
+  final String direction;
+  final DateTime? dueDate;
+  final String note;
+  final bool isActive;
+  const ObligationRow({
+    required this.id,
+    required this.counterpartyId,
+    required this.direction,
+    this.dueDate,
+    required this.note,
+    required this.isActive,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['counterparty_id'] = Variable<String>(counterpartyId);
+    map['direction'] = Variable<String>(direction);
+    if (!nullToAbsent || dueDate != null) {
+      map['due_date'] = Variable<DateTime>(dueDate);
+    }
+    map['note'] = Variable<String>(note);
+    map['is_active'] = Variable<bool>(isActive);
+    return map;
+  }
+
+  ObligationRowsCompanion toCompanion(bool nullToAbsent) {
+    return ObligationRowsCompanion(
+      id: Value(id),
+      counterpartyId: Value(counterpartyId),
+      direction: Value(direction),
+      dueDate: dueDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dueDate),
+      note: Value(note),
+      isActive: Value(isActive),
+    );
+  }
+
+  factory ObligationRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ObligationRow(
+      id: serializer.fromJson<String>(json['id']),
+      counterpartyId: serializer.fromJson<String>(json['counterpartyId']),
+      direction: serializer.fromJson<String>(json['direction']),
+      dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
+      note: serializer.fromJson<String>(json['note']),
+      isActive: serializer.fromJson<bool>(json['isActive']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'counterpartyId': serializer.toJson<String>(counterpartyId),
+      'direction': serializer.toJson<String>(direction),
+      'dueDate': serializer.toJson<DateTime?>(dueDate),
+      'note': serializer.toJson<String>(note),
+      'isActive': serializer.toJson<bool>(isActive),
+    };
+  }
+
+  ObligationRow copyWith({
+    String? id,
+    String? counterpartyId,
+    String? direction,
+    Value<DateTime?> dueDate = const Value.absent(),
+    String? note,
+    bool? isActive,
+  }) => ObligationRow(
+    id: id ?? this.id,
+    counterpartyId: counterpartyId ?? this.counterpartyId,
+    direction: direction ?? this.direction,
+    dueDate: dueDate.present ? dueDate.value : this.dueDate,
+    note: note ?? this.note,
+    isActive: isActive ?? this.isActive,
+  );
+  ObligationRow copyWithCompanion(ObligationRowsCompanion data) {
+    return ObligationRow(
+      id: data.id.present ? data.id.value : this.id,
+      counterpartyId: data.counterpartyId.present
+          ? data.counterpartyId.value
+          : this.counterpartyId,
+      direction: data.direction.present ? data.direction.value : this.direction,
+      dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      note: data.note.present ? data.note.value : this.note,
+      isActive: data.isActive.present ? data.isActive.value : this.isActive,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ObligationRow(')
+          ..write('id: $id, ')
+          ..write('counterpartyId: $counterpartyId, ')
+          ..write('direction: $direction, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('note: $note, ')
+          ..write('isActive: $isActive')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, counterpartyId, direction, dueDate, note, isActive);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ObligationRow &&
+          other.id == this.id &&
+          other.counterpartyId == this.counterpartyId &&
+          other.direction == this.direction &&
+          other.dueDate == this.dueDate &&
+          other.note == this.note &&
+          other.isActive == this.isActive);
+}
+
+class ObligationRowsCompanion extends UpdateCompanion<ObligationRow> {
+  final Value<String> id;
+  final Value<String> counterpartyId;
+  final Value<String> direction;
+  final Value<DateTime?> dueDate;
+  final Value<String> note;
+  final Value<bool> isActive;
+  final Value<int> rowid;
+  const ObligationRowsCompanion({
+    this.id = const Value.absent(),
+    this.counterpartyId = const Value.absent(),
+    this.direction = const Value.absent(),
+    this.dueDate = const Value.absent(),
+    this.note = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ObligationRowsCompanion.insert({
+    required String id,
+    required String counterpartyId,
+    required String direction,
+    this.dueDate = const Value.absent(),
+    this.note = const Value.absent(),
+    this.isActive = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       counterpartyId = Value(counterpartyId),
+       direction = Value(direction);
+  static Insertable<ObligationRow> custom({
+    Expression<String>? id,
+    Expression<String>? counterpartyId,
+    Expression<String>? direction,
+    Expression<DateTime>? dueDate,
+    Expression<String>? note,
+    Expression<bool>? isActive,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (counterpartyId != null) 'counterparty_id': counterpartyId,
+      if (direction != null) 'direction': direction,
+      if (dueDate != null) 'due_date': dueDate,
+      if (note != null) 'note': note,
+      if (isActive != null) 'is_active': isActive,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ObligationRowsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? counterpartyId,
+    Value<String>? direction,
+    Value<DateTime?>? dueDate,
+    Value<String>? note,
+    Value<bool>? isActive,
+    Value<int>? rowid,
+  }) {
+    return ObligationRowsCompanion(
+      id: id ?? this.id,
+      counterpartyId: counterpartyId ?? this.counterpartyId,
+      direction: direction ?? this.direction,
+      dueDate: dueDate ?? this.dueDate,
+      note: note ?? this.note,
+      isActive: isActive ?? this.isActive,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (counterpartyId.present) {
+      map['counterparty_id'] = Variable<String>(counterpartyId.value);
+    }
+    if (direction.present) {
+      map['direction'] = Variable<String>(direction.value);
+    }
+    if (dueDate.present) {
+      map['due_date'] = Variable<DateTime>(dueDate.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (isActive.present) {
+      map['is_active'] = Variable<bool>(isActive.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ObligationRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('counterpartyId: $counterpartyId, ')
+          ..write('direction: $direction, ')
+          ..write('dueDate: $dueDate, ')
+          ..write('note: $note, ')
+          ..write('isActive: $isActive, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2815,6 +3672,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FundRowsTable fundRows = $FundRowsTable(this);
   late final $SavingsAssetTypeRowsTable savingsAssetTypeRows =
       $SavingsAssetTypeRowsTable(this);
+  late final $CounterpartyRowsTable counterpartyRows = $CounterpartyRowsTable(
+    this,
+  );
+  late final $ObligationRowsTable obligationRows = $ObligationRowsTable(this);
   late final Index uxTransactionClientTxId = Index(
     'ux_transaction_client_tx_id',
     'CREATE UNIQUE INDEX ux_transaction_client_tx_id ON transaction_rows (client_tx_id)',
@@ -2835,9 +3696,21 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     'ix_transaction_recovery_of',
     'CREATE INDEX ix_transaction_recovery_of ON transaction_rows (recovery_of_tx_id)',
   );
+  late final Index ixTransactionObligation = Index(
+    'ix_transaction_obligation',
+    'CREATE INDEX ix_transaction_obligation ON transaction_rows (obligation_id)',
+  );
+  late final Index ixTransactionSettlementGroup = Index(
+    'ix_transaction_settlement_group',
+    'CREATE INDEX ix_transaction_settlement_group ON transaction_rows (settlement_group_id)',
+  );
   late final Index ixStatusCategory = Index(
     'ix_status_category',
     'CREATE INDEX ix_status_category ON status_rows (category_id)',
+  );
+  late final Index ixObligationCounterparty = Index(
+    'ix_obligation_counterparty',
+    'CREATE INDEX ix_obligation_counterparty ON obligation_rows (counterparty_id)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -2849,12 +3722,17 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transactionRows,
     fundRows,
     savingsAssetTypeRows,
+    counterpartyRows,
+    obligationRows,
     uxTransactionClientTxId,
     ixTransactionSource,
     ixTransactionDestination,
     ixTransactionCategoryStatus,
     ixTransactionRecoveryOf,
+    ixTransactionObligation,
+    ixTransactionSettlementGroup,
     ixStatusCategory,
+    ixObligationCounterparty,
   ];
 }
 
@@ -2867,6 +3745,7 @@ typedef $$CategoryRowsTableCreateCompanionBuilder =
       Value<bool> statsEnabled,
       Value<bool> excludeFromTotals,
       Value<String?> linkedExpenseCategoryId,
+      Value<String?> groupKey,
       Value<bool> isDefault,
       Value<bool> isActive,
       Value<int> rowid,
@@ -2880,6 +3759,7 @@ typedef $$CategoryRowsTableUpdateCompanionBuilder =
       Value<bool> statsEnabled,
       Value<bool> excludeFromTotals,
       Value<String?> linkedExpenseCategoryId,
+      Value<String?> groupKey,
       Value<bool> isDefault,
       Value<bool> isActive,
       Value<int> rowid,
@@ -2969,6 +3849,11 @@ class $$CategoryRowsTableFilterComposer
 
   ColumnFilters<String> get linkedExpenseCategoryId => $composableBuilder(
     column: $table.linkedExpenseCategoryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get groupKey => $composableBuilder(
+    column: $table.groupKey,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3077,6 +3962,11 @@ class $$CategoryRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get groupKey => $composableBuilder(
+    column: $table.groupKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDefault => $composableBuilder(
     column: $table.isDefault,
     builder: (column) => ColumnOrderings(column),
@@ -3125,6 +4015,9 @@ class $$CategoryRowsTableAnnotationComposer
     column: $table.linkedExpenseCategoryId,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get groupKey =>
+      $composableBuilder(column: $table.groupKey, builder: (column) => column);
 
   GeneratedColumn<bool> get isDefault =>
       $composableBuilder(column: $table.isDefault, builder: (column) => column);
@@ -3221,6 +4114,7 @@ class $$CategoryRowsTableTableManager
                 Value<bool> statsEnabled = const Value.absent(),
                 Value<bool> excludeFromTotals = const Value.absent(),
                 Value<String?> linkedExpenseCategoryId = const Value.absent(),
+                Value<String?> groupKey = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3232,6 +4126,7 @@ class $$CategoryRowsTableTableManager
                 statsEnabled: statsEnabled,
                 excludeFromTotals: excludeFromTotals,
                 linkedExpenseCategoryId: linkedExpenseCategoryId,
+                groupKey: groupKey,
                 isDefault: isDefault,
                 isActive: isActive,
                 rowid: rowid,
@@ -3245,6 +4140,7 @@ class $$CategoryRowsTableTableManager
                 Value<bool> statsEnabled = const Value.absent(),
                 Value<bool> excludeFromTotals = const Value.absent(),
                 Value<String?> linkedExpenseCategoryId = const Value.absent(),
+                Value<String?> groupKey = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> isActive = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3256,6 +4152,7 @@ class $$CategoryRowsTableTableManager
                 statsEnabled: statsEnabled,
                 excludeFromTotals: excludeFromTotals,
                 linkedExpenseCategoryId: linkedExpenseCategoryId,
+                groupKey: groupKey,
                 isDefault: isDefault,
                 isActive: isActive,
                 rowid: rowid,
@@ -3773,6 +4670,8 @@ typedef $$TransactionRowsTableCreateCompanionBuilder =
       Value<String?> correctsTxId,
       Value<String?> reversedByTxId,
       Value<String?> recoveryOfTxId,
+      Value<String?> obligationId,
+      Value<String?> settlementGroupId,
       required String clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -3798,6 +4697,8 @@ typedef $$TransactionRowsTableUpdateCompanionBuilder =
       Value<String?> correctsTxId,
       Value<String?> reversedByTxId,
       Value<String?> recoveryOfTxId,
+      Value<String?> obligationId,
+      Value<String?> settlementGroupId,
       Value<String> clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -3939,6 +4840,16 @@ class $$TransactionRowsTableFilterComposer
 
   ColumnFilters<String> get recoveryOfTxId => $composableBuilder(
     column: $table.recoveryOfTxId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get obligationId => $composableBuilder(
+    column: $table.obligationId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get settlementGroupId => $composableBuilder(
+    column: $table.settlementGroupId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4093,6 +5004,16 @@ class $$TransactionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get obligationId => $composableBuilder(
+    column: $table.obligationId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get settlementGroupId => $composableBuilder(
+    column: $table.settlementGroupId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => ColumnOrderings(column),
@@ -4234,6 +5155,16 @@ class $$TransactionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get obligationId => $composableBuilder(
+    column: $table.obligationId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get settlementGroupId => $composableBuilder(
+    column: $table.settlementGroupId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => column,
@@ -4338,6 +5269,8 @@ class $$TransactionRowsTableTableManager
                 Value<String?> correctsTxId = const Value.absent(),
                 Value<String?> reversedByTxId = const Value.absent(),
                 Value<String?> recoveryOfTxId = const Value.absent(),
+                Value<String?> obligationId = const Value.absent(),
+                Value<String?> settlementGroupId = const Value.absent(),
                 Value<String> clientTxId = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4361,6 +5294,8 @@ class $$TransactionRowsTableTableManager
                 correctsTxId: correctsTxId,
                 reversedByTxId: reversedByTxId,
                 recoveryOfTxId: recoveryOfTxId,
+                obligationId: obligationId,
+                settlementGroupId: settlementGroupId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,
@@ -4386,6 +5321,8 @@ class $$TransactionRowsTableTableManager
                 Value<String?> correctsTxId = const Value.absent(),
                 Value<String?> reversedByTxId = const Value.absent(),
                 Value<String?> recoveryOfTxId = const Value.absent(),
+                Value<String?> obligationId = const Value.absent(),
+                Value<String?> settlementGroupId = const Value.absent(),
                 required String clientTxId,
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4409,6 +5346,8 @@ class $$TransactionRowsTableTableManager
                 correctsTxId: correctsTxId,
                 reversedByTxId: reversedByTxId,
                 recoveryOfTxId: recoveryOfTxId,
+                obligationId: obligationId,
+                settlementGroupId: settlementGroupId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,
@@ -4883,6 +5822,623 @@ typedef $$SavingsAssetTypeRowsTableProcessedTableManager =
       SavingsAssetTypeRow,
       PrefetchHooks Function()
     >;
+typedef $$CounterpartyRowsTableCreateCompanionBuilder =
+    CounterpartyRowsCompanion Function({
+      required String id,
+      required String displayName,
+      Value<bool> isActive,
+      Value<int> rowid,
+    });
+typedef $$CounterpartyRowsTableUpdateCompanionBuilder =
+    CounterpartyRowsCompanion Function({
+      Value<String> id,
+      Value<String> displayName,
+      Value<bool> isActive,
+      Value<int> rowid,
+    });
+
+final class $$CounterpartyRowsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $CounterpartyRowsTable, CounterpartyRow> {
+  $$CounterpartyRowsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static MultiTypedResultKey<$ObligationRowsTable, List<ObligationRow>>
+  _obligationRowsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.obligationRows,
+    aliasName: 'counterparty_rows__id__obligation_rows__counterparty_id',
+  );
+
+  $$ObligationRowsTableProcessedTableManager get obligationRowsRefs {
+    final manager = $$ObligationRowsTableTableManager(
+      $_db,
+      $_db.obligationRows,
+    ).filter((f) => f.counterpartyId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_obligationRowsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$CounterpartyRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $CounterpartyRowsTable> {
+  $$CounterpartyRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> obligationRowsRefs(
+    Expression<bool> Function($$ObligationRowsTableFilterComposer f) f,
+  ) {
+    final $$ObligationRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.obligationRows,
+      getReferencedColumn: (t) => t.counterpartyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ObligationRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.obligationRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CounterpartyRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CounterpartyRowsTable> {
+  $$CounterpartyRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CounterpartyRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CounterpartyRowsTable> {
+  $$CounterpartyRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  Expression<T> obligationRowsRefs<T extends Object>(
+    Expression<T> Function($$ObligationRowsTableAnnotationComposer a) f,
+  ) {
+    final $$ObligationRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.obligationRows,
+      getReferencedColumn: (t) => t.counterpartyId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ObligationRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.obligationRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$CounterpartyRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CounterpartyRowsTable,
+          CounterpartyRow,
+          $$CounterpartyRowsTableFilterComposer,
+          $$CounterpartyRowsTableOrderingComposer,
+          $$CounterpartyRowsTableAnnotationComposer,
+          $$CounterpartyRowsTableCreateCompanionBuilder,
+          $$CounterpartyRowsTableUpdateCompanionBuilder,
+          (CounterpartyRow, $$CounterpartyRowsTableReferences),
+          CounterpartyRow,
+          PrefetchHooks Function({bool obligationRowsRefs})
+        > {
+  $$CounterpartyRowsTableTableManager(
+    _$AppDatabase db,
+    $CounterpartyRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CounterpartyRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CounterpartyRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CounterpartyRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> displayName = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CounterpartyRowsCompanion(
+                id: id,
+                displayName: displayName,
+                isActive: isActive,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String displayName,
+                Value<bool> isActive = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CounterpartyRowsCompanion.insert(
+                id: id,
+                displayName: displayName,
+                isActive: isActive,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CounterpartyRowsTable, CounterpartyRow>(table),
+                  $$CounterpartyRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({obligationRowsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (obligationRowsRefs) db.obligationRows,
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (obligationRowsRefs)
+                    await $_getPrefetchedData<
+                      CounterpartyRow,
+                      $CounterpartyRowsTable,
+                      ObligationRow
+                    >(
+                      currentTable: table,
+                      referencedTable: $$CounterpartyRowsTableReferences
+                          ._obligationRowsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$CounterpartyRowsTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).obligationRowsRefs,
+                      referencedItemsForCurrentItem: (item, referencedItems) =>
+                          referencedItems.where(
+                            (e) => e.counterpartyId == item.id,
+                          ),
+                      typedResults: items,
+                    ),
+                ];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$CounterpartyRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CounterpartyRowsTable,
+      CounterpartyRow,
+      $$CounterpartyRowsTableFilterComposer,
+      $$CounterpartyRowsTableOrderingComposer,
+      $$CounterpartyRowsTableAnnotationComposer,
+      $$CounterpartyRowsTableCreateCompanionBuilder,
+      $$CounterpartyRowsTableUpdateCompanionBuilder,
+      (CounterpartyRow, $$CounterpartyRowsTableReferences),
+      CounterpartyRow,
+      PrefetchHooks Function({bool obligationRowsRefs})
+    >;
+typedef $$ObligationRowsTableCreateCompanionBuilder =
+    ObligationRowsCompanion Function({
+      required String id,
+      required String counterpartyId,
+      required String direction,
+      Value<DateTime?> dueDate,
+      Value<String> note,
+      Value<bool> isActive,
+      Value<int> rowid,
+    });
+typedef $$ObligationRowsTableUpdateCompanionBuilder =
+    ObligationRowsCompanion Function({
+      Value<String> id,
+      Value<String> counterpartyId,
+      Value<String> direction,
+      Value<DateTime?> dueDate,
+      Value<String> note,
+      Value<bool> isActive,
+      Value<int> rowid,
+    });
+
+final class $$ObligationRowsTableReferences
+    extends BaseReferences<_$AppDatabase, $ObligationRowsTable, ObligationRow> {
+  $$ObligationRowsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $CounterpartyRowsTable _counterpartyIdTable(_$AppDatabase db) => db
+      .counterpartyRows
+      .createAlias('obligation_rows__counterparty_id__counterparty_rows__id');
+
+  $$CounterpartyRowsTableProcessedTableManager get counterpartyId {
+    final $_column = $_itemColumn<String>('counterparty_id')!;
+
+    final manager = $$CounterpartyRowsTableTableManager(
+      $_db,
+      $_db.counterpartyRows,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_counterpartyIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ObligationRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $ObligationRowsTable> {
+  $$ObligationRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$CounterpartyRowsTableFilterComposer get counterpartyId {
+    final $$CounterpartyRowsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.counterpartyId,
+      referencedTable: $db.counterpartyRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CounterpartyRowsTableFilterComposer(
+            $db: $db,
+            $table: $db.counterpartyRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ObligationRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ObligationRowsTable> {
+  $$ObligationRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get direction => $composableBuilder(
+    column: $table.direction,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dueDate => $composableBuilder(
+    column: $table.dueDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isActive => $composableBuilder(
+    column: $table.isActive,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$CounterpartyRowsTableOrderingComposer get counterpartyId {
+    final $$CounterpartyRowsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.counterpartyId,
+      referencedTable: $db.counterpartyRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CounterpartyRowsTableOrderingComposer(
+            $db: $db,
+            $table: $db.counterpartyRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ObligationRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ObligationRowsTable> {
+  $$ObligationRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get direction =>
+      $composableBuilder(column: $table.direction, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dueDate =>
+      $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<bool> get isActive =>
+      $composableBuilder(column: $table.isActive, builder: (column) => column);
+
+  $$CounterpartyRowsTableAnnotationComposer get counterpartyId {
+    final $$CounterpartyRowsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.counterpartyId,
+      referencedTable: $db.counterpartyRows,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CounterpartyRowsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.counterpartyRows,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ObligationRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ObligationRowsTable,
+          ObligationRow,
+          $$ObligationRowsTableFilterComposer,
+          $$ObligationRowsTableOrderingComposer,
+          $$ObligationRowsTableAnnotationComposer,
+          $$ObligationRowsTableCreateCompanionBuilder,
+          $$ObligationRowsTableUpdateCompanionBuilder,
+          (ObligationRow, $$ObligationRowsTableReferences),
+          ObligationRow,
+          PrefetchHooks Function({bool counterpartyId})
+        > {
+  $$ObligationRowsTableTableManager(
+    _$AppDatabase db,
+    $ObligationRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ObligationRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ObligationRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ObligationRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> counterpartyId = const Value.absent(),
+                Value<String> direction = const Value.absent(),
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ObligationRowsCompanion(
+                id: id,
+                counterpartyId: counterpartyId,
+                direction: direction,
+                dueDate: dueDate,
+                note: note,
+                isActive: isActive,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String counterpartyId,
+                required String direction,
+                Value<DateTime?> dueDate = const Value.absent(),
+                Value<String> note = const Value.absent(),
+                Value<bool> isActive = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ObligationRowsCompanion.insert(
+                id: id,
+                counterpartyId: counterpartyId,
+                direction: direction,
+                dueDate: dueDate,
+                note: note,
+                isActive: isActive,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ObligationRowsTable, ObligationRow>(table),
+                  $$ObligationRowsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({counterpartyId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (counterpartyId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.counterpartyId,
+                        referencedTable: $$ObligationRowsTableReferences
+                            ._counterpartyIdTable(db),
+                        referencedColumn: $$ObligationRowsTableReferences
+                            ._counterpartyIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ObligationRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ObligationRowsTable,
+      ObligationRow,
+      $$ObligationRowsTableFilterComposer,
+      $$ObligationRowsTableOrderingComposer,
+      $$ObligationRowsTableAnnotationComposer,
+      $$ObligationRowsTableCreateCompanionBuilder,
+      $$ObligationRowsTableUpdateCompanionBuilder,
+      (ObligationRow, $$ObligationRowsTableReferences),
+      ObligationRow,
+      PrefetchHooks Function({bool counterpartyId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -4897,4 +6453,8 @@ class $AppDatabaseManager {
       $$FundRowsTableTableManager(_db, _db.fundRows);
   $$SavingsAssetTypeRowsTableTableManager get savingsAssetTypeRows =>
       $$SavingsAssetTypeRowsTableTableManager(_db, _db.savingsAssetTypeRows);
+  $$CounterpartyRowsTableTableManager get counterpartyRows =>
+      $$CounterpartyRowsTableTableManager(_db, _db.counterpartyRows);
+  $$ObligationRowsTableTableManager get obligationRows =>
+      $$ObligationRowsTableTableManager(_db, _db.obligationRows);
 }

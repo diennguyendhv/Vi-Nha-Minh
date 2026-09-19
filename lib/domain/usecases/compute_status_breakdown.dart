@@ -23,7 +23,12 @@ StatusBreakdown computeStatusBreakdown(
   if (category.statuses.isEmpty) return const StatusBreakdown({});
 
   final totals = {for (final s in category.statuses) s.id: 0};
-  final firstStepId = category.statuses.first.id;
+  // Giao dịch chưa gán `statusId` (hoặc gán bước không còn tồn tại) tính vào
+  // bước ĐANG DÙNG đầu tiên; nếu toàn bộ bước đã ẩn thì vào bước đầu bất kỳ.
+  final firstStepId =
+      (category.hasStatus ? category.activeStatuses : category.statuses)
+          .first
+          .id;
   for (final t in transactions) {
     if (!isVisible(t) || t.categoryId != category.id) continue;
     final key = t.statusId != null && totals.containsKey(t.statusId)

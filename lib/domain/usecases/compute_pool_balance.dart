@@ -20,8 +20,8 @@ int computeMemberAvailableBalance(
   return poolBalance(balances, PoolKind.memberAvailable, member.name);
 }
 
-/// Số dư 1 thành viên ở 1 loại tài sản tiết kiệm cụ thể (Tiền mặt, Ngân
-/// hàng, Chứng khoán...) — thay `computeMemberSavingsCash`/
+/// Số dư 1 thành viên ở 1 loại tài sản tiết kiệm cụ thể (Gửi ngân
+/// hàng, Vàng, Chứng khoán...) — thay `computeMemberSavingsCash`/
 /// `computeMemberSavingsBank` cố định của bản trước.
 int computeMemberSavingsByAssetType(
   String assetTypeId,

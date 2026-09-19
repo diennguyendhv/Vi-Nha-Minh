@@ -151,7 +151,8 @@ bool isSameLogicalTransaction(Transaction a, Transaction b) {
       a.transactionDate == b.transactionDate &&
       a.note == b.note &&
       a.statusId == b.statusId &&
-      a.recoveryOfTxId == b.recoveryOfTxId;
+      a.recoveryOfTxId == b.recoveryOfTxId &&
+      a.obligationId == b.obligationId;
 }
 
 /// Phase 8.6 — kiểm tra [recovery] (transaction sắp ghi, `recoveryOfTxId ==

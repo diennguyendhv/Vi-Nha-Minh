@@ -1,7 +1,10 @@
 import '../engine/financial_engine.dart';
+import '../engine/obligation_settlement.dart';
 import '../entities/category.dart';
 import '../entities/family_member.dart';
 import '../entities/fund.dart';
+import '../entities/obligation.dart';
+import '../entities/obligation_direction.dart';
 import '../entities/pool_kind.dart';
 import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
@@ -25,6 +28,8 @@ class FinancialSummary {
     required this.fundBalances,
     required this.totalFunds,
     required this.totalAssets,
+    required this.totalReceivables,
+    required this.totalPayables,
     required this.monthlyIncome,
     required this.monthlyExpense,
   });
@@ -67,6 +72,20 @@ class FinancialSummary {
   /// amountMinor, TRANSFER tự triệt tiêu vì luôn chạm đúng 2 pool nội bộ).
   final int totalAssets;
 
+  /// Phase 8.7 — tổng khoản PHẢI THU (Receivable) còn outstanding, quét
+  /// trực tiếp `PoolKind.receivable` trên `balances` (đã tự động cộng vào
+  /// [totalAssets] ở trên — field này chỉ để hiển thị TÁCH RIÊNG, không
+  /// phải 1 nguồn cộng thêm).
+  final int totalReceivables;
+
+  /// Phase 8.7 — tổng khoản PHẢI TRẢ (Payable) còn outstanding — derived
+  /// theo TỪNG `Obligation` truyền vào ([obligations]), KHÔNG quét
+  /// `balances` (Payable không phải `PoolKind`, cố tình — xem
+  /// `docs/financial-core-v2.md` audit Phase 8.7 mục D/F). **KHÔNG được**
+  /// cộng field này vào [totalAssets] — Payable là liability, không phải
+  /// asset; dùng [netWorth] để phản ánh ảnh hưởng của nó.
+  final int totalPayables;
+
   /// `Total Income` theo kỳ truyền vào (`month`, xem [computeThreeTotals])
   /// — bỏ qua category `excludeFromTotals` (vd "Số dư ban đầu").
   final int monthlyIncome;
@@ -78,6 +97,11 @@ class FinancialSummary {
   /// totalExpense`. KHÔNG lưu field riêng, luôn suy ra để không lệch với
   /// [ThreeTotals.balance].
   int get monthlyNet => monthlyIncome - monthlyExpense;
+
+  /// Phase 8.7 — `Net Worth = Total Assets − Total Payables` (audit mục
+  /// F). KHÔNG đổi ý nghĩa [totalAssets] hiện có — đây là field MỚI, tách
+  /// riêng, để không bao giờ "báo người dùng giàu thêm" chỉ vì vừa đi vay.
+  int get netWorth => totalAssets - totalPayables;
 }
 
 int _sumByKind(Map<PoolRef, int> balances, PoolKind kind) {
@@ -100,11 +124,15 @@ int _sumByKind(Map<PoolRef, int> balances, PoolKind kind) {
 /// Truyền [month] để `monthlyIncome`/`monthlyExpense` chỉ tính trong 1
 /// tháng cụ thể (theo `transactionDate`, KHÔNG theo `createdAt` — xem
 /// `computeThreeTotals`); bỏ trống để tính toàn bộ lịch sử.
+///
+/// [obligations] (Phase 8.7) chỉ cần cho [FinancialSummary.totalPayables] —
+/// mặc định rỗng (không breaking caller cũ chưa biết Obligation).
 FinancialSummary computeFinancialSummary(
   List<Transaction> transactions, {
   required List<Category> categories,
   required List<Fund> funds,
   required List<SavingsAssetType> assetTypes,
+  List<Obligation> obligations = const [],
   DateTime? month,
 }) {
   final balances = computeAllPoolBalances(transactions);
@@ -133,6 +161,19 @@ FinancialSummary computeFinancialSummary(
 
   final threeTotals = computeThreeTotals(transactions, categories, month: month);
 
+  final totalPayables = obligations
+      .where((o) => o.direction == ObligationDirection.payable)
+      .fold<int>(
+        0,
+        (s, o) => s +
+            computeObligationOutstanding(
+              o.direction,
+              o.id,
+              transactions,
+              balances,
+            ),
+      );
+
   return FinancialSummary(
     availableByMember: availableByMember,
     totalAvailable: totalAvailable,
@@ -141,7 +182,14 @@ FinancialSummary computeFinancialSummary(
     totalSavings: _sumByKind(balances, PoolKind.memberSavingsAsset),
     fundBalances: fundBalances,
     totalFunds: _sumByKind(balances, PoolKind.fund),
+    // Cố tình vẫn lấy tổng TOÀN BỘ `balances.values` — Phase 8.7 thêm
+    // `PoolKind.receivable` (1 asset thật) nên KHÔNG cần sửa dòng này, tự
+    // động cộng đúng (đúng như doc-comment `totalAssets` đã nói trước —
+    // "tự động đúng cả khi domain thêm PoolKind mới"). Payable KHÔNG có
+    // PoolKind nên KHÔNG lọt vào tổng này — không cần loại trừ thủ công.
     totalAssets: balances.values.fold<int>(0, (s, v) => s + v),
+    totalReceivables: _sumByKind(balances, PoolKind.receivable),
+    totalPayables: totalPayables,
     monthlyIncome: threeTotals.totalIncome,
     monthlyExpense: threeTotals.totalExpense,
   );

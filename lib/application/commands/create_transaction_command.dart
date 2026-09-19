@@ -47,6 +47,7 @@ class CreateTransactionCommand {
     this.note = '',
     this.statusId,
     this.recoveryOfTxId,
+    this.obligationId,
     String? id,
     String? clientTxId,
   }) : id = id ?? IdGenerator.generate(),
@@ -99,4 +100,12 @@ class CreateTransactionCommand {
   /// là Chi, không phải chain, chưa bị hoàn tác...) nằm ở Repository
   /// (`validateRecoveryRelation`), KHÔNG lặp lại ở Application layer.
   final String? recoveryOfTxId;
+
+  /// Phase 8.7 — khác null khi command này tạo giao dịch TẠO 1 khoản vay
+  /// (Cho vay/Đi vay), trỏ về `Obligation.id`. Vai trò suy ra từ hình dạng
+  /// giao dịch (`type`/pool), không cần field riêng phân biệt tạo/tất toán
+  /// — xem `domain/engine/obligation_settlement.dart`. Tất toán (settlement)
+  /// KHÔNG đi qua command này — dùng `SettleObligationCommand` riêng (có
+  /// thể sinh 2 dòng atomic, khác lifecycle 1-dòng của command này).
+  final String? obligationId;
 }

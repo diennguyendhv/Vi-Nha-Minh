@@ -19,6 +19,16 @@ class DefaultCategories {
     type: TransactionType.income,
     excludeFromTotals: true,
   );
+
+  /// "Khác" thuộc nhóm Khoản thu khác (tiền vào không phải doanh thu, vd bán
+  /// lại đồ, người khác trả lại). Chỉ seed cho DB MỚI — DB cũ không đổi.
+  static const thuKhac = Category(
+    id: 'thu_khac',
+    name: 'Khác',
+    color: Color(0xFF6FA88A),
+    type: TransactionType.income,
+    excludeFromTotals: true,
+  );
   static const thuNhap = Category(
     id: 'thu_nhap',
     name: 'Thu nhập',
@@ -43,6 +53,7 @@ class DefaultCategories {
     color: Color(0xFFC14F7A),
     type: TransactionType.expense,
   );
+
   /// Tên hiển thị viết tắt (mã hoá) — "Cho đi" nguyên bản nhạy cảm, dùng
   /// "CĐ" để người ngoài nhìn màn hình không đoán ra ngay. Id nội bộ
   /// (`cho_di`) giữ nguyên, không đổi — chỉ đổi `name` hiển thị.
@@ -70,6 +81,13 @@ class DefaultCategories {
         categoryId: 'cho_di',
         name: 'ĐG',
         sortOrder: 2,
+      ),
+      // Bộ 4 trạng thái đang dùng thật (đọc từ DB Pixel): CĐ có ĐD SAU ĐG.
+      Status(
+        id: 'cho_di_da_dang',
+        categoryId: 'cho_di',
+        name: 'ĐD',
+        sortOrder: 3,
       ),
     ],
   );
@@ -99,6 +117,13 @@ class DefaultCategories {
         categoryId: 'dang_hien',
         name: 'ĐD',
         sortOrder: 2,
+      ),
+      // Bộ 4 trạng thái đang dùng thật: DH có ĐG SAU ĐD (khác thứ tự của CĐ).
+      Status(
+        id: 'dang_hien_da_gui',
+        categoryId: 'dang_hien',
+        name: 'ĐG',
+        sortOrder: 3,
       ),
     ],
   );
@@ -141,25 +166,73 @@ class DefaultCategories {
     excludeFromTotals: true,
   );
 
+  /// Phase 8.7 — Receivable (cho vay): TẠO khoản vay + trả gốc đều là
+  /// `TransactionType.transfer` (`memberAvailable ↔ receivable`), dùng
+  /// chung 1 category giống `napQuy`/`chuyenTienThanhVien` (đều là các
+  /// category `type == transfer` hệ thống).
+  static const choVay = Category(
+    id: 'cho_vay',
+    name: 'Cho vay',
+    color: Color(0xFF4F8AB0),
+    type: TransactionType.transfer,
+  );
+
+  /// Phase 8.7 — phần LÃI của 1 lần thu hồi Receivable (leg riêng, income
+  /// thật, KHÔNG `excludeFromTotals` — báo cáo bình thường vào Tổng thu).
+  static const laiChoVay = Category(
+    id: 'lai_cho_vay',
+    name: 'Lãi cho vay',
+    color: Color(0xFF6FB08A),
+    type: TransactionType.income,
+  );
+
+  /// Phase 8.7 — Payable (đi vay): giao dịch TẠO khoản vay (nhận tiền vay).
+  static const vayNo = Category(
+    id: 'vay_no',
+    name: 'Đi vay',
+    color: Color(0xFFB0834F),
+    type: TransactionType.income,
+  );
+
+  /// Phase 8.7 — Payable: giao dịch TẤT TOÁN (trả nợ, gồm cả gốc lẫn lãi
+  /// gộp trong 1 dòng — xem `buildObligationSettlementLegs`).
+  static const traNo = Category(
+    id: 'tra_no',
+    name: 'Trả nợ',
+    color: Color(0xFFB0574F),
+    type: TransactionType.expense,
+  );
+
+  /// Hạng mục Chi BÌNH THƯỜNG cho chi phí vận hành công việc/kinh doanh (lương,
+  /// quảng cáo, bảo hành...). Chi tiết từng khoản ghi trong Ghi chú — Category
+  /// chỉ là nhóm để thống kê, KHÔNG có ngữ nghĩa báo cáo đặc biệt nào (không
+  /// liên kết với hạng mục Thu, không tính lợi nhuận). Chỉ được seed khi tạo
+  /// DB mới (như mọi hạng mục mặc định) — DB đã có từ trước không bị đổi.
+  static const chiPhiKinhDoanh = Category(
+    id: 'chi_phi_kinh_doanh',
+    name: 'Chi phí kinh doanh',
+    color: Color(0xFF5B7083),
+    type: TransactionType.expense,
+    groupKey: CategoryGroupKey.businessExpense,
+  );
+
   static const all = <Category>[
     soDuBanDau,
+    thuKhac,
     thuNhap,
     sinhHoat,
     dauTu,
     tuThuong,
     choDi,
     dangHien,
+    chiPhiKinhDoanh,
     chuyenTienThanhVien,
     napQuy,
     tietKiem,
     hoanTienThuHoi,
-  ];
-
-  static const quickNotes = <String>[
-    'Chợ',
-    'Xăng xe',
-    'Cà phê',
-    'Hoá đơn',
-    'Khác',
+    choVay,
+    laiChoVay,
+    vayNo,
+    traNo,
   ];
 }

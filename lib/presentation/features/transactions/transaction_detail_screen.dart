@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/entities/status.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/entities/transaction.dart';
@@ -11,8 +12,13 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_recovery_summary.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/feature_providers.dart';
+import '../../providers/obligation_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../../widgets/amount_input_formatter.dart';
+import '../../widgets/amount_preview.dart';
 import '../add_transaction/add_transaction_sheet.dart';
+import '../loans/loan_detail_screen.dart';
 
 /// Màn "Chi tiết giao dịch" (`docs/design.html` màn 11) — sửa được toàn bộ:
 /// hạng mục (trong cùng loại Thu/Chi/Chuyển gốc), số tiền, ghi chú, người
@@ -45,6 +51,23 @@ class _TransactionDetailScreenState
   late String _categoryId;
   late DateTime _transactionDate;
   String? _statusId;
+
+  /// Các bước có thể chọn: các bước ĐANG DÙNG của hạng mục, cộng thêm bước
+  /// hiện tại của giao dịch nếu nó đã bị ẩn (để giao dịch lịch sử vẫn hiển
+  /// thị đúng trạng thái của nó, không bị đổi ngầm).
+  List<Status> _statusChoices(Category category) {
+    final choices = category.activeStatuses;
+    final current = category.statusById(_statusId);
+    if (current != null && !current.isActive) return [...choices, current];
+    return choices;
+  }
+
+  String? _statusValue(Category category) {
+    final choices = _statusChoices(category);
+    if (choices.any((s) => s.id == _statusId)) return _statusId;
+    return choices.isEmpty ? null : choices.first.id;
+  }
+
   FamilyMember? _member;
 
   @override
@@ -61,13 +84,27 @@ class _TransactionDetailScreenState
     return null;
   }
 
+  // Re-check the stream snapshot as well as the captured callback argument.
+  // A callback or confirmation dialog can outlive the frame that created it.
+  // This is Presentation containment; repository protection remains separate.
+  bool _canMutateGeneric(Transaction captured) {
+    if (!mounted || captured.obligationId != null) return false;
+    final latest = _findTransaction(
+      ref.read(transactionsStreamProvider).valueOrNull ?? const [],
+    );
+    return latest != null &&
+        latest.obligationId == null &&
+        latest.reversedByTxId == null;
+  }
+
   /// Chỉ khác null khi giao dịch có đúng 1 "người tiêu" rõ ràng có thể sửa
   /// — INCOME (người nhận) hoặc EXPENSE nguồn ví (người chi). TRANSFER và
   /// EXPENSE nguồn Quỹ không có field này để sửa.
   FamilyMember? _currentMember(Transaction t) {
     final refId = t.type == TransactionType.income
         ? t.destinationRefId
-        : (t.type == TransactionType.expense && t.sourceKind == PoolKind.memberAvailable
+        : (t.type == TransactionType.expense &&
+                  t.sourceKind == PoolKind.memberAvailable
               ? t.sourceRefId
               : null);
     if (refId == null) return null;
@@ -76,6 +113,10 @@ class _TransactionDetailScreenState
     }
     return null;
   }
+
+  /// Số tiền đang nhập (0 nếu trống/không hợp lệ) — Lưu bị khoá khi <= 0.
+  int get _enteredAmount =>
+      int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0;
 
   void _initFrom(Transaction t) {
     _amountController.text = t.amountMinor.toString();
@@ -104,6 +145,7 @@ class _TransactionDetailScreenState
   /// Repository (mục 4: "Do not duplicate logic... if Repository already
   /// owns that distinction").
   Future<void> _save(Transaction current) async {
+    if (!_canMutateGeneric(current)) return;
     if (_submitting) return; // chặn double-tap.
     final newAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
     if (newAmount == null || newAmount <= 0) return;
@@ -122,9 +164,8 @@ class _TransactionDetailScreenState
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -136,6 +177,7 @@ class _TransactionDetailScreenState
   /// khoá loại giao dịch/category, không dựng form/pipeline riêng nào ở
   /// đây.
   void _openRecoverySheet(Transaction current) {
+    if (!_canMutateGeneric(current)) return;
     showAddTransactionSheet(context, recoveryTarget: current);
   }
 
@@ -144,6 +186,7 @@ class _TransactionDetailScreenState
   /// xoá cứng — Repository (frozen) tạo bản reversal mới, đánh dấu
   /// `reversedByTxId` lên bản gốc.
   Future<void> _delete(Transaction current) async {
+    if (!_canMutateGeneric(current)) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -164,6 +207,7 @@ class _TransactionDetailScreenState
       ),
     );
     if (confirmed != true) return;
+    if (!_canMutateGeneric(current)) return;
     if (_submitting) return; // chặn double-tap.
 
     setState(() => _submitting = true);
@@ -172,9 +216,8 @@ class _TransactionDetailScreenState
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -211,12 +254,18 @@ class _TransactionDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final transaction = _findTransaction(transactions);
 
     if (transaction == null) {
-      return const Scaffold(body: Center(child: Text('Giao dịch không tồn tại.')));
+      return const Scaffold(
+        body: Center(child: Text('Giao dịch không tồn tại.')),
+      );
+    }
+    if (transaction.obligationId != null) {
+      return _loanTransactionDetail(transaction, categories);
     }
     if (transaction.reversedByTxId != null) {
       return const Scaffold(
@@ -234,7 +283,10 @@ class _TransactionDetailScreenState
       if (c.id == _categoryId) selectedCategory = c;
     }
     final sameTypeCategories = categories
-        .where((c) => c.type == transaction.type && (c.isActive || c.id == _categoryId))
+        .where(
+          (c) =>
+              c.type == transaction.type && (c.isActive || c.id == _categoryId),
+        )
         .toList();
     final canEditCategory = transaction.type != TransactionType.transfer;
     final canEditMember = _currentMember(transaction) != null;
@@ -245,28 +297,43 @@ class _TransactionDetailScreenState
     // chain). Giao dịch đã bị hoàn tác không tới được đây (return sớm ở
     // trên) nên không cần check lại `reversedByTxId`.
     final canRecover =
-        transaction.type == TransactionType.expense && transaction.recoveryOfTxId == null;
+        ref.watch(advancedFeaturesEnabledProvider) &&
+        transaction.type == TransactionType.expense &&
+        transaction.recoveryOfTxId == null;
     final recoverySummary = computeRecoverySummary(transaction, transactions);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chi tiết giao dịch · ${Formatters.dayMonth(transaction.transactionDate)}'),
+        title: Text(
+          'Chi tiết giao dịch · ${Formatters.dayMonth(transaction.transactionDate)}',
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
             'HẠNG MỤC',
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 8),
           if (canEditCategory)
             DropdownButtonFormField<String>(
-              value: sameTypeCategories.any((c) => c.id == _categoryId) ? _categoryId : null,
+              value: sameTypeCategories.any((c) => c.id == _categoryId)
+                  ? _categoryId
+                  : null,
               isExpanded: true,
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
               items: sameTypeCategories
-                  .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
+                  .map(
+                    (c) => DropdownMenuItem(value: c.id, child: Text(c.name)),
+                  )
                   .toList(),
               onChanged: (id) {
                 if (id == null) return;
@@ -276,33 +343,55 @@ class _TransactionDetailScreenState
                   for (final c in sameTypeCategories) {
                     if (c.id == id) newCategory = c;
                   }
-                  // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ.
+                  // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ: giữ
+                  // status hiện tại nếu nó thuộc hạng mục mới (kể cả đã ẩn —
+                  // đó là trạng thái lịch sử của chính giao dịch này), ngược
+                  // lại lấy bước ĐANG DÙNG đầu tiên (hoặc null).
                   if (newCategory != null &&
-                      (!newCategory.hasStatus ||
-                          newCategory.statuses.every((s) => s.id != _statusId))) {
-                    _statusId = newCategory.hasStatus ? newCategory.statuses.first.id : null;
+                      newCategory.statuses.every((s) => s.id != _statusId)) {
+                    _statusId = newCategory.hasStatus
+                        ? newCategory.activeStatuses.first.id
+                        : null;
                   }
                 });
               },
             )
           else
-            _ReadOnlyRow(label: 'Danh mục hệ thống, không sửa được', value: selectedCategory?.name ?? '—'),
+            _ReadOnlyRow(
+              label: 'Danh mục hệ thống, không sửa được',
+              value: selectedCategory?.name ?? '—',
+            ),
           const SizedBox(height: 16),
           const Text(
             'SỐ TIỀN',
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 6),
           TextField(
+            key: const Key('detail_amount_field'),
             controller: _amountController,
             keyboardType: TextInputType.number,
+            inputFormatters: const [AmountInputFormatter()],
+            onChanged: (_) => setState(() {}),
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-            decoration: const InputDecoration(border: OutlineInputBorder(), suffixText: 'đ'),
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              suffixText: 'đ',
+            ),
           ),
+          AmountPreview(amountMinor: _enteredAmount),
           const SizedBox(height: 16),
           const Text(
             'GHI CHÚ',
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 6),
           TextField(
@@ -317,7 +406,11 @@ class _TransactionDetailScreenState
             const SizedBox(height: 16),
             const Text(
               'NGƯỜI TIÊU',
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
             ),
             const SizedBox(height: 8),
             SegmentedButton<FamilyMember>(
@@ -331,7 +424,11 @@ class _TransactionDetailScreenState
           const SizedBox(height: 16),
           const Text(
             'NGÀY',
-            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 6),
           OutlinedButton.icon(
@@ -342,19 +439,34 @@ class _TransactionDetailScreenState
               '${_transactionDate.month.toString().padLeft(2, '0')}/${_transactionDate.year}',
             ),
           ),
-          if (selectedCategory != null && selectedCategory.hasStatus) ...[
+          if (selectedCategory != null &&
+              _statusChoices(selectedCategory).isNotEmpty) ...[
             const SizedBox(height: 20),
             const Text(
               'TRẠNG THÁI',
-              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textMuted),
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _statusId ?? selectedCategory.statuses.first.id,
+              value: _statusValue(selectedCategory),
               isExpanded: true,
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-              items: selectedCategory.statuses
-                  .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
+              decoration: const InputDecoration(
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              items: _statusChoices(selectedCategory)
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s.id,
+                      child: Text(
+                        s.isActive ? s.name : '${s.name} (ngừng sử dụng)',
+                      ),
+                    ),
+                  )
                   .toList(),
               onChanged: (id) {
                 if (id != null) setState(() => _statusId = id);
@@ -365,13 +477,18 @@ class _TransactionDetailScreenState
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   'Cập nhật lần cuối: ${Formatters.dayMonth(transaction.statusUpdatedAt!)}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
                 ),
               ),
           ],
           const SizedBox(height: 24),
           ElevatedButton(
-            onPressed: _submitting ? null : () => _save(transaction),
+            onPressed: (_submitting || _enteredAmount <= 0)
+                ? null
+                : () => _save(transaction),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
@@ -382,7 +499,9 @@ class _TransactionDetailScreenState
           if (canRecover) ...[
             const SizedBox(height: 10),
             OutlinedButton(
-              onPressed: _submitting ? null : () => _openRecoverySheet(transaction),
+              onPressed: _submitting
+                  ? null
+                  : () => _openRecoverySheet(transaction),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.accent,
                 side: const BorderSide(color: AppColors.accent),
@@ -400,6 +519,78 @@ class _TransactionDetailScreenState
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: const Text('Xoá giao dịch'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _loanTransactionDetail(
+    Transaction transaction,
+    List<Category> categories,
+  ) {
+    final obligations = ref.watch(obligationsStreamProvider);
+    final matches = obligations.valueOrNull?.where(
+      (o) => o.id == transaction.obligationId,
+    );
+    final obligation = matches != null && matches.isNotEmpty
+        ? matches.first
+        : null;
+    final categoryMatches = categories.where(
+      (c) => c.id == transaction.categoryId,
+    );
+    final category = categoryMatches.isEmpty ? null : categoryMatches.first;
+    final statuses = category?.statuses.where(
+      (s) => s.id == transaction.statusId,
+    );
+    final member = _currentMember(transaction);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Chi tiết giao dịch')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _ReadOnlyRow(label: 'Hạng mục', value: category?.name ?? '—'),
+          const SizedBox(height: 16),
+          _ReadOnlyRow(
+            label: 'Số tiền',
+            value: Formatters.amount(transaction.amountMinor),
+          ),
+          const SizedBox(height: 16),
+          _ReadOnlyRow(
+            label: 'Ngày',
+            value: Formatters.dayMonthYear(transaction.transactionDate),
+          ),
+          const SizedBox(height: 16),
+          _ReadOnlyRow(label: 'Ghi chú', value: transaction.note),
+          if (member != null) ...[
+            const SizedBox(height: 16),
+            _ReadOnlyRow(label: 'Người tiêu', value: member.label),
+          ],
+          if (statuses != null && statuses.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _ReadOnlyRow(label: 'Trạng thái', value: statuses.first.name),
+          ],
+          const SizedBox(height: 24),
+          const Text(
+            'Giao dịch này thuộc một khoản vay. Hãy quản lý giao dịch từ mục Vay & Cho vay.',
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed:
+                obligation == null ||
+                    obligations.isLoading ||
+                    obligations.hasError
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => LoanDetailScreen(
+                        obligationId: obligation.id,
+                        direction: obligation.direction,
+                      ),
+                    ),
+                  ),
+            child: const Text('Xem khoản vay'),
           ),
         ],
       ),
@@ -435,11 +626,17 @@ class _RecoverySummaryCard extends StatelessWidget {
                 summary.recoveries.length > 1
                     ? 'Đã thu hồi · ${summary.recoveries.length} giao dịch'
                     : 'Đã thu hồi',
-                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
               ),
               Text(
                 Formatters.amount(summary.totalRecovered),
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
@@ -447,13 +644,48 @@ class _RecoverySummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Chi phí ròng', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+              const Text(
+                'Chi phí ròng',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               Text(
                 Formatters.amount(summary.netCost),
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
+          // Phase 8.6B — chỉ hiện khi thu hồi VƯỢT chi phí gốc (bán có lãi):
+          // phần vượt là lợi nhuận thật, đã được tính vào Tổng thu tháng
+          // (`computeThreeTotals`/`computeFinancialSummary`) — không tự tính
+          // lại ở đây, chỉ hiển thị field domain đã tính sẵn.
+          if (summary.totalProfit > 0) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Lợi nhuận',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  Formatters.amount(summary.totalProfit),
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -471,7 +703,13 @@ class _ReadOnlyRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12.5,
+            color: AppColors.textSecondary,
+          ),
+        ),
         Flexible(
           child: Text(
             value,

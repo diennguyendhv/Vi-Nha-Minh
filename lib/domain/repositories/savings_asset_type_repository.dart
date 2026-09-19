@@ -1,6 +1,6 @@
 import '../entities/savings_asset_type.dart';
 
-/// Loại tài sản tiết kiệm là DỮ LIỆU gia đình tự tạo (Tiền mặt, Ngân hàng,
+/// Loại tài sản tiết kiệm là DỮ LIỆU gia đình tự tạo (Gửi ngân hàng, Vàng,
 /// Chứng khoán, Bất động sản...) — CRUD đầy đủ, không hardcode danh sách.
 abstract class SavingsAssetTypeRepository {
   Stream<List<SavingsAssetType>> watchAssetTypes();

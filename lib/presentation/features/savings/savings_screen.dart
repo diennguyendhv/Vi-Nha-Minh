@@ -36,13 +36,16 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final assetTypes = ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final assetTypes =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final active = assetTypes.where((a) => a.isActive).toList();
 
     final total = active.fold<int>(
       0,
-      (sum, a) => sum + computeMemberSavingsByAssetType(a.id, _member, transactions),
+      (sum, a) =>
+          sum + computeMemberSavingsByAssetType(a.id, _member, transactions),
     );
 
     return Scaffold(
@@ -69,12 +72,18 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
               children: [
                 Text(
                   'Tổng tiết kiệm của ${_member.label}',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   Formatters.amount(total),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
@@ -84,7 +93,11 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
             _AssetTypeTile(
               assetType: a,
               member: _member,
-              balance: computeMemberSavingsByAssetType(a.id, _member, transactions),
+              balance: computeMemberSavingsByAssetType(
+                a.id,
+                _member,
+                transactions,
+              ),
             ),
           const SizedBox(height: 12),
           OutlinedButton(
@@ -122,10 +135,17 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       ),
     );
     if (name == null || name.isEmpty) return;
-    final color = _assetColors[DateTime.now().millisecond % _assetColors.length];
-    await ref.read(savingsAssetTypeRepositoryProvider).addAssetType(
-      SavingsAssetType(id: IdGenerator.generate(), name: name, color: color),
-    );
+    final color =
+        _assetColors[DateTime.now().millisecond % _assetColors.length];
+    await ref
+        .read(savingsAssetTypeRepositoryProvider)
+        .addAssetType(
+          SavingsAssetType(
+            id: IdGenerator.generate(),
+            name: name,
+            color: color,
+          ),
+        );
   }
 }
 
@@ -160,7 +180,9 @@ class _AssetTypeTile extends ConsumerWidget {
       return;
     }
     try {
-      await ref.read(savingsAssetTypeRepositoryProvider).softDeleteAssetType(assetType.id);
+      await ref
+          .read(savingsAssetTypeRepositoryProvider)
+          .softDeleteAssetType(assetType.id);
     } on SavingsAssetTypeNotEmptyException {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +200,13 @@ class _AssetTypeTile extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: AppColors.shadow, blurRadius: 10, offset: const Offset(0, 3))],
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -188,17 +216,26 @@ class _AssetTypeTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(assetType.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                  assetType.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
                 Text(
                   Formatters.amount(balance),
-                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
             tooltip: 'Nạp',
-            icon: const Icon(Icons.add_circle_outline_rounded, color: AppColors.accent),
+            icon: const Icon(
+              Icons.add_circle_outline_rounded,
+              color: AppColors.accent,
+            ),
             onPressed: () => showAddTransactionSheet(
               context,
               initialType: EntryType.chuyen,
@@ -210,7 +247,10 @@ class _AssetTypeTile extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Rút',
-            icon: const Icon(Icons.remove_circle_outline_rounded, color: AppColors.expenseAmount),
+            icon: const Icon(
+              Icons.remove_circle_outline_rounded,
+              color: AppColors.expenseAmount,
+            ),
             onPressed: () => showAddTransactionSheet(
               context,
               initialType: EntryType.chuyen,
@@ -222,7 +262,11 @@ class _AssetTypeTile extends ConsumerWidget {
           ),
           IconButton(
             tooltip: 'Xoá loại này',
-            icon: const Icon(Icons.close_rounded, color: AppColors.textMuted, size: 18),
+            icon: const Icon(
+              Icons.close_rounded,
+              color: AppColors.textMuted,
+              size: 18,
+            ),
             onPressed: () => _delete(context, ref),
           ),
         ],

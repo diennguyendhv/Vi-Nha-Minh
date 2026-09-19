@@ -10,8 +10,8 @@ enum TransferKind {
   /// memberSavingsAsset(loại X) → MEMBER_AVAILABLE.
   savingsWithdraw,
 
-  /// memberSavingsAsset(loại X) → memberSavingsAsset(loại Y) — vd "Tiền
-  /// mặt" sang "Ngân hàng", hoặc "Ngân hàng" sang "Chứng khoán". Thay cho
+  /// memberSavingsAsset(loại X) → memberSavingsAsset(loại Y) — vd "Gửi
+  /// ngân hàng" sang "Vàng", hoặc "Vàng" sang "Chứng khoán". Thay cho
   /// `savingsToBank` cố định ở bản trước — giờ chuyển được giữa BẤT KỲ 2
   /// loại tài sản tiết kiệm nào gia đình tự tạo.
   savingsConvert,

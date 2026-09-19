@@ -9,6 +9,8 @@ import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
+import 'package:vi_nha_minh/domain/entities/obligation.dart';
+import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -19,10 +21,14 @@ import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
+import 'package:vi_nha_minh/presentation/features/loans/loan_detail_screen.dart';
+import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/counterparty_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/currency_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/feature_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 /// Ghi lại toàn bộ tham số 1 lần gọi `updateTransaction`.
@@ -130,6 +136,39 @@ class _FakeTransactionRepository implements TransactionRepository {
       null;
 
   Future<void> dispose() => _controller.close();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})> settleObligation({
+    required String obligationId,
+    required ObligationDirection direction,
+    required String memberRefId,
+    required int amountMinor,
+    required DateTime transactionDate,
+    String note = '',
+    required String categoryId,
+    required String interestCategoryId,
+    required String principalId,
+    required String principalClientTxId,
+    required String interestId,
+    required String interestClientTxId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> reverseObligationSettlement(String anyLegTransactionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})>
+  correctObligationSettlement(
+    String anyLegTransactionId, {
+    required int newAmountMinor,
+    required String categoryId,
+    required String interestCategoryId,
+    required String newPrincipalId,
+    required String newPrincipalClientTxId,
+    required String newInterestId,
+    required String newInterestClientTxId,
+  }) => throw UnimplementedError();
 }
 
 class _StaticCategoryRepository implements CategoryRepository {
@@ -242,6 +281,9 @@ Future<void> _pumpDetail(
   WidgetTester tester, {
   required _FakeTransactionRepository fakeRepo,
   required String transactionId,
+  List<Obligation> obligations = const [],
+  List<Category>? categories,
+  bool advancedFeatures = false,
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -251,9 +293,14 @@ Future<void> _pumpDetail(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        obligationsStreamProvider.overrideWith(
+          (ref) => Stream.value(obligations),
+        ),
+        counterpartiesStreamProvider.overrideWith((ref) => Stream.value([])),
+        advancedFeaturesEnabledProvider.overrideWithValue(advancedFeatures),
         transactionRepositoryProvider.overrideWithValue(fakeRepo),
         categoryRepositoryProvider.overrideWithValue(
-          _StaticCategoryRepository(DefaultCategories.all),
+          _StaticCategoryRepository(categories ?? DefaultCategories.all),
         ),
         fundRepositoryProvider.overrideWithValue(
           _StaticFundRepository(DefaultFunds.all),
@@ -261,7 +308,9 @@ Future<void> _pumpDetail(
         savingsAssetTypeRepositoryProvider.overrideWithValue(
           _StaticSavingsAssetTypeRepository(DefaultSavingsAssetTypes.all),
         ),
-        currencyContextProvider.overrideWithValue(const _TestCurrencyContext('VND')),
+        currencyContextProvider.overrideWithValue(
+          const _TestCurrencyContext('VND'),
+        ),
       ],
       child: MaterialApp(
         home: TransactionDetailScreen(transactionId: transactionId),
@@ -272,12 +321,27 @@ Future<void> _pumpDetail(
 }
 
 Future<void> _tapSave(WidgetTester tester) async {
-  final button = find.widgetWithText(ElevatedButton, 'Lưu thay đổi').evaluate().isNotEmpty
+  final button =
+      find.widgetWithText(ElevatedButton, 'Lưu thay đổi').evaluate().isNotEmpty
       ? find.widgetWithText(ElevatedButton, 'Lưu thay đổi')
       : find.byType(ElevatedButton);
   await tester.ensureVisible(button.first);
   await tester.tap(button.first, warnIfMissed: false);
 }
+
+
+/// F30: CĐ với bước "ĐCB" đã ẩn (`isActive == false`).
+List<Category> _categoriesWithHiddenDcb() => [
+  for (final c in DefaultCategories.all)
+    c.id == 'cho_di'
+        ? c.copyWith(
+            statuses: [
+              for (final s in c.statuses)
+                s.id == 'cho_di_da_chuan_bi' ? s.copyWith(isActive: false) : s,
+            ],
+          )
+        : c,
+];
 
 void main() {
   late _FakeTransactionRepository fakeRepo;
@@ -288,31 +352,261 @@ void main() {
 
   tearDown(() async => fakeRepo.dispose());
 
-  group('Update path (Phase 7 mục 22)', () {
-    testWidgets('1 — note-only update: gọi UpdateTransactionUseCase với đúng id, amount giữ nguyên', (
+  group('Phase 8.8 generic transaction containment', () {
+    Transaction loanTransaction(String role, {String id = 'loan-tx'}) {
+      final creation = role.endsWith('creation');
+      final payable = role.startsWith('payable');
+      final interest = role == 'receivable-interest';
+      return Transaction(
+        id: id,
+        type: payable
+            ? (creation ? TransactionType.income : TransactionType.expense)
+            : (interest ? TransactionType.income : TransactionType.transfer),
+        categoryId: payable
+            ? (creation
+                  ? DefaultCategories.vayNo.id
+                  : DefaultCategories.traNo.id)
+            : (interest
+                  ? DefaultCategories.laiChoVay.id
+                  : DefaultCategories.choVay.id),
+        sourceKind: payable
+            ? (creation ? PoolKind.external : PoolKind.memberAvailable)
+            : (creation
+                  ? PoolKind.memberAvailable
+                  : (interest ? PoolKind.external : PoolKind.receivable)),
+        sourceRefId: payable
+            ? (creation ? null : 'vo')
+            : (creation ? 'vo' : (interest ? null : 'loan-1')),
+        destinationKind: payable
+            ? (creation ? PoolKind.memberAvailable : PoolKind.external)
+            : (creation ? PoolKind.receivable : PoolKind.memberAvailable),
+        destinationRefId: payable
+            ? (creation ? 'vo' : null)
+            : (creation ? 'loan-1' : 'vo'),
+        amountMinor: 100000,
+        note: 'Loan history entry',
+        obligationId: 'loan-1',
+        settlementGroupId: creation ? null : 'settlement-1',
+        transactionDate: DateTime(2026, 9, 1),
+        createdAt: DateTime(2026, 9, 1),
+        clientTxId: 'client-$id',
+      );
+    }
+
+    for (final role in [
+      'receivable-creation',
+      'payable-creation',
+      'receivable-principal',
+      'receivable-interest',
+      'payable-settlement',
+    ]) {
+      testWidgets('$role is read-only and navigates to its own loan', (
+        tester,
+      ) async {
+        final direction = role.startsWith('payable')
+            ? ObligationDirection.payable
+            : ObligationDirection.receivable;
+        fakeRepo.seed([loanTransaction(role)]);
+        await _pumpDetail(
+          tester,
+          fakeRepo: fakeRepo,
+          transactionId: 'loan-tx',
+          obligations: [
+            const Obligation(
+              id: 'other-loan',
+              counterpartyId: 'other',
+              direction: ObligationDirection.payable,
+            ),
+            Obligation(
+              id: 'loan-1',
+              counterpartyId: 'person-1',
+              direction: direction,
+            ),
+          ],
+        );
+        expect(find.byType(TextField), findsNothing);
+        expect(find.byType(EditableText), findsNothing);
+        expect(find.text('Lưu thay đổi'), findsNothing);
+        expect(find.text('Xoá giao dịch'), findsNothing);
+        expect(find.text('Hoàn tiền / Thu hồi'), findsNothing);
+        expect(find.text('Loan history entry'), findsOneWidget);
+        expect(find.textContaining('obligationId'), findsNothing);
+        await tester.tap(find.text('Xem khoản vay'));
+        await tester.pumpAndSettle();
+        final detail = tester.widget<LoanDetailScreen>(
+          find.byType(LoanDetailScreen),
+        );
+        expect(detail.obligationId, 'loan-1');
+        expect(detail.direction, direction);
+        expect(fakeRepo.updateCalls, isEmpty);
+        expect(fakeRepo.reverseCalls, isEmpty);
+      });
+    }
+
+    testWidgets('stale Save/Delete/Recovery callbacks cannot mutate a loan', (
+      tester,
+    ) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(
+        tester,
+        fakeRepo: fakeRepo,
+        transactionId: 'tx1',
+        advancedFeatures: true,
+      );
+      final save = tester
+          .widget<ElevatedButton>(
+            find.widgetWithText(ElevatedButton, 'Lưu thay đổi'),
+          )
+          .onPressed!;
+      final delete = tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Xoá giao dịch'),
+          )
+          .onPressed!;
+      final recover = tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'),
+          )
+          .onPressed!;
+      // Simulate a new snapshot while an older frame's callbacks survive.
+      fakeRepo.seed([loanTransaction('payable-creation', id: 'tx1')]);
+      await tester.pumpAndSettle();
+      save();
+      delete();
+      recover();
+      await tester.pumpAndSettle();
+      expect(fakeRepo.updateCalls, isEmpty);
+      expect(fakeRepo.reverseCalls, isEmpty);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.byType(BottomSheet), findsNothing);
+    });
+
+    testWidgets('Delete rechecks loan ownership after confirmation', (
       tester,
     ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
-
-      await tester.enterText(find.byType(TextField).at(1), 'ghi chú mới');
-      await _tapSave(tester);
+      await tester.tap(find.text('Xoá giao dịch'));
       await tester.pumpAndSettle();
-
-      expect(fakeRepo.updateCalls, hasLength(1));
-      final call = fakeRepo.updateCalls.single;
-      expect(call.transactionId, 'tx1', reason: 'Test 4 — đúng id tới Use Case');
-      expect(call.note, 'ghi chú mới');
-      expect(call.amountMinor, 100000, reason: 'amount không đổi vẫn được truyền đủ (Repository tự quyết định)');
+      expect(find.byType(AlertDialog), findsOneWidget);
+      fakeRepo.seed([loanTransaction('receivable-creation', id: 'tx1')]);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xoá').last);
+      await tester.pumpAndSettle();
+      expect(fakeRepo.reverseCalls, isEmpty);
+      expect(find.text('Xem khoản vay'), findsOneWidget);
     });
 
-    testWidgets('2 — status update (bundled trong Save) map đúng statusId', (tester) async {
+    testWidgets('missing loan metadata keeps transaction read-only', (
+      tester,
+    ) async {
+      fakeRepo.seed([loanTransaction('receivable-interest')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'loan-tx');
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Xem khoản vay'),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(find.byType(TextField), findsNothing);
+      expect(find.text('Lưu thay đổi'), findsNothing);
+      expect(find.text('Xoá giao dịch'), findsNothing);
+    });
+  });
+
+  group('Update path (Phase 7 mục 22)', () {
+    testWidgets(
+      '1 — note-only update: gọi UpdateTransactionUseCase với đúng id, amount giữ nguyên',
+      (tester) async {
+        fakeRepo.seed([_expenseTx()]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+        await tester.enterText(find.byType(TextField).at(1), 'ghi chú mới');
+        await _tapSave(tester);
+        await tester.pumpAndSettle();
+
+        expect(fakeRepo.updateCalls, hasLength(1));
+        final call = fakeRepo.updateCalls.single;
+        expect(
+          call.transactionId,
+          'tx1',
+          reason: 'Test 4 — đúng id tới Use Case',
+        );
+        expect(call.note, 'ghi chú mới');
+        expect(
+          call.amountMinor,
+          100000,
+          reason:
+              'amount không đổi vẫn được truyền đủ (Repository tự quyết định)',
+        );
+      },
+    );
+
+    testWidgets('F30 — giao dịch lịch sử ở bước đã ẩn vẫn hiện đúng tên (kèm "đã ẩn"), không bị đổi ngầm', (
+      tester,
+    ) async {
+      fakeRepo.seed([
+        _expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_chuan_bi'),
+      ]);
+      await _pumpDetail(
+        tester,
+        fakeRepo: fakeRepo,
+        transactionId: 'tx1',
+        categories: _categoriesWithHiddenDcb(),
+      );
+
+      expect(find.text('ĐCB (ngừng sử dụng)'), findsOneWidget, reason: 'lịch sử resolve tên bước đã ẩn');
+
+      // Lưu mà không đụng gì: statusId giữ nguyên bước lịch sử.
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      final call = fakeRepo.updateCalls.single;
+      expect(call.statusId, 'cho_di_da_chuan_bi');
+    });
+
+    testWidgets('F30 — mở bộ chọn: bước đang dùng + bước lịch sử của chính giao dịch, không có bước ẩn khác', (
+      tester,
+    ) async {
+      // Ẩn thêm ĐG; giao dịch đang ở CCB (đang dùng) → chỉ CCB, không thấy ĐCB/ĐG.
+      final cats = [
+        for (final c in _categoriesWithHiddenDcb())
+          c.id == 'cho_di'
+              ? c.copyWith(
+                  statuses: [
+                    for (final s in c.statuses)
+                      s.id == 'cho_di_da_gui' ? s.copyWith(isActive: false) : s,
+                  ],
+                )
+              : c,
+      ];
+      fakeRepo.seed([
+        _expenseTx(categoryId: 'cho_di', statusId: 'cho_di_chua_chuan_bi'),
+      ]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1', categories: cats);
+
+      await tester.tap(find.text('CCB').first, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('ĐCB'), findsNothing);
+      expect(find.text('ĐCB (ngừng sử dụng)'), findsNothing);
+      expect(find.text('ĐG'), findsNothing);
+      expect(find.text('CCB'), findsWidgets);
+    });
+
+    testWidgets('2 — status update (bundled trong Save) map đúng statusId', (
+      tester,
+    ) async {
       fakeRepo.seed([
         _expenseTx(categoryId: 'cho_di', statusId: 'cho_di_chua_chuan_bi'),
       ]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-      await tester.tap(find.text('CCB').first, warnIfMissed: false); // mở dropdown trạng thái
+      await tester.tap(
+        find.text('CCB').first,
+        warnIfMissed: false,
+      ); // mở dropdown trạng thái
       await tester.pumpAndSettle();
       await tester.tap(find.text('ĐCB').last, warnIfMissed: false);
       await tester.pumpAndSettle();
@@ -329,37 +623,105 @@ void main() {
       );
     });
 
-    testWidgets('3 — financial amount update: amountMinor mới tới đúng Use Case', (tester) async {
+    testWidgets(
+      '3 — financial amount update: amountMinor mới tới đúng Use Case',
+      (tester) async {
+        fakeRepo.seed([_expenseTx(amountMinor: 100000)]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+        await tester.enterText(find.byType(TextField).first, '250000');
+        await _tapSave(tester);
+        await tester.pumpAndSettle();
+
+        final call = fakeRepo.updateCalls.single;
+        expect(call.transactionId, 'tx1');
+        expect(call.amountMinor, 250000);
+      },
+    );
+  });
+
+  group('R7 — ô số tiền khi sửa giao dịch', () {
+    Finder amountField() => find.byKey(const Key('detail_amount_field'));
+    String amountText(WidgetTester t) =>
+        t.widget<TextField>(amountField()).controller!.text;
+    ElevatedButton saveButton(WidgetTester t) =>
+        t.widget<ElevatedButton>(find.widgetWithText(ElevatedButton, 'Lưu thay đổi'));
+
+    testWidgets('bàn phím số hệ thống; chỉ chữ số; bỏ số 0 đầu; xem trước', (tester) async {
       fakeRepo.seed([_expenseTx(amountMinor: 100000)]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-      await tester.enterText(find.byType(TextField).first, '250000');
-      await _tapSave(tester);
+      final field = tester.widget<TextField>(amountField());
+      expect(field.keyboardType, TextInputType.number);
+      expect(field.inputFormatters, isNotEmpty);
+      expect(amountText(tester), '100000');
+      expect(find.text('100.000 đ'), findsOneWidget);
+
+      await tester.enterText(amountField(), 'a1-2.3,4 5');
+      await tester.pump();
+      expect(amountText(tester), '12345');
+
+      await tester.enterText(amountField(), '0400000');
+      await tester.pump();
+      expect(amountText(tester), '400000');
+      expect(find.text('400.000 đ'), findsOneWidget);
+    });
+
+    testWidgets('empty và 0 → Lưu bị khoá, không gọi Use Case', (tester) async {
+      fakeRepo.seed([_expenseTx(amountMinor: 100000)]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.enterText(amountField(), '');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNull);
+      await tester.enterText(amountField(), '0');
+      await tester.pump();
+      expect(saveButton(tester).onPressed, isNull);
+      expect(fakeRepo.updateCalls, isEmpty);
+    });
+
+    testWidgets('007 → lưu amount = 7; bấm Lưu liên tiếp chỉ gọi Use Case 1 lần', (tester) async {
+      fakeRepo.seed([_expenseTx(amountMinor: 100000)]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.enterText(amountField(), '007');
+      await tester.pump();
+      final button = find.widgetWithText(ElevatedButton, 'Lưu thay đổi');
+      await tester.ensureVisible(button);
+      await tester.tap(button, warnIfMissed: false);
+      await tester.tap(button, warnIfMissed: false);
+      await tester.tap(button, warnIfMissed: false);
       await tester.pumpAndSettle();
 
-      final call = fakeRepo.updateCalls.single;
-      expect(call.transactionId, 'tx1');
-      expect(call.amountMinor, 250000);
+      expect(fakeRepo.updateCalls, hasLength(1));
+      expect(fakeRepo.updateCalls.single.amountMinor, 7);
     });
   });
 
   group('Reversal path (Phase 7 mục 23)', () {
-    testWidgets('6/7 — Xoá gọi ReverseTransactionUseCase với đúng id, pop sau thành công', (
+    testWidgets(
+      '6/7 — Xoá gọi ReverseTransactionUseCase với đúng id, pop sau thành công',
+      (tester) async {
+        fakeRepo.seed([_expenseTx()]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+        await tester.tap(find.text('Xoá giao dịch'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Xoá').last); // xác nhận dialog
+        await tester.pumpAndSettle();
+
+        expect(fakeRepo.reverseCalls, ['tx1']);
+        expect(
+          find.byType(TransactionDetailScreen),
+          findsNothing,
+          reason: 'màn hình pop sau khi xoá thành công',
+        );
+      },
+    );
+
+    testWidgets('8 — double tap Xoá không gửi 2 request đồng thời', (
       tester,
     ) async {
-      fakeRepo.seed([_expenseTx()]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
-
-      await tester.tap(find.text('Xoá giao dịch'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Xoá').last); // xác nhận dialog
-      await tester.pumpAndSettle();
-
-      expect(fakeRepo.reverseCalls, ['tx1']);
-      expect(find.byType(TransactionDetailScreen), findsNothing, reason: 'màn hình pop sau khi xoá thành công');
-    });
-
-    testWidgets('8 — double tap Xoá không gửi 2 request đồng thời', (tester) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
@@ -379,7 +741,9 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('9 — AlreadyReversedException → message an toàn, không crash', (tester) async {
+    testWidgets('9 — AlreadyReversedException → message an toàn, không crash', (
+      tester,
+    ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
@@ -389,42 +753,68 @@ void main() {
       await tester.tap(find.text('Xoá').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('Giao dịch này đã được xử lý rồi, vui lòng tải lại.'), findsOneWidget);
+      expect(
+        find.text('Giao dịch này đã được xử lý rồi, vui lòng tải lại.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('Exception'), findsNothing);
-      expect(find.byType(TransactionDetailScreen), findsOneWidget, reason: 'không pop khi lỗi');
+      expect(
+        find.byType(TransactionDetailScreen),
+        findsOneWidget,
+        reason: 'không pop khi lỗi',
+      );
     });
   });
 
   group('Not found / persistence error (Phase 7 mục 25/26)', () {
-    testWidgets('TransactionNotFoundException khi Lưu → message an toàn, không crash', (tester) async {
-      fakeRepo.seed([_expenseTx()]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+    testWidgets(
+      'TransactionNotFoundException khi Lưu → message an toàn, không crash',
+      (tester) async {
+        fakeRepo.seed([_expenseTx()]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-      fakeRepo.nextUpdateError = const TransactionNotFoundException('tx1');
-      await _tapSave(tester);
-      await tester.pumpAndSettle();
+        fakeRepo.nextUpdateError = const TransactionNotFoundException('tx1');
+        await _tapSave(tester);
+        await tester.pumpAndSettle();
 
-      expect(
-        find.text('Giao dịch không còn tồn tại — có thể đã bị xoá ở nơi khác.'),
-        findsOneWidget,
-      );
-      expect(find.text('Lưu thay đổi'), findsOneWidget, reason: 'submitting reset, nút dùng lại được');
-    });
+        expect(
+          find.text(
+            'Giao dịch không còn tồn tại — có thể đã bị xoá ở nơi khác.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Lưu thay đổi'),
+          findsOneWidget,
+          reason: 'submitting reset, nút dùng lại được',
+        );
+      },
+    );
 
-    testWidgets('PersistenceException khi Lưu → message an toàn, không lộ SQLite', (tester) async {
-      fakeRepo.seed([_expenseTx()]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+    testWidgets(
+      'PersistenceException khi Lưu → message an toàn, không lộ SQLite',
+      (tester) async {
+        fakeRepo.seed([_expenseTx()]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-      fakeRepo.nextUpdateError = const PersistenceException('chi tiết kỹ thuật');
-      await _tapSave(tester);
-      await tester.pumpAndSettle();
+        fakeRepo.nextUpdateError = const PersistenceException(
+          'chi tiết kỹ thuật',
+        );
+        await _tapSave(tester);
+        await tester.pumpAndSettle();
 
-      expect(find.text('Có lỗi khi lưu dữ liệu, vui lòng thử lại.'), findsOneWidget);
-      expect(find.textContaining('Sqlite'), findsNothing);
-      expect(find.textContaining('chi tiết kỹ thuật'), findsNothing);
-    });
+        expect(
+          find.text('Có lỗi khi lưu dữ liệu, vui lòng thử lại.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Sqlite'), findsNothing);
+        expect(find.textContaining('chi tiết kỹ thuật'), findsNothing);
+      },
+    );
 
-    testWidgets('PersistenceConstraintException khi Lưu → message an toàn', (tester) async {
+    testWidgets('PersistenceConstraintException khi Lưu → message an toàn', (
+      tester,
+    ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
@@ -435,10 +825,15 @@ void main() {
       await _tapSave(tester);
       await tester.pumpAndSettle();
 
-      expect(find.text('Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.'), findsOneWidget);
+      expect(
+        find.text('Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.'),
+        findsOneWidget,
+      );
     });
 
-    testWidgets('InsufficientBalanceException khi Lưu → message an toàn', (tester) async {
+    testWidgets('InsufficientBalanceException khi Lưu → message an toàn', (
+      tester,
+    ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
@@ -474,94 +869,160 @@ void main() {
     );
   });
 
-  group('Phase 8.6 — Hoàn tiền / Thu hồi', () {
-    testWidgets('nút "Hoàn tiền / Thu hồi" hiện với giao dịch Chi hợp lệ', (tester) async {
+  group('Phase 8.8 simplification — Hoàn tiền / Thu hồi ẩn mặc định', () {
+    testWidgets('mặc định KHÔNG có nút "Hoàn tiền / Thu hồi", nhưng Sửa/Xoá vẫn có', (tester) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
-      expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsOneWidget);
-    });
-
-    testWidgets('nút KHÔNG hiện với giao dịch Thu (không phải target hợp lệ)', (tester) async {
-      fakeRepo.seed([_incomeTx()]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'income1');
       expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsNothing);
+      expect(find.widgetWithText(ElevatedButton, 'Lưu thay đổi'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Xoá giao dịch'), findsOneWidget);
     });
 
-    testWidgets('nút KHÔNG hiện với giao dịch CHÍNH NÓ đã là 1 recovery (chống chain)', (tester) async {
-      final expense = _expenseTx();
-      final recovery = _recoveryTx(recoveryOfTxId: expense.id);
+    testWidgets('giao dịch cũ đã có recovery vẫn hiện thẻ "Đã thu hồi" (tương thích lịch sử), không lỗi', (tester) async {
+      final expense = _expenseTx(amountMinor: 2000000);
+      final recovery = _recoveryTx(recoveryOfTxId: expense.id, amountMinor: 450000);
       fakeRepo.seed([expense, recovery]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: recovery.id);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: expense.id);
+      expect(find.textContaining('Đã thu hồi'), findsWidgets);
       expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsNothing);
     });
+  });
 
-    testWidgets('bấm nút mở sheet Hoàn tiền, pre-linked đúng target, lưu tạo đúng recoveryOfTxId', (
+  group('Phase 8.6 — Hoàn tiền / Thu hồi', () {
+    testWidgets('nút "Hoàn tiền / Thu hồi" hiện với giao dịch Chi hợp lệ', (
       tester,
     ) async {
-      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000, note: 'Mua iPad');
-      fakeRepo.seed([expense]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
-
-      await tester.tap(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'));
-      await tester.pumpAndSettle();
-
-      // Sheet mở đúng chế độ recovery — tiêu đề đổi, banner hiện đúng target.
-      expect(find.text('Hoàn tiền / Thu hồi'), findsWidgets);
-      expect(find.text('Mua iPad'), findsWidgets, reason: 'banner hiện đúng ghi chú giao dịch gốc');
-
-      // Nhập số tiền thu hồi (2.800.000) qua bàn phím sheet.
-      for (final d in '2800000'.split('')) {
-        await tester.tap(find.text(d).first);
-        await tester.pump();
-      }
-      final saveButton = find.widgetWithText(ElevatedButton, 'Lưu giao dịch');
-      await tester.ensureVisible(saveButton);
-      await tester.tap(saveButton, warnIfMissed: false);
-      await tester.pumpAndSettle();
-
-      expect(fakeRepo.addedTransactions, hasLength(1));
-      final recovery = fakeRepo.addedTransactions.single;
-      expect(recovery.type, TransactionType.income);
-      expect(recovery.categoryId, 'hoan_tien_thu_hoi');
-      expect(recovery.recoveryOfTxId, 'ipad');
-      expect(recovery.amountMinor, 2800000);
-      expect(recovery.sourceKind, PoolKind.external);
-      expect(recovery.destinationKind, PoolKind.memberAvailable);
-    });
-
-    testWidgets('có recovery đang hiệu lực → hiện "Đã thu hồi"/"Chi phí ròng" đúng số', (tester) async {
-      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
-      final recovery = _recoveryTx(id: 'r1', recoveryOfTxId: expense.id, amountMinor: 2800000);
-      fakeRepo.seed([expense, recovery]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
-
-      expect(find.textContaining('Đã thu hồi'), findsOneWidget);
-      expect(find.text('2.800.000 đ'), findsOneWidget);
-      expect(find.textContaining('Chi phí ròng'), findsOneWidget);
-      expect(find.text('7.200.000 đ'), findsOneWidget);
-    });
-
-    testWidgets('recovery ĐÃ bị reverse → KHÔNG hiện card "Đã thu hồi" (loại theo isVisible)', (tester) async {
-      final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
-      final recovery = _recoveryTx(id: 'r1', recoveryOfTxId: expense.id, amountMinor: 2800000);
-      final reversedRecovery = Transaction(
-        id: recovery.id,
-        type: recovery.type,
-        categoryId: recovery.categoryId,
-        sourceKind: recovery.sourceKind,
-        destinationKind: recovery.destinationKind,
-        destinationRefId: recovery.destinationRefId,
-        amountMinor: recovery.amountMinor,
-        recoveryOfTxId: recovery.recoveryOfTxId,
-        reversedByTxId: 'reversal-of-r1',
-        transactionDate: recovery.transactionDate,
-        createdAt: recovery.createdAt,
-        clientTxId: recovery.clientTxId,
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1', advancedFeatures: true);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'),
+        findsOneWidget,
       );
-      fakeRepo.seed([expense, reversedRecovery]);
-      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad');
-
-      expect(find.textContaining('Đã thu hồi'), findsNothing);
     });
+
+    testWidgets('nút KHÔNG hiện với giao dịch Thu (không phải target hợp lệ)', (
+      tester,
+    ) async {
+      fakeRepo.seed([_incomeTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'income1', advancedFeatures: true);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+      'nút KHÔNG hiện với giao dịch CHÍNH NÓ đã là 1 recovery (chống chain)',
+      (tester) async {
+        final expense = _expenseTx();
+        final recovery = _recoveryTx(recoveryOfTxId: expense.id);
+        fakeRepo.seed([expense, recovery]);
+        await _pumpDetail(
+          tester,
+          fakeRepo: fakeRepo,
+          transactionId: recovery.id,
+          advancedFeatures: true,
+        );
+        expect(
+          find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'bấm nút mở sheet Hoàn tiền, pre-linked đúng target, lưu tạo đúng recoveryOfTxId',
+      (tester) async {
+        final expense = _expenseTx(
+          id: 'ipad',
+          amountMinor: 10000000,
+          note: 'Mua iPad',
+        );
+        fakeRepo.seed([expense]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad', advancedFeatures: true);
+
+        await tester.tap(
+          find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'),
+        );
+        await tester.pumpAndSettle();
+
+        // Sheet mở đúng chế độ recovery — tiêu đề đổi, banner hiện đúng target.
+        expect(find.text('Hoàn tiền / Thu hồi'), findsWidgets);
+        expect(
+          find.text('Mua iPad'),
+          findsWidgets,
+          reason: 'banner hiện đúng ghi chú giao dịch gốc',
+        );
+
+        // Nhập số tiền thu hồi (2.800.000) qua ô số (bàn phím hệ thống).
+        await tester.enterText(
+          find.byKey(const Key('add_amount_field')),
+          '2800000',
+        );
+        await tester.pump();
+        final saveButton = find.widgetWithText(ElevatedButton, 'Lưu giao dịch');
+        await tester.ensureVisible(saveButton);
+        await tester.tap(saveButton, warnIfMissed: false);
+        await tester.pumpAndSettle();
+
+        expect(fakeRepo.addedTransactions, hasLength(1));
+        final recovery = fakeRepo.addedTransactions.single;
+        expect(recovery.type, TransactionType.income);
+        expect(recovery.categoryId, 'hoan_tien_thu_hoi');
+        expect(recovery.recoveryOfTxId, 'ipad');
+        expect(recovery.amountMinor, 2800000);
+        expect(recovery.sourceKind, PoolKind.external);
+        expect(recovery.destinationKind, PoolKind.memberAvailable);
+      },
+    );
+
+    testWidgets(
+      'có recovery đang hiệu lực → hiện "Đã thu hồi"/"Chi phí ròng" đúng số',
+      (tester) async {
+        final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
+        final recovery = _recoveryTx(
+          id: 'r1',
+          recoveryOfTxId: expense.id,
+          amountMinor: 2800000,
+        );
+        fakeRepo.seed([expense, recovery]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad', advancedFeatures: true);
+
+        expect(find.textContaining('Đã thu hồi'), findsOneWidget);
+        expect(find.text('2.800.000 đ'), findsOneWidget);
+        expect(find.textContaining('Chi phí ròng'), findsOneWidget);
+        expect(find.text('7.200.000 đ'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'recovery ĐÃ bị reverse → KHÔNG hiện card "Đã thu hồi" (loại theo isVisible)',
+      (tester) async {
+        final expense = _expenseTx(id: 'ipad', amountMinor: 10000000);
+        final recovery = _recoveryTx(
+          id: 'r1',
+          recoveryOfTxId: expense.id,
+          amountMinor: 2800000,
+        );
+        final reversedRecovery = Transaction(
+          id: recovery.id,
+          type: recovery.type,
+          categoryId: recovery.categoryId,
+          sourceKind: recovery.sourceKind,
+          destinationKind: recovery.destinationKind,
+          destinationRefId: recovery.destinationRefId,
+          amountMinor: recovery.amountMinor,
+          recoveryOfTxId: recovery.recoveryOfTxId,
+          reversedByTxId: 'reversal-of-r1',
+          transactionDate: recovery.transactionDate,
+          createdAt: recovery.createdAt,
+          clientTxId: recovery.clientTxId,
+        );
+        fakeRepo.seed([expense, reversedRecovery]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'ipad', advancedFeatures: true);
+
+        expect(find.textContaining('Đã thu hồi'), findsNothing);
+      },
+    );
   });
 }

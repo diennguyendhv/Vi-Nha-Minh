@@ -75,4 +75,13 @@ class LocalStatusRepository implements StatusRepository {
       const StatusRowsCompanion(isActive: Value(false)),
     );
   }
+
+  @override
+  Future<void> reactivateStatus(String statusId) async {
+    await (_db.update(
+      _db.statusRows,
+    )..where((r) => r.id.equals(statusId))).write(
+      const StatusRowsCompanion(isActive: Value(true)),
+    );
+  }
 }

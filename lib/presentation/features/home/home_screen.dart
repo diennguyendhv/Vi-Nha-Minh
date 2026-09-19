@@ -12,8 +12,12 @@ import '../../../domain/usecases/compute_financial_summary.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/obligation_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
+import '../../providers/feature_providers.dart';
+import '../../widgets/category_label.dart';
 import '../../providers/transaction_providers.dart';
+import '../loans/loans_screen.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/transaction_detail_screen.dart';
 
@@ -26,34 +30,41 @@ class HomeScreen extends ConsumerWidget {
     final categoriesAsync = ref.watch(categoriesStreamProvider);
     final fundsAsync = ref.watch(fundsStreamProvider);
     final assetTypesAsync = ref.watch(savingsAssetTypesStreamProvider);
+    final obligationsAsync = ref.watch(obligationsStreamProvider);
 
     if (transactionsAsync.isLoading ||
         categoriesAsync.isLoading ||
         fundsAsync.isLoading ||
-        assetTypesAsync.isLoading) {
+        assetTypesAsync.isLoading ||
+        obligationsAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     final error =
         transactionsAsync.error ??
         categoriesAsync.error ??
         fundsAsync.error ??
-        assetTypesAsync.error;
+        assetTypesAsync.error ??
+        obligationsAsync.error;
     if (error != null) {
       return Center(child: Text('Lỗi tải dữ liệu: $error'));
     }
 
     final transactions = transactionsAsync.value ?? const [];
     final categories = categoriesAsync.value ?? const [];
-    final funds = (fundsAsync.value ?? const []).where((f) => f.isActive).toList();
+    final funds = (fundsAsync.value ?? const [])
+        .where((f) => f.isActive)
+        .toList();
     final assetTypes = (assetTypesAsync.value ?? const [])
         .where((a) => a.isActive)
         .toList();
+    final obligations = obligationsAsync.value ?? const [];
 
     final summary = computeFinancialSummary(
       transactions,
       categories: categories,
       funds: funds,
       assetTypes: assetTypes,
+      obligations: obligations,
       month: DateTime.now(),
     );
 
@@ -61,6 +72,7 @@ class HomeScreen extends ConsumerWidget {
       transactions: transactions,
       categories: categories,
       summary: summary,
+      showLoans: ref.watch(advancedFeaturesEnabledProvider),
     );
   }
 }
@@ -70,11 +82,15 @@ class _HomeContent extends StatelessWidget {
     required this.transactions,
     required this.categories,
     required this.summary,
+    required this.showLoans,
   });
 
   final List<Transaction> transactions;
   final List<Category> categories;
   final FinancialSummary summary;
+
+  /// Lối tắt Vay & Cho vay chỉ hiện khi bật tính năng nâng cao.
+  final bool showLoans;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +156,10 @@ class _HomeContent extends StatelessWidget {
         ),
         const SizedBox(height: 20),
         _AssetOverviewCard(summary: summary),
+        if (showLoans) ...[
+          const SizedBox(height: 12),
+          _LoansShortcutCard(summary: summary),
+        ],
         const SizedBox(height: 26),
         const Text(
           'Giao dịch gần đây',
@@ -170,7 +190,11 @@ class _AssetOverviewCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
-          BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -190,15 +214,36 @@ class _AssetOverviewCard extends StatelessWidget {
             Formatters.amount(summary.totalAssets),
             style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
           ),
+          // Phase 8.8 — chỉ hiện khi có Payable, tránh người dùng tưởng vừa
+          // "giàu thêm" sau khi đi vay (audit mục 24) — Receivable đã nằm
+          // TRONG totalAssets rồi nên không hiện dòng riêng ở đây (mục 25:
+          // không cộng lại lần 2).
+          if (summary.totalPayables > 0) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Tài sản ròng: ${Formatters.amount(summary.netWorth)}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
-                child: _MiniStat(label: 'Số dư khả dụng', value: summary.totalAvailable),
+                child: _MiniStat(
+                  label: 'Số dư khả dụng',
+                  value: summary.totalAvailable,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: _MiniStat(label: 'Tiết kiệm', value: summary.totalSavings),
+                child: _MiniStat(
+                  label: 'Tiết kiệm',
+                  value: summary.totalSavings,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -236,6 +281,83 @@ class _AssetOverviewCard extends StatelessWidget {
   }
 }
 
+/// Phase 8.8 — entry point cho màn "Vay & Cho vay" (mục 3) — card riêng,
+/// KHÔNG đổi bottom navigation. `totalReceivables`/`totalPayables` đọc
+/// thẳng từ [FinancialSummary] đã tính sẵn (Phase 8.7), KHÔNG tự cộng lại
+/// (mục 3: "Không duplicate financial calculation trong UI").
+class _LoansShortcutCard extends StatelessWidget {
+  const _LoansShortcutCard({required this.summary});
+
+  final FinancialSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => const LoansScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.shadow,
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.accent.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.handshake_rounded,
+                color: AppColors.accent,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Vay & Cho vay',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Phải thu ${Formatters.amount(summary.totalReceivables)} · Phải trả ${Formatters.amount(summary.totalPayables)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MiniStat extends StatelessWidget {
   const _MiniStat({required this.label, required this.value, this.color});
 
@@ -254,7 +376,10 @@ class _MiniStat extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+          ),
           const SizedBox(height: 2),
           Text(
             Formatters.amount(value),
@@ -372,10 +497,7 @@ class _MemberCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 const Text(
                   'Xem theo từng loại tài sản ở Cài đặt › Tiết kiệm',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: AppColors.textMuted,
-                  ),
+                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                 ),
               ],
             ),
@@ -432,14 +554,6 @@ class _TransactionList extends StatelessWidget {
   }
 }
 
-String? _memberLabelForRefId(String? refId) {
-  if (refId == null) return null;
-  for (final m in FamilyMember.values) {
-    if (m.name == refId) return m.label;
-  }
-  return null;
-}
-
 class _TransactionRow extends StatelessWidget {
   const _TransactionRow({required this.transaction, required this.category});
 
@@ -449,7 +563,7 @@ class _TransactionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = category?.color ?? AppColors.textMuted;
-    final name = category?.name ?? 'Đã xoá danh mục';
+    final name = categoryDisplayLabel(category);
     final initial = category == null || category!.name.isEmpty
         ? '?'
         : category!.name.substring(0, 1).toUpperCase();
@@ -460,10 +574,7 @@ class _TransactionRow extends StatelessWidget {
         : (isIncome ? AppColors.accent : AppColors.textPrimary);
     final sign = isTransfer ? '⇄ ' : (isIncome ? '+ ' : '- ');
     final amountText = '$sign${Formatters.amount(transaction.amountMinor)}';
-    final participant =
-        _memberLabelForRefId(transaction.sourceRefId) ??
-        _memberLabelForRefId(transaction.destinationRefId) ??
-        '';
+    final participant = transactionMemberLabel(transaction) ?? '';
     final subtitle = transaction.note.isEmpty
         ? participant
         : (participant.isEmpty
@@ -473,65 +584,66 @@ class _TransactionRow extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => TransactionDetailScreen(transactionId: transaction.id),
+          builder: (_) =>
+              TransactionDetailScreen(transactionId: transaction.id),
         ),
       ),
       child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.divider)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                  ),
-                ),
-                if (subtitle.isNotEmpty)
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    name,
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
                     ),
                   ),
-              ],
+                  if (subtitle.isNotEmpty)
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-          Text(
-            amountText,
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13.5,
-              color: amountColor,
+            Text(
+              amountText,
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 13.5,
+                color: amountColor,
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }

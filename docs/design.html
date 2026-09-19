@@ -790,7 +790,7 @@ erDiagram
       </div>
       <div class="note-card">
         <h4>Tiết kiệm là loại tài sản tự do (SAVINGS_ASSET_TYPE), không cố định 2 loại</h4>
-        <p>Gia đình tự tạo bao nhiêu loại tuỳ ý (Tiền mặt, Ngân hàng, Chứng khoán, Bất động sản...) — mỗi loại là 1 pool riêng cho TỪNG thành viên, xoá được khi mọi thành viên đã về 0 ở loại đó. Đây là mô hình Tiết kiệm duy nhất — không còn 2 field cố định "savingsCash"/"savingsBank" của bản trước.</p>
+        <p>Gia đình tự tạo bao nhiêu loại tuỳ ý (Gửi ngân hàng, Vàng, Chứng khoán, Bất động sản...) — mỗi loại là 1 pool riêng cho TỪNG thành viên, xoá được khi mọi thành viên đã về 0 ở loại đó. Đây là mô hình Tiết kiệm duy nhất — không còn 2 field cố định "savingsCash"/"savingsBank" của bản trước.</p>
       </div>
       <div class="note-card">
         <h4>Local-first trước khi có FAMILY thật</h4>
@@ -925,21 +925,26 @@ erDiagram
           <div class="phone-head">Danh mục <span class="sub">+ thêm</span></div>
           <div class="phone-body">
             <div class="cat-group-label">Thu</div>
-            <div class="cat-row"><span class="dot" style="background:var(--jade-soft)"></span><div class="info"><div class="n">Số dư ban đầu</div><div class="m">Không tính vào Tổng thu (excludeFromTotals)</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--jade)"></span><div class="info"><div class="n">Thu nhập</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--jade-deep)"></span><div class="info"><div class="n">Doanh thu</div><div class="m">Liên kết Chi "Chi phí vận hành" · Ròng 2.000.000 đ</div></div><span class="chev">›</span></div>
+            <div class="cat-row" style="display:block;background:var(--paper-sunken);border-radius:12px;padding:8px 10px;margin-bottom:6px"><div class="n" style="font-weight:800">Doanh thu</div>
+              <div class="cat-row"><span class="dot" style="background:var(--jade)"></span><div class="info"><div class="n">Thu nhập</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--jade-deep)"></span><div class="info"><div class="n">Học phí</div></div><span class="chev">›</span></div>
+              <div class="m" style="color:var(--jade-deep);font-weight:600;padding:2px 0">+ Thêm danh mục</div></div>
+            <div class="cat-row" style="display:block;background:var(--paper-sunken);border-radius:12px;padding:8px 10px;margin-bottom:6px"><div class="n" style="font-weight:800">Khoản thu khác</div>
+              <div class="cat-row"><span class="dot" style="background:var(--jade-soft)"></span><div class="info"><div class="n">Số dư ban đầu</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Khác</div></div><span class="chev">›</span></div>
+              <div class="m" style="color:var(--jade-deep);font-weight:600;padding:2px 0">+ Thêm danh mục</div></div>
             <div class="cat-group-label">Chi</div>
-            <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div><div class="m">2 trạng thái, tự thêm · Thống kê: bật</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Đầu tư</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div><div class="m">Không theo dõi trạng thái</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">CĐ</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">DH</div><div class="m">3 trạng thái · Thống kê: bật</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Chi phí vận hành</div><div class="m">2 trạng thái · Thống kê: bật · Thu hộ cho "Doanh thu"</div></div><span class="chev">›</span></div>
-            <div class="cat-group-label">Chuyển <span style="font-weight:400;text-transform:none;letter-spacing:0">· hệ thống, không tự tạo/xoá được</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--grey-transfer)"></span><div class="info"><div class="n">Chuyển tiền cho thành viên khác</div><div class="m">Chọn người nhận khi ghi</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Tiết kiệm</div><div class="m">Nạp / Rút / Gửi ngân hàng</div></div><span class="chev">›</span></div>
-            <div class="cat-row"><span class="dot" style="background:var(--jade-deep)"></span><div class="info"><div class="n">Nạp quỹ</div><div class="m">Dùng chung cho mọi quỹ</div></div><span class="chev">›</span></div>
-            <button class="btn-outline" style="margin-top:4px">+ Thêm danh mục Thu/Chi</button>
+            <div class="cat-row" style="display:block;background:var(--paper-sunken);border-radius:12px;padding:8px 10px;margin-bottom:6px"><div class="n" style="font-weight:800">Chi tiêu</div>
+              <div class="cat-row"><span class="dot" style="background:var(--ink-soft)"></span><div class="info"><div class="n">Sinh hoạt</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Đầu tư</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--rust)"></span><div class="info"><div class="n">Tự thưởng</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--amber)"></span><div class="info"><div class="n">CĐ</div><div class="m">4 trạng thái</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--amber-dark)"></span><div class="info"><div class="n">DH</div><div class="m">4 trạng thái</div></div><span class="chev">›</span></div>
+              <div class="m" style="color:var(--jade-deep);font-weight:600;padding:2px 0">+ Thêm danh mục</div></div>
+            <div class="cat-row" style="display:block;background:var(--paper-sunken);border-radius:12px;padding:8px 10px;margin-bottom:6px"><div class="n" style="font-weight:800">Chi phí kinh doanh</div>
+              <div class="cat-row"><span class="dot" style="background:var(--slate-light)"></span><div class="info"><div class="n">Lương nhân viên</div></div><span class="chev">›</span></div>
+              <div class="cat-row"><span class="dot" style="background:var(--slate)"></span><div class="info"><div class="n">Quảng cáo</div></div><span class="chev">›</span></div>
+              <div class="m" style="color:var(--jade-deep);font-weight:600;padding:2px 0">+ Thêm danh mục</div></div>
             <div class="bottom-nav">
               <div class="tab"><span class="ic"></span>Trang chủ</div>
               <div class="tab"><span class="ic"></span>Giao dịch</div>
@@ -949,7 +954,7 @@ erDiagram
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p>3 nhóm: Thu, Chi (tự tạo được), Chuyển (cố định, do hệ thống quản lý — không còn 2 danh mục cứng "Chồng đưa vợ/Vợ đưa chồng"). Sinh hoạt cũng có trạng thái tự thêm — không riêng gì "CĐ"/"DH". "CĐ"/"DH" là tên viết tắt của "Cho đi"/"Dâng hiến" — 2 hạng mục nhạy cảm, đổi tên hiển thị để bảo mật khi ai đó nhìn lướt qua màn hình (chỉ đổi <code>name</code>, <code>id</code> nội bộ giữ nguyên, tự đổi lại được qua màn Sửa danh mục). "Doanh thu" (Thu) hiện sẵn dòng phụ "Ròng 2.000.000đ" vì đã liên kết category Chi "Chi phí vận hành" (<code>linkedExpenseCategoryId</code>) — 2 giao dịch vẫn tách riêng, chỉ gộp lại để hiển thị 1 con số duy nhất.</p></div>
+        <div class="screen-caption"><div class="tag">06 · DANH MỤC — DANH SÁCH</div><p><b>Phase 8.8:</b> 2 tầng. 4 NHÓM CHÍNH cố định (Doanh thu · Khoản thu khác · Chi tiêu · Chi phí kinh doanh — hệ thống định nghĩa, không xoá/đổi được) → danh mục con tự thêm/sửa/ngừng sử dụng. Danh mục Chuyển và tính năng nâng cao (Vay, Hoàn tiền/Thu hồi) không hiện ở đây; lịch sử cũ của chúng vẫn xem được.</p></div>
       </div>
       <div class="screen-col">
         <div class="phone"><div class="phone-screen">
@@ -967,12 +972,13 @@ erDiagram
                 <button class="active" data-t="chi">Chi</button>
               </div>
             </div>
-            <div id="linkedExpenseField" hidden>
-              <label class="field-label">Danh mục chi liên kết <span class="hint">tuỳ chọn, để tính Thu nhập ròng</span></label>
-              <select class="select-input">
-                <option selected>Không liên kết</option>
-                <option>Chi phí vận hành</option>
-              </select>
+            <div id="incomeGroupField" hidden>
+              <label class="field-label">Thuộc nhóm</label>
+              <div class="segmented"><button class="active">Doanh thu</button><button>Khoản thu khác</button></div>
+            </div>
+            <div id="expenseGroupField">
+              <label class="field-label">Thuộc nhóm</label>
+              <div class="segmented"><button class="active">Chi tiêu</button><button>Chi phí kinh doanh</button></div>
             </div>
             <div>
               <label class="field-label">Màu</label>
@@ -990,6 +996,7 @@ erDiagram
                 <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">CCB</span><button class="rm">×</button></div>
                 <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">ĐCB</span><button class="rm">×</button></div>
                 <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">ĐG</span><button class="rm">×</button></div>
+                <div class="status-edit-row"><span class="handle">⋮⋮</span><span class="txt">ĐD</span><button class="rm">×</button></div>
               </div>
               <div class="status-add-row">
                 <input type="text" id="newStatusInput" placeholder="Thêm bước trạng thái...">
@@ -1004,7 +1011,7 @@ erDiagram
             <button class="danger-link">Xoá danh mục này</button>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p>Chỉ tạo được danh mục Thu/Chi — "Chuyển" (Tiết kiệm, Quỹ, chuyển tiền thành viên) là danh mục hệ thống, quản lý qua các màn riêng. Bấm + để thêm bước trạng thái, × để xoá; công tắc "Thống kê" quyết định có hiện ở màn Tổng hợp trạng thái (13) hay không. Bấm tab "Thu" ở Phân loại để thấy field mới "Danh mục chi liên kết" (<code>linkedExpenseCategoryId</code>, tuỳ chọn) — chỉ dùng cho các danh mục Thu kiểu "thu hộ" (vd Doanh thu), để tự tính "Thu nhập ròng" mà không cần gộp 2 giao dịch làm 1. Màn đang sửa danh mục "CĐ" (viết tắt "Cho đi") — tên viết tắt để bảo mật, đổi lại tên đầy đủ bất cứ lúc nào ở đây.</p></div>
+        <div class="screen-caption"><div class="tag">07 · DANH MỤC — CHỈNH SỬA</div><p><b>Phase 8.8:</b> "Thuộc nhóm" thay cho cấu hình liên kết/loại trừ. Thu: Doanh thu | Khoản thu khác (chính là cờ <code>excludeFromTotals</code>). Chi: Chi tiêu | Chi phí kinh doanh (<code>group_key</code>, schema v7). Đổi nhóm chỉ đổi BÁO CÁO, không đụng giao dịch/số dư. CĐ và DH có bộ 4 trạng thái riêng (CĐ: CCB → ĐCB → ĐG → ĐD; DH: CCB → ĐCB → ĐD → ĐG).</p></div>
       </div>
     </div>
 
@@ -1091,12 +1098,16 @@ erDiagram
               <div>
                 <label class="field-label">Hạng mục</label>
                 <select class="select-input" id="catGrid">
-                  <option value="sinh_hoat" selected>Sinh hoạt</option>
-                  <option value="dau_tu">Đầu tư</option>
-                  <option value="tu_thuong">Tự thưởng</option>
-                  <option value="cho_di">CĐ</option>
-                  <option value="dang_hien">DH</option>
-                  <option value="tra_luong_gv">Chi phí vận hành</option>
+                  <optgroup label="Chi tiêu">
+                    <option value="sinh_hoat" selected>Sinh hoạt</option>
+                    <option value="dau_tu">Đầu tư</option>
+                    <option value="tu_thuong">Tự thưởng</option>
+                    <option value="cho_di">CĐ</option>
+                    <option value="dang_hien">DH</option>
+                  </optgroup>
+                  <optgroup label="Chi phí kinh doanh">
+                    <option value="tra_luong_gv">Lương nhân viên</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
@@ -1133,11 +1144,15 @@ erDiagram
               <div>
                 <label class="field-label">Hạng mục</label>
                 <select class="select-input" id="catGridThu">
-                  <option value="thu_nhap" selected>Thu nhập</option>
-                  <option value="hoc_phi">Doanh thu</option>
-                  <option value="so_du_ban_dau">Số dư ban đầu</option>
+                  <optgroup label="Doanh thu">
+                    <option value="thu_nhap" selected>Thu nhập</option>
+                    <option value="hoc_phi">Học phí</option>
+                  </optgroup>
+                  <optgroup label="Khoản thu khác">
+                    <option value="so_du_ban_dau">Số dư ban đầu</option>
+                  </optgroup>
                 </select>
-                <p class="fund-warn" id="hocPhiHint" hidden style="color:var(--jade-deep);background:var(--jade-soft)">Danh mục này đã liên kết Chi "Chi phí vận hành" — sau khi lưu, nhớ ghi thêm 1 giao dịch Chi riêng cho phần phải trả, app sẽ tự tính Thu nhập ròng.</p>
+                <p class="fund-warn" id="hocPhiHint" hidden style="color:var(--jade-deep);background:var(--jade-soft)">Doanh thu — được tính vào Thu nhập ròng (Doanh thu − Chi phí kinh doanh).</p>
               </div>
               <div><label class="field-label">Số tiền</label><div class="amount-input">16.000.000 <span>đ</span></div></div>
               <div><label class="field-label">Người nhận</label><div class="person-toggle"><button>Vợ</button><button class="active">Chồng</button></div></div>
@@ -1170,8 +1185,8 @@ erDiagram
                 <div class="segmented"><button class="active">Nạp</button><button>Rút về ví</button><button>Chuyển đổi loại</button></div>
                 <label class="field-label" style="margin-top:8px">Loại tài sản <span class="hint">(tự tạo được, không giới hạn)</span></label>
                 <select class="select-input">
-                  <option selected>Tiền mặt</option>
-                  <option>Ngân hàng</option>
+                  <option selected>Gửi ngân hàng</option>
+                  <option>Vàng</option>
                 </select>
               </div>
               <div style="margin-top:12px"><label class="field-label">Số tiền</label><div class="amount-input">3.000.000 <span>đ</span></div></div>
@@ -1227,6 +1242,20 @@ erDiagram
       <div class="screen-col">
         <div class="phone"><div class="phone-screen">
           <div class="phone-notch"></div>
+          <!-- Phase 8.8 atomic-create review: tạo khoản vay phải commit đồng
+               thời metadata + giao dịch gốc trong SQLite transaction, hoặc
+               rollback cả hai. Counterparty độc lập. Trong lúc lưu khóa mọi
+               field và đóng sheet; lỗi giữ form, retry nguyên form giữ command
+               identity, sửa sau lỗi tạo identity mới. Không compensation UI. -->
+          <!-- Phase 8.8 review: mọi giao dịch có obligationId (tạo khoản vay,
+               trả/nhận gốc, lãi) vẫn hiện trong lịch sử. Chi tiết chỉ đọc:
+               hạng mục, số tiền, ghi chú, ngày, người và trạng thái; không
+               field sửa, Lưu, Xoá hoặc Hoàn tiền/Thu hồi generic. Hiện lời
+               hướng dẫn quản lý ở Vay & Cho vay và nút "Xem khoản vay" mở
+               LoanDetailScreen theo metadata obligationId/direction.
+               Nếu metadata đang tải/lỗi/thiếu, giữ chỉ đọc, không đoán chiều.
+               Handler generic kiểm tra cả giao dịch nhận vào lẫn snapshot
+               stream mới nhất, kể cả sau hộp xác nhận xoá. -->
           <div class="phone-head">Chi tiết giao dịch <span class="sub">10/09 · Vợ</span></div>
           <div class="phone-body">
             <div>
@@ -1392,18 +1421,18 @@ erDiagram
               <div class="val">9.200.000 đ</div>
             </div>
             <div class="member-row">
-              <div class="member-card"><div class="name">Tiền mặt</div><div class="bal">1.200.000 đ</div></div>
-              <div class="member-card"><div class="name">Ngân hàng</div><div class="bal">8.000.000 đ</div></div>
+              <div class="member-card"><div class="name">Vàng</div><div class="bal">1.200.000 đ</div></div>
+              <div class="member-card"><div class="name">Gửi ngân hàng</div><div class="bal">8.000.000 đ</div></div>
             </div>
             <button class="btn-outline" style="margin-top:4px">+ Thêm loại tài sản</button>
             <div>
               <div class="section-label">Lịch sử</div>
-              <div class="fund-entry"><div><div class="n">Chuyển đổi: Tiền mặt → Ngân hàng</div><div class="d">15/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">8.000.000</div></div>
-              <div class="fund-entry"><div><div class="n">Nạp (Tiền mặt)</div><div class="d">10/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">1.200.000</div></div>
+              <div class="fund-entry"><div><div class="n">Chuyển đổi: Vàng → Gửi ngân hàng</div><div class="d">15/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">8.000.000</div></div>
+              <div class="fund-entry"><div><div class="n">Nạp (Vàng)</div><div class="d">10/09 · Vợ</div></div><div class="tx-amt" style="color:var(--ink)">1.200.000</div></div>
             </div>
           </div>
         </div></div>
-        <div class="screen-caption"><div class="tag">16 · TIẾT KIỆM — QUẢN LÝ</div><p>Cũng chỉ xem số dư + lịch sử — bấm nút Nạp/Rút trên từng loại mở thẳng màn Thêm giao dịch (09), loại "Chuyển" → "Tiết kiệm", điền sẵn hành động + loại tài sản. Không có màn nhập riêng nữa — dùng chung 1 nơi tạo giao dịch duy nhất với Quỹ và chuyển tiền thành viên. Chọn thành viên bằng segmented control ở đầu màn (khớp đúng code thật, không còn ẩn số của cả nhà làm 1). <b>Mô hình Tiết kiệm duy nhất (xem `docs/financial-core-v2.md` mục 9):</b> "Tiền mặt"/"Ngân hàng" chỉ là 2 loại seed mặc định — gia đình tạo thêm bao nhiêu loại tuỳ ý (Chứng khoán, Bất động sản...) qua nút "+ Thêm loại tài sản", mỗi loại xoá được riêng khi về 0, y hệt cách Quỹ là dữ liệu tự tạo. Số liệu ở đây (Vợ: 1.200.000 + 8.000.000 = 9.200.000đ) khớp đúng dòng "Tiết kiệm" của Vợ ở Trang chủ (màn 08).</p></div>
+        <div class="screen-caption"><div class="tag">16 · TIẾT KIỆM — QUẢN LÝ</div><p>Cũng chỉ xem số dư + lịch sử — bấm nút Nạp/Rút trên từng loại mở thẳng màn Thêm giao dịch (09), loại "Chuyển" → "Tiết kiệm", điền sẵn hành động + loại tài sản. Không có màn nhập riêng nữa — dùng chung 1 nơi tạo giao dịch duy nhất với Quỹ và chuyển tiền thành viên. Chọn thành viên bằng segmented control ở đầu màn (khớp đúng code thật, không còn ẩn số của cả nhà làm 1). <b>Mô hình Tiết kiệm duy nhất (xem `docs/financial-core-v2.md` mục 9):</b> "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" chỉ là 4 loại seed mặc định (tiền mặt và tiền tài khoản dùng hằng ngày là tiền khả dụng, không phải loại tiết kiệm) — gia đình tạo thêm bao nhiêu loại tuỳ ý (Bất động sản...) qua nút "+ Thêm loại tài sản", mỗi loại xoá được riêng khi về 0, y hệt cách Quỹ là dữ liệu tự tạo. Số liệu ở đây (Vợ: 1.200.000 + 8.000.000 = 9.200.000đ) khớp đúng dòng "Tiết kiệm" của Vợ ở Trang chủ (màn 08).</p></div>
       </div>
 
       <!-- SCREEN 6: INVITE -->
@@ -1428,6 +1457,19 @@ erDiagram
       </div>
 
     </div>
+  </section>
+
+  <section class="block" id="phase88">
+    <div class="block-head">
+      <h2>Phase 8.8 — Đơn giản hoá: 4 nhóm Thu/Chi &amp; Summary/Explorer (đã duyệt, schema v7)</h2>
+      <p>SIMPLE BY DEFAULT · ít quyết định · ngôn ngữ người dùng · chi tiết ẩn khi không cần.</p>
+    </div>
+    <ul style="line-height:1.7;max-width:880px">
+      <li><b>2 tầng:</b> 4 nhóm chính cố định (Doanh thu · Khoản thu khác · Chi tiêu · Chi phí kinh doanh) → danh mục con tự tạo. Thu suy từ <code>excludeFromTotals</code>; Chi suy từ <code>category_rows.group_key</code> (<code>business_expense</code>).</li>
+      <li><b>Công thức báo cáo (chỉ đọc):</b> Thu nhập ròng = Doanh thu − Chi phí kinh doanh; Dòng tiền = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí KD. Financial Engine (số dư, Total Assets) không đổi. Thu nhập ròng theo Vợ/Chồng tính theo người nhận doanh thu và người chi chi phí kinh doanh.</li>
+      <li><b>Ẩn khỏi UI mặc định:</b> Vay &amp; Cho vay, Hoàn tiền/Thu hồi (engine + lịch sử giữ nguyên). Ghi chú là ô trống, không chip gợi ý.</li>
+      <li><b>Summary = truy vết:</b> mặc định Thu nhập ròng Vợ · Chồng + Chi tiêu gia đình; Explorer lọc kết hợp theo Thời gian · Thành viên · Nhóm chính · Danh mục · Trạng thái · Tìm trong Note, có tổng của kết quả đang xem và "Xoá bộ lọc". Mỗi dòng: ngày · Vợ/Chồng · Nhóm · Danh mục · số tiền · Note · trạng thái.</li>
+    </ul>
   </section>
 
   <section class="block" id="confirm">
@@ -1464,6 +1506,13 @@ erDiagram
 </div>
 
 <script type="text/plain" id="doc-src-financial-core-v2"># Financial Core V2 — Audit & Thiết kế lại
+
+> Phase 8.8 review (2026-09-18), atomic persistence invariant được duyệt:
+> một thao tác Tạo khoản vay phải commit Obligation metadata và opening
+> Transaction trong cùng SQLite transaction hoặc rollback cả hai. Counterparty
+> độc lập, có thể tồn tại chưa có khoản vay. Cùng command/clientTxId retry phải
+> idempotent, đổi payload cùng identity phải conflict. Không thay Financial
+> Engine, principal-first allocation, reporting/recovery hay schema v6.
 
 **Trạng thái: ĐÃ CODE (Giai đoạn A, phase 1-17) + ĐÃ ĐỒNG BỘ TÀI LIỆU (2026-09-16).** Tài liệu này là kết quả Phase 1-5 (Đọc → Audit → Liệt kê vấn đề → Thiết kế V2 → Financial Core Spec) theo đúng yêu cầu review, và là **source of truth duy nhất** cho business logic tài chính — mọi mâu thuẫn giữa tài liệu này với `spec.md`/`CLAUDE.md`/`docs/design.html` đều được giải quyết bằng cách sửa 3 file kia theo đúng tài liệu này (không giữ song song 2 cách định nghĩa).
 
@@ -1529,8 +1578,8 @@ Thay vì object rời rạc (`memberBalances`, `funds`, `savings` tách biệt n
 
 | kind | refId | Ý nghĩa |
 |---|---|---|
-| `MEMBER_AVAILABLE` | uid | Tiền có thể chi của 1 thành viên |
-| `MEMBER_SAVINGS_ASSET` | `assetTypeId|uid` (ghép chuỗi, xem mục 9) | Số dư của 1 thành viên trong 1 **loại tài sản tiết kiệm tự do do gia đình tạo** (`SavingsAssetType` — Tiền mặt, Ngân hàng, Chứng khoán...; KHÔNG còn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) |
+| `MEMBER_AVAILABLE` | uid | Tiền có thể chi của 1 thành viên (tiền mặt + tiền trong tài khoản ngân hàng dùng hằng ngày, gộp làm một) |
+| `MEMBER_SAVINGS_ASSET` | `assetTypeId|uid` (ghép chuỗi, xem mục 9) | Số dư của 1 thành viên trong 1 **loại tài sản tiết kiệm tự do do gia đình tạo** (`SavingsAssetType` — Gửi ngân hàng, Vàng, Chứng khoán...; KHÔNG còn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) |
 | `FUND` | fundId | 1 quỹ cụ thể (Quỹ tiền ăn, Quỹ sinh hoạt...) |
 | `EXTERNAL` | — | Bên ngoài hệ thống (lương từ công ty, tiền trả cho người bán...) |
 
@@ -1612,9 +1661,9 @@ TRANSACTION
 | Chồng đưa vợ 3 triệu | TRANSFER (MEMBER_TO_MEMBER) | MEMBER_AVAILABLE(Chồng) | MEMBER_AVAILABLE(Vợ) |
 | Nạp quỹ tiền ăn 2 triệu | TRANSFER (FUND_TOPUP) | MEMBER_AVAILABLE(Vợ) | FUND(quỹ tiền ăn) |
 | Rút hết quỹ về ví (trước khi xoá quỹ) | TRANSFER (FUND_WITHDRAW) | FUND(quỹ tiền ăn) | MEMBER_AVAILABLE(người nhận) |
-| Nạp tiết kiệm 2 triệu (loại "Tiền mặt") | TRANSFER (SAVINGS_TOPUP) | MEMBER_AVAILABLE(X) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) |
-| Rút tiết kiệm 500k về ví | TRANSFER (SAVINGS_WITHDRAW) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) | MEMBER_AVAILABLE(X) |
-| Chuyển tiết kiệm sang loại khác (vd "Ngân hàng", hoặc bất kỳ loại nào X tự tạo) | TRANSFER (SAVINGS_CONVERT) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) | MEMBER_SAVINGS_ASSET(Ngân hàng, X) |
+| Nạp tiết kiệm 2 triệu (loại "Gửi ngân hàng") | TRANSFER (SAVINGS_TOPUP) | MEMBER_AVAILABLE(X) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) |
+| Rút tiết kiệm 500k về ví | TRANSFER (SAVINGS_WITHDRAW) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) | MEMBER_AVAILABLE(X) |
+| Chuyển tiết kiệm sang loại khác (vd "Gửi ngân hàng" → "Vàng", hoặc bất kỳ loại nào X tự tạo) | TRANSFER (SAVINGS_CONVERT) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) | MEMBER_SAVINGS_ASSET(Vàng, X) |
 
 **Financial Engine — 1 hàm duy nhất xử lý mọi loại:**
 
@@ -1665,20 +1714,21 @@ Test 8 — Spend without Fund 500k: Member 3 → 2.5, Fund 2 → 2 (KHÔNG ĐỔ
 
 ## 9. Savings Model — cập nhật: loại tài sản tự do, không còn cố định cash/bank
 
-**Đã tổng quát hoá so với bản đầu** (từng cố định đúng 2 pool `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) — thực tế gia đình có thể "tiết kiệm" dưới nhiều hình thức khác nhau: tiền mặt, gửi ngân hàng, mua chứng khoán, mua bất động sản... Không hardcode danh sách hình thức, đúng nguyên tắc "dữ liệu, không phải hằng số cứng" đã áp dụng cho Category/Fund.
+**Đã tổng quát hoá so với bản đầu** (từng cố định đúng 2 pool `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) — thực tế gia đình có thể "tiết kiệm" dưới nhiều hình thức khác nhau: gửi ngân hàng, mua vàng, mua chứng khoán, mua bất động sản... (tiền mặt và tiền tài khoản dùng hằng ngày KHÔNG phải tiết kiệm — đó là tiền khả dụng) Không hardcode danh sách hình thức, đúng nguyên tắc "dữ liệu, không phải hằng số cứng" đã áp dụng cho Category/Fund.
 
 ```
 SAVINGS_ASSET_TYPE
   assetTypeId PK, familyId FK, name, color, isActive (soft delete)
 ```
 
-`SAVINGS_ASSET_TYPE` là dữ liệu gia đình tự tạo — y hệt `FUND` về hình dạng (chỉ id/tên/màu/isActive, không cache balance), khác `FUND` ở chỗ **mỗi loại tài sản là 1 pool RIÊNG cho TỪNG thành viên** (Fund thì dùng chung cả nhà). Pool kind mới `PoolKind.memberSavingsAsset` với `refId` là khoá ghép `"${assetTypeId}|${memberName}"` (hàm `savingsAssetRefId`/`parseSavingsAssetRefId`) — thay hẳn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK` của bản đầu. 2 loại seed mặc định "Tiền mặt"/"Ngân hàng" vẫn được tạo sẵn (giữ đúng trải nghiệm cũ), nhưng giờ chỉ là 2 hàng dữ liệu bình thường — xoá/thêm/sửa qua UI như bất kỳ loại nào khác, xoá được khi mọi thành viên đều về 0 ở loại đó (giống quy tắc Fund mục 8).
+`SAVINGS_ASSET_TYPE` là dữ liệu gia đình tự tạo — y hệt `FUND` về hình dạng (chỉ id/tên/màu/isActive, không cache balance), khác `FUND` ở chỗ **mỗi loại tài sản là 1 pool RIÊNG cho TỪNG thành viên** (Fund thì dùng chung cả nhà). Pool kind mới `PoolKind.memberSavingsAsset` với `refId` là khoá ghép `"${assetTypeId}|${memberName}"` (hàm `savingsAssetRefId`/`parseSavingsAssetRefId`) — thay hẳn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK` của bản đầu. 4 loại seed mặc định "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" được tạo sẵn, nhưng chỉ là 4 hàng dữ liệu bình thường — xoá/thêm/sửa qua UI như bất kỳ loại nào khác, xoá được khi mọi thành viên đều về 0 ở loại đó (giống quy tắc Fund mục 8).
 
 Toàn bộ thao tác tiết kiệm vẫn là `TRANSFER`, gắn 1 category riêng **"Tiết kiệm"** (`type = TRANSFER`, seed mặc định, dùng chung cho cả 3 `transferKind` bên dưới — phân biệt bằng `transferKind`, không cần 1 category riêng cho từng loại tài sản):
 
 - **Nạp:** `MEMBER_AVAILABLE(X) -tiền` → `memberSavingsAsset(loại Y, X) +tiền` — `transferKind = SAVINGS_TOPUP`.
 - **Rút về ví:** `memberSavingsAsset(loại Y, X) -tiền` → `MEMBER_AVAILABLE(X) +tiền` — `transferKind = SAVINGS_WITHDRAW`.
-- **Chuyển đổi loại tài sản** (vd Tiền mặt → Ngân hàng, hoặc Ngân hàng → Chứng khoán): `memberSavingsAsset(loại Y, X) -tiền` → `memberSavingsAsset(loại Z, X) +tiền` — `transferKind = SAVINGS_CONVERT` (thay `SAVINGS_TO_BANK` cố định của bản đầu — giờ chuyển được giữa BẤT KỲ 2 loại nào, không riêng "sang ngân hàng").
+- **Chuyển đổi loại tài sản** (vd Gửi ngân hàng → Vàng, hoặc Vàng → Chứng khoán): `memberSavingsAsset(loại Y, X) -tiền` → `memberSavingsAsset(loại Z, X) +tiền` — `transferKind = SAVINGS_CONVERT` (thay `SAVINGS_TO_BANK` cố định của bản đầu — giờ chuyển được giữa BẤT KỲ 2 loại nào, không riêng "sang ngân hàng").
+- **Quyết định sản phẩm (chủ dự án, 2026-09-19) — Available vs Savings:** tiền mặt và tiền trong tài khoản ngân hàng dùng hằng ngày là CÙNG một khái niệm — tiền khả dụng (`MEMBER_AVAILABLE`), KHÔNG phải hai `SavingsAssetType` khác nhau. Tiết kiệm là khi tiền rời khỏi khả dụng để thành một dạng tài sản khác. 4 loại seed mặc định: **Gửi ngân hàng** (tiền gửi tiết kiệm/sinh lời, KHÔNG phải tài khoản thanh toán; `assetTypeId` giữ `savings_bank` để tương thích), **Vàng**, **Chứng khoán**, **Khác**. Ví dụ đúng: `Available → Gửi ngân hàng`, `Available → Vàng`, `Gửi ngân hàng → Vàng`, `Vàng → Available`. KHÔNG thiết kế "Tiền mặt → Ngân hàng" như một `SAVINGS_CONVERT`. Seed chỉ chạy khi tạo DB mới; DB đã seed từ trước với "Tiền mặt"/"Ngân hàng" giữ nguyên (không migration, không reinterpret dữ liệu).
 
 Cả 3 đều KHÔNG đổi Total Assets (tiền chỉ đổi pool, không rời hệ thống). Không có màn nhập riêng cho tiết kiệm — cả 3 hành động đều mở lại chính màn Thêm giao dịch (`docs/design.html` màn 09, loại "Chuyển" → "Tiết kiệm", thêm bước chọn loại tài sản), tránh 2 luồng code trùng nhau cho cùng 1 việc. Màn "Tiết kiệm" riêng (Cài đặt → Tiết kiệm) chỉ để xem số dư từng loại theo từng thành viên + tạo/xoá loại tài sản, không nhập giao dịch trực tiếp — giống hệt nguyên tắc màn Quỹ.
 
@@ -1711,6 +1761,8 @@ Bỏ hẳn `isSaving` và `transferToUid` khỏi Category (F-04) — 2 field nà
 **`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo.
 
 **`linkedExpenseCategoryId` — ví dụ dùng: "Doanh thu" (Thu) liên kết "Chi phí vận hành" (Chi).** Đây là câu trả lời cho mẫu "thu hộ — phải trả lại" (thu tiền về nhưng phải trả 1 phần chi phí thuê ngoài): **vẫn ghi 2 giao dịch riêng biệt** (1 `INCOME` "Doanh thu" + 1 `EXPENSE` "Chi phí vận hành" có `statuses` Chưa gửi/Đã gửi để theo dõi tiến độ trả) — **không dùng số âm trên Income** (vi phạm Invariant 12), và **không gộp Chi vào trong Thu** thành 1 giao dịch (sẽ phá nguyên tắc 1 giao dịch chỉ có 1 `type`/1 cặp source-destination). Field này chỉ làm đúng 1 việc: đánh dấu category Thu "Doanh thu" biết category Chi nào là khoản nó phải trả lại, để UI tính và hiển thị thêm chỉ số **"Thu nhập ròng" = Doanh thu − Chi phí vận hành** (mục 17) — hoàn toàn không đụng tới `applyEffect`, không đổi `Total Income`/`Total External Expense`/`Total Assets`. Optional — chỉ set khi gia đình cần loại báo cáo "thu hộ" này, phần lớn category Thu (Lương, Thu nhập khác...) để `null`.
+
+**Quyết định sản phẩm (2026-09-19) — tối giản trước: Category = nhóm thống kê, Note = khoản cụ thể là gì.** Dữ liệu Excel thật ghi học phí là hạng mục "Thu nhập" với Note "HP chị Lam", còn lương/quảng cáo/bảo hành là hạng mục "Chi phí kinh doanh" với Note "Lương cô Bích"... — không cần hạng mục ghép cặp. Vì vậy: (1) cấu hình `linkedExpenseCategoryId` / "Tính thu nhập ròng" **bị ẩn hoàn toàn khỏi UI** Danh mục, Tổng hợp; cột dữ liệu, `computeNetIncome` và Test 18 giữ nguyên (không migration), và giá trị đã có được **bảo toàn** khi mở/lưu danh mục cũ; nếu sau này cần Business Profit thì thiết kế riêng theo use case thật. (2) "Chi phí kinh doanh" là category Chi mặc định BÌNH THƯỜNG (id `chi_phi_kinh_doanh`, không status/link/loại trừ), chỉ được seed khi tạo DB mới. (3) Ô **Ghi chú tự do** (không bắt buộc) có ở mọi luồng tạo giao dịch; **Note chỉ là mô tả** — không đổi loại giao dịch, hạng mục, Income/Expense hay balance, và Financial Core KHÔNG BAO GIỜ parse Note để suy luận ý nghĩa tài chính.
 
 `STATUS` (subcollection của Category) giữ nguyên như V1: `statusId, categoryId, name, sortOrder` — không đổi.
 
@@ -1752,7 +1804,7 @@ BUDGET
 | `CATEGORY` | Nhãn phân loại | categoryId PK, familyId FK | `isActive` | bỏ `isSaving`/`transferToUid`, thêm `type` (3 giá trị) |
 | `STATUS` | Bước tiến độ (con của Category) | statusId PK, categoryId FK | `isActive` | không đổi |
 | `FUND` | 1 pool tiền dạng quỹ | fundId PK, familyId FK | `isActive` | không đổi, bỏ subcollection `entries` |
-| `SAVINGS_ASSET_TYPE` | 1 "loại" tài sản tiết kiệm gia đình tự đặt (Tiền mặt, Ngân hàng, Chứng khoán...) | assetTypeId PK, familyId FK | `isActive` | xem mục 9 — mỗi loại là 1 pool RIÊNG cho TỪNG thành viên (`PoolKind.memberSavingsAsset`, refId ghép `assetTypeId|member`), khác `FUND` (dùng chung cả nhà). **Đây là mô hình Savings chính thức duy nhất — không còn field `savingsCash`/`savingsBank` cố định ở bất kỳ entity nào.** |
+| `SAVINGS_ASSET_TYPE` | 1 "loại" tài sản tiết kiệm gia đình tự đặt (Gửi ngân hàng, Vàng, Chứng khoán...) | assetTypeId PK, familyId FK | `isActive` | xem mục 9 — mỗi loại là 1 pool RIÊNG cho TỪNG thành viên (`PoolKind.memberSavingsAsset`, refId ghép `assetTypeId|member`), khác `FUND` (dùng chung cả nhà). **Đây là mô hình Savings chính thức duy nhất — không còn field `savingsCash`/`savingsBank` cố định ở bất kỳ entity nào.** |
 | `TRANSACTION` | **Nguồn sự thật duy nhất** — mọi chuyển động tiền | txId PK, familyId FK | `deletedAt` | xem mục 6, thay thế cả `transactions` và `funds/{id}/entries` của V1 |
 | `MEMBER_BALANCE` | Cache số dư `MEMBER_AVAILABLE` của 1 thành viên + map số dư theo từng `SavingsAssetType` | uid PK | không cần (derived) | `availableBalance` (1 field cố định) + `savingsByAssetType: { assetTypeId: amountMinor }` (map động theo số loại tài sản gia đình đã tạo — KHÔNG còn 2 field cố định `savingsCash`/`savingsBank`, xem mục 9) |
 | `MONTH_SUMMARY` | Rollup tháng | yearMonth PK, familyId FK | không cần (derived) | xem mục 17 |
@@ -1835,6 +1887,8 @@ Tổng "tiền ra" của 1 thành viên theo hạng mục (`computeMemberOutflow
 
 **Số dư còn lại (`availableBalance`) là 1 chuỗi liên tục, không có khái niệm "số dư ban đầu của tháng" lưu riêng.** Công thức tương đương tính tay hàng tháng ("số dư ban đầu + doanh thu − chi phí vận hành − chi tiêu − tiết kiệm = số dư hiện tại") **đúng tự động** nhờ cách balance luôn = tổng cộng dồn mọi transaction từ đầu tới nay (Invariant 10) — không cần field `openingBalance` riêng cho mỗi tháng, vì "số dư cuối tháng trước" chính là điểm mà tổng cộng dồn đang dừng ở đó, tự động trở thành điểm bắt đầu của tháng sau khi cộng thêm giao dịch mới. Đây là lý do tách biệt `availableBalance` (không reset) khỏi `MONTH_SUMMARY.totalIncome/totalExpense` (reset mỗi tháng, chỉ để báo cáo).
 
+**Thu nhập theo thành viên dùng CÙNG ngữ nghĩa với Total Income của gia đình (F25, 2026-09-19).** Không phải mọi `INCOME` đi vào ví thành viên đều là thu nhập: Số dư ban đầu (`excludeFromTotals`) tăng Available/Total Assets nhưng không phải thu nhập; gốc tiền Đi vay tạo Payable, không phải thu nhập; phần hoàn vốn của Linked Refund/Asset Recovery không phải thu nhập, chỉ phần lợi nhuận vượt chi phí gốc mới là thu nhập. Quy tắc nằm ở MỘT nơi duy nhất — `computeReportableIncomeEntries` (`lib/domain/usecases/compute_reportable_income.dart`) — và cả `computeThreeTotals` (thu nhập gia đình) lẫn `computeMemberIncomeTotal` (thu nhập từng người) cộng từ cùng danh sách đó, nên `Σ thu nhập thành viên == Total Income gia đình` trong cùng kỳ (lọc theo `transactionDate`, chỉ giao dịch `isVisible` nên reversal/correction không đếm đôi). Không viết lại quy tắc này ở Presentation và không hard-code `categoryId` nào.
+
 ---
 
 ## 18. Invariants bắt buộc
@@ -1853,7 +1907,7 @@ Tổng "tiền ra" của 1 thành viên theo hạng mục (`computeMemberOutflow
 12. `amountMinor` luôn dương; dấu suy ra từ `type` + vị trí source/destination.
 13. **`reverseTransaction`/`deleteTransaction` phải từ chối nếu giao dịch gốc đã có `reversedByTxId != null`** (đã bị hoàn tác/thay thế trước đó) — chống hoàn tác 2 lần trên cùng 1 giao dịch, vốn sẽ áp dụng hiệu ứng đảo ngược 2 lần vào balance (vì `computeAllPoolBalances` cộng dồn TOÀN BỘ transaction, không lọc). Ném lỗi rõ ràng (`AlreadyReversedException` hoặc tương đương) thay vì âm thầm tạo thêm 1 bản reversal chồng chéo. **[IMPLEMENTATION BLOCKER / TODO]** — chưa có guard này trong `LocalTransactionRepository` hiện tại; bắt buộc thêm trước khi PR tiếp theo đụng tới `reverseTransaction`/`deleteTransaction` được coi là hoàn chỉnh.
 14. **Sửa giao dịch (`updateTransaction`) luôn phải thao tác trên bản ghi mới nhất của 1 chuỗi sửa** (`reversedByTxId == null`) — UI không bao giờ được hiển thị nút "Sửa"/"Xoá" trên 1 bản ghi đã có `reversedByTxId != null`, kể cả khi đó là bản gốc của 1 giao dịch đã từng sửa 1 lần. Sửa lần thứ N luôn tạo `correctsTxId` trỏ tới bản thay thế gần nhất (lần N-1), không trỏ ngược về bản gốc ban đầu. **[IMPLEMENTATION BLOCKER / TODO]** — cần xác nhận `transaction_detail_screen.dart` luôn điều hướng theo `txId` mới nhất, chưa audit code UI này.
-15. **`TRANSFER` không được có source và destination là cùng 1 pool** (cùng `kind` và cùng `refId`) — chặn ở cả UI (không cho chọn người nhận = người gửi, loại tài sản đích = loại tài sản nguồn) lẫn tầng ghi dữ liệu, để không tạo ra giao dịch "rỗng" vô nghĩa trong lịch sử. **Ví dụ cụ thể cho `SAVINGS_CONVERT`:** nếu loại tài sản nguồn = loại tài sản đích (cùng `assetTypeId`, cùng thành viên) — vd chọn "Tiền mặt → Tiền mặt" — **giao dịch phải bị REJECT ngay lúc submit**, không tạo transaction "chuyển đổi cùng loại" (vô nghĩa về nghiệp vụ, dù không gây sai balance vì tự triệt tiêu). **[IMPLEMENTATION BLOCKER / TODO]** — chưa có validate này trong `LocalTransactionRepository`/UI `add_transaction_sheet.dart`.
+15. **`TRANSFER` không được có source và destination là cùng 1 pool** (cùng `kind` và cùng `refId`) — chặn ở cả UI (không cho chọn người nhận = người gửi, loại tài sản đích = loại tài sản nguồn) lẫn tầng ghi dữ liệu, để không tạo ra giao dịch "rỗng" vô nghĩa trong lịch sử. **Ví dụ cụ thể cho `SAVINGS_CONVERT`:** nếu loại tài sản nguồn = loại tài sản đích (cùng `assetTypeId`, cùng thành viên) — vd chọn "Vàng → Vàng" — **giao dịch phải bị REJECT ngay lúc submit**, không tạo transaction "chuyển đổi cùng loại" (vô nghĩa về nghiệp vụ, dù không gây sai balance vì tự triệt tiêu). **[IMPLEMENTATION BLOCKER / TODO]** — chưa có validate này trong `LocalTransactionRepository`/UI `add_transaction_sheet.dart`.
 
 ---
 
@@ -2056,6 +2110,12 @@ Mỗi quyết định phạm vi dưới đây dùng đúng 1 trong 3 nhãn: **`S
 | Đổi `transactionDate` của giao dịch cũ | `updateTransaction(txId, transactionDate mới)` | Update thẳng, không qua reversal, giao dịch chuyển sang rollup tháng khác | **ACCEPT** | Mục 21 — field này không ảnh hưởng balance. |
 | Offline retry (Giai đoạn B, mất mạng giữa lúc gửi) | Client gửi lại đúng request cũ (cùng `clientTxId`) khi có mạng lại | Không tạo trùng | **ACCEPT** (idempotent) | Mục 14, mục 22. |
 | Transfer source = destination (mọi loại) | `MEMBER_TO_MEMBER` người nhận = người gửi, hoặc `SAVINGS_CONVERT` cùng loại tài sản | Từ chối | **REJECT** | Invariant 15 — `[IMPLEMENTATION BLOCKER / TODO]`. |
+
+## Phase 8.8 — 4 nhóm Thu/Chi (báo cáo, KHÔNG đổi Financial Core)
+- Schema v7: `category_rows.group_key` (nullable; giá trị hợp lệ duy nhất `business_expense`). Chỉ có nghĩa với Category Chi; không ảnh hưởng `applyEffect`, số dư, Total Assets, reversal/correction.
+- Nhóm Thu = cờ `excludeFromTotals` (false → Doanh thu, true → Khoản thu khác). Nhóm Chi: `groupKey == business_expense` → Chi phí kinh doanh, ngược lại → Chi tiêu.
+- `computeGroupedTotals` (chỉ đọc, dùng cùng danh sách giao dịch hiệu lực): Doanh thu = `computeReportableIncomeEntries`; Khoản thu khác = tiền vào còn lại; Chi tiêu + Chi phí kinh doanh = `ThreeTotals.totalExpense`; Thu nhập ròng = Doanh thu − Chi phí kinh doanh; Dòng tiền = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí kinh doanh. Đổi nhóm 1 danh mục chỉ đổi báo cáo (giao dịch giữ nguyên `categoryId`).
+- Tính năng nâng cao (Vay & Cho vay, Hoàn tiền/Thu hồi) ẩn khỏi UI mặc định bằng ID hệ thống; engine/lịch sử giữ nguyên.
 </script>
 
 <script type="text/plain" id="doc-src-spec"># Đặc tả sản phẩm & Lộ trình phát triển
@@ -2122,7 +2182,7 @@ Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nh
 
 **Tài khoản theo từng thành viên (riêng biệt, không gộp chung)** — đây là điểm khác biệt lớn nhất so với mô hình "một quỹ chung" ban đầu: sheet thật tính **Số dư** và **Tiết kiệm** riêng cho Vợ và cho Chồng (cột `K`/`N` "Tổng hợp"), dựa vào cột "Người tiêu" của từng giao dịch. App giữ đúng cơ chế này cho MỌI thành viên, không riêng Vợ/Chồng.
 
-**Tiết kiệm chia nhiều "loại tài sản" tự do, không cố định 2 loại (đã tổng quát hoá):** ban đầu chỉ tính tiền mặt/ngân hàng, nhưng thực tế có thể tiết kiệm dưới nhiều hình thức khác (chứng khoán, bất động sản, vàng...) — nên **loại tài sản tiết kiệm là dữ liệu gia đình tự tạo** (`SavingsAssetType`: id/tên/màu, giống hệt cách `Fund` là dữ liệu, chỉ khác là mỗi loại tách riêng CHO TỪNG thành viên). Seed sẵn 2 loại mặc định "Tiền mặt"/"Ngân hàng" để giữ trải nghiệm quen thuộc, nhưng xoá/thêm được như bất kỳ dữ liệu nào khác qua màn "Tiết kiệm" (Cài đặt) — xoá được khi cả 2 thành viên đều về 0 ở loại đó. Xem `docs/financial-core-v2.md` mục 9.
+**Tiết kiệm chia nhiều "loại tài sản" tự do, không cố định 2 loại (đã tổng quát hoá):** ban đầu chỉ tính tiền mặt/ngân hàng, nhưng thực tế có thể tiết kiệm dưới nhiều hình thức khác (chứng khoán, bất động sản, vàng...) — nên **loại tài sản tiết kiệm là dữ liệu gia đình tự tạo** (`SavingsAssetType`: id/tên/màu, giống hệt cách `Fund` là dữ liệu, chỉ khác là mỗi loại tách riêng CHO TỪNG thành viên). Seed sẵn 4 loại mặc định "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" (tiền mặt và tiền tài khoản ngân hàng dùng hằng ngày là tiền khả dụng, KHÔNG phải loại tiết kiệm), nhưng xoá/thêm được như bất kỳ dữ liệu nào khác qua màn "Tiết kiệm" (Cài đặt) — xoá được khi cả 2 thành viên đều về 0 ở loại đó. Xem `docs/financial-core-v2.md` mục 9.
 
 **Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `families/{familyId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn B bên dưới (làm cùng lúc với phần mời/tham gia thật), **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
 
@@ -2244,11 +2304,11 @@ families/{familyId}/months/{yearMonth}/transactions/{txId}
 - **Xoá quỹ chỉ được phép khi `balance = 0`.** Phải rút hết quỹ trước bằng giao dịch `TRANSFER(FUND_WITHDRAW)` (`source = FUND` → `destination = MEMBER_AVAILABLE`, đảo chiều của `FUND_TOPUP`), sau đó mới soft-delete (`isActive = false`) — không xoá cứng, không tự ý quy tiền còn lại cho ai. Màn Quỹ — Chi tiết (`docs/design.html` màn 15) chặn nút "Xoá quỹ" và giải thích rõ nếu `balance ≠ 0`.
 - **Màn Quỹ/Tiết kiệm chỉ để xem số dư + lịch sử, không nhập giao dịch trực tiếp.** Các nút "Nạp quỹ"/"Ghi khoản mua"/"Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" đều mở màn Thêm giao dịch (`docs/design.html` màn 09) điền sẵn loại giao dịch/nguồn-đích tương ứng — chỉ có 1 nơi tạo giao dịch duy nhất trong app, tránh 2 luồng code trùng nhau cho cùng 1 việc.
 
-**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Loại tài sản tiết kiệm (`SavingsAssetType`: Tiền mặt, Ngân hàng, Chứng khoán, Bất động sản...) là **dữ liệu gia đình tự tạo, không giới hạn số lượng** — xem `docs/financial-core-v2.md` mục 9. Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
+**Tiết kiệm — màn quản lý riêng, tách hẳn khỏi Quỹ, và không còn là Category kiểu Chi.** Loại tài sản tiết kiệm (`SavingsAssetType`: Gửi ngân hàng, Vàng, Chứng khoán, Bất động sản...) là **dữ liệu gia đình tự tạo, không giới hạn số lượng** — xem `docs/financial-core-v2.md` mục 9. Toàn bộ thao tác tiết kiệm là `TRANSFER`, category "Tiết kiệm", phân biệt bằng `transferKind`:
 
 - `SAVINGS_TOPUP` — nạp tiết kiệm vào 1 loại tài sản: `source = MEMBER_AVAILABLE` → `destination = MEMBER_SAVINGS_ASSET(loại X, người nạp)`.
 - `SAVINGS_WITHDRAW` — rút về ví chính (mở qua màn Thêm giao dịch, loại "Chuyển"): `source = MEMBER_SAVINGS_ASSET(loại X, người rút)` → `destination = MEMBER_AVAILABLE`.
-- `SAVINGS_CONVERT` — chuyển đổi giữa 2 loại tài sản bất kỳ (vd Tiền mặt → Ngân hàng, hoặc Ngân hàng → Chứng khoán, không riêng "gửi ngân hàng"): `source = MEMBER_SAVINGS_ASSET(loại X)` → `destination = MEMBER_SAVINGS_ASSET(loại Y)`, cùng 1 thành viên.
+- `SAVINGS_CONVERT` — chuyển đổi giữa 2 loại tài sản bất kỳ (vd Gửi ngân hàng → Vàng, hoặc Vàng → Chứng khoán): `source = MEMBER_SAVINGS_ASSET(loại X)` → `destination = MEMBER_SAVINGS_ASSET(loại Y)`, cùng 1 thành viên.
 
 Cả 3 đều **không đổi Tổng tài sản**, chỉ đổi chỗ tiền đang nằm — qua **chính màn Thêm giao dịch** (loại "Chuyển" → "Tiết kiệm"), không phải 1 form/màn hình riêng: chọn loại hình + loại tài sản, nhập số tiền + ghi chú, `transactionDate`/`createdAt` hệ thống tự gán.
 
@@ -2265,6 +2325,28 @@ match /families/{familyId}/{document=**} {
 ```
 
 ---
+
+## Phase 8.8 — Đơn giản hoá sản phẩm: 4 nhóm Thu/Chi & Summary/Explorer (đã duyệt, schema v7)
+
+**Ngôn ngữ người dùng chỉ còn 2 tầng:** 4 NHÓM CHÍNH cố định (hệ thống định nghĩa, không xoá/đổi được) → danh mục con do gia đình tự thêm/sửa/ngừng sử dụng.
+
+| Nhóm chính | Là gì | Biểu diễn trong dữ liệu |
+|---|---|---|
+| **Doanh thu** | Tiền thật kiếm được | `type = income` và `excludeFromTotals = false` |
+| **Khoản thu khác** | Tiền vào không phải doanh thu (Số dư ban đầu, người khác trả lại, thu hồi vốn khi bán lại…) | `type = income` và `excludeFromTotals = true` |
+| **Chi tiêu** | Chi phí cuộc sống/gia đình | `type = expense` và `groupKey = NULL` |
+| **Chi phí kinh doanh** | Chi phí để tạo ra doanh thu | `type = expense` và `groupKey = business_expense` |
+
+- Schema v7 chỉ thêm cột nullable `category_rows.group_key` (giá trị hợp lệ duy nhất `business_expense`). Không phân nhóm theo tên/Ghi chú. Đổi nhóm 1 danh mục chỉ đổi BÁO CÁO — giao dịch giữ nguyên `categoryId`, số dư/Total Assets không đổi (Financial Engine không đọc `groupKey`).
+- **Công thức (báo cáo, chỉ đọc):** Thu nhập ròng = Doanh thu − Chi phí kinh doanh (KHÔNG trừ Chi tiêu, KHÔNG cộng Khoản thu khác); Dòng tiền Thu/Chi = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí kinh doanh. Thu nhập ròng của từng thành viên = Doanh thu nhận về ví/tiết kiệm của người đó − Chi phí kinh doanh người đó chi. `Chi tiêu + Chi phí kinh doanh = Total External Expense`, `Doanh thu = Total Income` của Financial Core.
+- **Chuyển** chỉ là "từ đâu → đến đâu" (Vợ → Chồng, Tiết kiệm, Quỹ); không có danh mục Cho vay trong bộ chọn.
+- **Tính năng nâng cao ẩn khỏi UI mặc định** (engine + lịch sử giữ nguyên): Vay & Cho vay, Hoàn tiền/Thu hồi. Nhận diện bằng ID hệ thống (`AdvancedSystemCategories`) + cờ `advancedFeaturesEnabledProvider` (mặc định tắt). Giao dịch cũ của chúng vẫn hiển thị trong lịch sử.
+- **Seed DB mới tối giản:** Doanh thu: Thu nhập · Khoản thu khác: Số dư ban đầu, Khác · Chi tiêu: Sinh hoạt, Đầu tư, Tự thưởng, CĐ, DH · Chi phí kinh doanh: Chi phí kinh doanh. CĐ và DH có bộ 4 trạng thái riêng đúng như đang dùng thật: CĐ = CCB → ĐCB → ĐG → ĐD; DH = CCB → ĐCB → ĐD → ĐG. DB đã tồn tại không bị reseed.
+- **Ghi chú (Note)** là ô trống đơn giản (không chip gợi ý, không câu ví dụ) — Category là nhóm thống kê, Note mô tả giao dịch cụ thể; app không bao giờ parse Note.
+
+### Summary / Transaction Explorer (Phase 8.8 — scope kế tiếp)
+- **Home** = trả lời nhanh. **Summary** = truy vết tiền thật: mặc định chỉ Thu nhập ròng tháng này của Vợ, của Chồng và Chi tiêu gia đình; bên dưới là Explorer.
+- **Explorer** lọc kết hợp (giao, không phải hợp): Thời gian (Hôm nay / Tháng này / Tháng trước / khoảng ngày), Thành viên (Tất cả / Vợ / Chồng — chip nhanh), Nhóm chính, Danh mục (phụ thuộc nhóm), Trạng thái (chỉ khi danh mục có trạng thái), Tìm trong Note (không phân biệt hoa/thường, khớp một phần). Có "Xoá bộ lọc". Mỗi dòng: ngày · Vợ/Chồng · Nhóm · Danh mục · số tiền · Note · trạng thái; Chuyển hiện "Vợ → Chồng". Đầu kết quả: số giao dịch, tổng tiền vào, tổng tiền ra, khoảng ngày. Chỉ hiển thị bản ghi đang hiệu lực (reversal/bản gốc đã hoàn tác ẩn; chi tiết vẫn xem được lịch sử).
 
 ## Lộ trình chi tiết theo mô hình thác nước
 
@@ -2329,8 +2411,8 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 43. **Form nạp tiền vào quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `TRANSFER(FUND_TOPUP)`: `source = MEMBER_AVAILABLE` → `destination = FUND`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, số dư người nạp giảm đúng, Tổng tài sản không đổi.
 44. **Form ghi khoản chi tích quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `EXPENSE` với `source = FUND` (thay vì `MEMBER_AVAILABLE`), chặn chọn quỹ nếu `amountMinor` > số dư quỹ. Chạy: ghi thử "đi chợ 150.000đ" tích quỹ. Test: **chỉ** số dư quỹ giảm đúng — số dư người mua giữ nguyên (không trừ kép, xem test case 7 ở `docs/financial-core-v2.md`).
 45. **Cloud Function cache `balance` lên `funds/{fundId}`** — đã gộp chung vào phase 36 (`applyEffect` cập nhật mọi pool cùng lúc) — Chạy/Test: xác nhận lại `balance` quỹ khớp tổng tính tay sau nhiều giao dịch liên tiếp.
-46. **Nối số dư theo từng loại tài sản tiết kiệm với dữ liệu thật** — Code: đổi nguồn `savingsByAssetType` (map theo `assetTypeId`) sang Cloud Function tính theo `transferKind` (`SAVINGS_TOPUP`/`SAVINGS_WITHDRAW`/`SAVINGS_CONVERT`). Chạy: thêm giao dịch Tiết kiệm `SAVINGS_CONVERT` (vd Tiền mặt → Ngân hàng). Test: đúng loại tài sản đích tăng, loại tài sản nguồn giảm đúng, `availableBalance` không đổi.
-47. **Màn hình Tiết kiệm — Quản lý** (`docs/design.html` màn 16) — Code: `presentation/features/savings/`, nút "Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" trên từng loại tài sản mở lại màn Thêm giao dịch (09) với loại "Chuyển" → "Tiết kiệm" điền sẵn hành động + loại tài sản tương ứng — **không dựng form nhập riêng**, đúng nguyên tắc chỉ 1 nơi tạo giao dịch duy nhất trong app (giống Quỹ ở phase 42-44). Chạy: rút thử 500.000 về ví chính, chuyển thử 10.000.000 từ "Tiền mặt" sang "Ngân hàng". Test: `SAVINGS_WITHDRAW` cộng đúng vào `availableBalance`; `SAVINGS_CONVERT` chỉ đổi chỗ giữa 2 loại tài sản tự chọn, Tổng tài sản không đổi.
+46. **Nối số dư theo từng loại tài sản tiết kiệm với dữ liệu thật** — Code: đổi nguồn `savingsByAssetType` (map theo `assetTypeId`) sang Cloud Function tính theo `transferKind` (`SAVINGS_TOPUP`/`SAVINGS_WITHDRAW`/`SAVINGS_CONVERT`). Chạy: thêm giao dịch Tiết kiệm `SAVINGS_CONVERT` (vd Gửi ngân hàng → Vàng). Test: đúng loại tài sản đích tăng, loại tài sản nguồn giảm đúng, `availableBalance` không đổi.
+47. **Màn hình Tiết kiệm — Quản lý** (`docs/design.html` màn 16) — Code: `presentation/features/savings/`, nút "Rút về ví chính"/"Nạp"/"Chuyển đổi loại tài sản" trên từng loại tài sản mở lại màn Thêm giao dịch (09) với loại "Chuyển" → "Tiết kiệm" điền sẵn hành động + loại tài sản tương ứng — **không dựng form nhập riêng**, đúng nguyên tắc chỉ 1 nơi tạo giao dịch duy nhất trong app (giống Quỹ ở phase 42-44). Chạy: rút thử 500.000 về ví chính, chuyển thử 10.000.000 từ "Gửi ngân hàng" sang "Vàng". Test: `SAVINGS_WITHDRAW` cộng đúng vào `availableBalance`; `SAVINGS_CONVERT` chỉ đổi chỗ giữa 2 loại tài sản tự chọn, Tổng tài sản không đổi.
 
 ### Giai đoạn D — Trạng thái & Tổng hợp tháng (9 phase, đánh số 48-56)
 
@@ -2501,7 +2583,7 @@ Vì vậy, **không bao giờ** viết logic kiểu `if (categoryId == 'cho_di')
 
 **Công thức tài chính:** `Total Income`, `Total External Expense`, `Total Transfer` là 3 tổng **tách biệt hoàn toàn** — Transfer không bao giờ được cộng vào Income/Expense. `Tổng tài sản = Tổng tài sản đầu kỳ + Total Income − Total External Expense` (Transfer tự cân bằng nội bộ, không xuất hiện trong công thức). Không dùng công thức "Tổng thu = Tổng chi + Số tiền còn lại" của bản nháp đầu — công thức đó tự mâu thuẫn vì gộp cả Transfer vào Chi. Chi tiết ở `docs/financial-core-v2.md` mục 17.
 
-**`SavingsAssetType` là mô hình Tiết kiệm DUY NHẤT** — loại tài sản tiết kiệm (Tiền mặt, Ngân hàng, Chứng khoán...) là dữ liệu gia đình tự tạo không giới hạn số lượng, y hệt nguyên tắc Category/Fund. **Không dùng lại** `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`/`SAVINGS_TO_BANK` (model cũ, cố định 2 loại) ở bất kỳ đâu — nếu thấy 3 tên này xuất hiện lại trong code/tài liệu mới, đó là dấu hiệu quay lại model sai, cần sửa ngay. Chi tiết ở `docs/financial-core-v2.md` mục 9.
+**`SavingsAssetType` là mô hình Tiết kiệm DUY NHẤT** — loại tài sản tiết kiệm (Gửi ngân hàng, Vàng, Chứng khoán...) là dữ liệu gia đình tự tạo không giới hạn số lượng, y hệt nguyên tắc Category/Fund. **Tiền mặt và tiền trong tài khoản ngân hàng dùng hằng ngày KHÔNG phải loại tiết kiệm** — cả hai đều là tiền khả dụng (`MEMBER_AVAILABLE`); "Gửi ngân hàng" là tiền gửi tiết kiệm/sinh lời (quyết định chủ dự án 2026-09-19). **Không dùng lại** `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`/`SAVINGS_TO_BANK` (model cũ, cố định 2 loại) ở bất kỳ đâu — nếu thấy 3 tên này xuất hiện lại trong code/tài liệu mới, đó là dấu hiệu quay lại model sai, cần sửa ngay. Chi tiết ở `docs/financial-core-v2.md` mục 9.
 
 **Reversal ledger có thêm 3 ràng buộc bắt buộc** (Invariant 13-15, `docs/financial-core-v2.md` mục 18): không được hoàn tác 2 lần trên cùng 1 giao dịch; sửa nhiều lần liên tiếp luôn thao tác trên bản mới nhất (`reversedByTxId == null`), không bao giờ trên bản gốc; giao dịch Transfer không được có source = destination. **Fund → Fund** và **Savings người A → Savings người B** trực tiếp **chưa hỗ trợ trong MVP** (đi qua rút/chuyển/nạp lại) — đây là quyết định phạm vi có chủ đích, không phải thiếu sót.
 
@@ -2521,6 +2603,9 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 - `docs/financial-core-v2.md` — **đọc trước khi viết bất kỳ dòng domain logic nào liên quan tới tiền.** Audit đầy đủ các lỗi tài chính đã sửa (trừ kép ở Quỹ, Transfer bị tính nhầm thành Chi...), model `Transaction` với `source`/`destination`, 15 invariant bắt buộc đúng, 20 test case (double-count + reversal ledger) phải pass trước khi merge bất kỳ PR nào đụng tới Financial Engine. Đây là **source of truth cao nhất cho business logic tài chính** — nếu `spec.md`/`CLAUDE.md`/`docs/design.html` có chỗ nào mâu thuẫn với file này, sửa lại theo file này.
 - `docs/design.html` — bản vẽ giao diện: sơ đồ use case, ERD, màn hình mô phỏng có tương tác. Đã đồng bộ theo model V2 ở `financial-core-v2.md` (đợt rà soát `docs/audit-pre-implementation.md`, 2026-09-16) — mọi màn hình thật khi code phải khớp luồng trong file này; nếu cần đổi khác đi, cập nhật lại `docs/design.html` trước rồi mới đổi code, để các tài liệu không lệch nhau.
 - `docs/audit-pre-implementation.md` — audit trước-khi-code: đối chiếu toàn bộ `spec.md`/`CLAUDE.md`/`financial-core-v2.md`/`design.html`/code hiện có, liệt kê mọi mâu thuẫn/BLOCKER đã tìm thấy và cách đã sửa. Tham khảo nếu cần hiểu tại sao 1 đoạn tài liệu được viết như hiện tại.
+
+## 12. Phase 8.8 — Đơn giản hoá sản phẩm (4 nhóm Thu/Chi)
+Người dùng chỉ thấy 2 tầng: 4 nhóm chính cố định (Doanh thu · Khoản thu khác · Chi tiêu · Chi phí kinh doanh) → danh mục con tự tạo. Nhóm Thu suy từ `excludeFromTotals`; nhóm Chi suy từ `Category.groupKey` (`business_expense`, schema v7). KHÔNG phân nhóm theo tên/Ghi chú. Vay & Cho vay và Hoàn tiền/Thu hồi là tính năng nâng cao: engine giữ nguyên, entry point UI ẩn sau `advancedFeaturesEnabledProvider` (mặc định tắt) + `AdvancedSystemCategories` (ID hệ thống). Chi tiết ở `docs/phase-8.8-simplification-audit.md` và `docs/financial-core-v2.md` cuối file.
 </script>
 
 <footer>
@@ -2659,13 +2744,15 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
   }
 
   var typeSeg = document.getElementById('typeSeg');
-  var linkedExpenseField = document.getElementById('linkedExpenseField');
+  var incomeGroupField = document.getElementById('incomeGroupField');
+  var expenseGroupField = document.getElementById('expenseGroupField');
   if(typeSeg){
     typeSeg.querySelectorAll('button').forEach(function(btn){
       btn.addEventListener('click', function(){
         typeSeg.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
         btn.classList.add('active');
-        if(linkedExpenseField) linkedExpenseField.hidden = (btn.dataset.t !== 'thu');
+        if(incomeGroupField) incomeGroupField.hidden = (btn.dataset.t !== 'thu');
+        if(expenseGroupField) expenseGroupField.hidden = (btn.dataset.t === 'thu');
       });
     });
   }

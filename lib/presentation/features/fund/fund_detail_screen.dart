@@ -24,7 +24,8 @@ class FundDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     Fund? fund;
     for (final f in funds) {
       if (f.id == fundId) fund = f;
@@ -34,15 +35,17 @@ class FundDetailScreen extends ConsumerWidget {
     }
 
     final balance = computeFundBalance(fundId, transactions);
-    final history = transactions
-        .where(
-          (t) =>
-              isVisible(t) &&
-              ((t.sourceKind == PoolKind.fund && t.sourceRefId == fundId) ||
-                  (t.destinationKind == PoolKind.fund && t.destinationRefId == fundId)),
-        )
-        .toList()
-      ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+    final history =
+        transactions
+            .where(
+              (t) =>
+                  isVisible(t) &&
+                  ((t.sourceKind == PoolKind.fund && t.sourceRefId == fundId) ||
+                      (t.destinationKind == PoolKind.fund &&
+                          t.destinationRefId == fundId)),
+            )
+            .toList()
+          ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
     return Scaffold(
       appBar: AppBar(title: Text(fund.name)),
@@ -67,10 +70,8 @@ class FundDetailScreen extends ConsumerWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: () => showAddTransactionSheet(
-                    context,
-                    initialFundId: fundId,
-                  ),
+                  onPressed: () =>
+                      showAddTransactionSheet(context, initialFundId: fundId),
                   child: const Text('Ghi khoản mua'),
                 ),
               ),
@@ -105,7 +106,11 @@ class FundDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _deleteFund(BuildContext context, WidgetRef ref, int balance) async {
+  Future<void> _deleteFund(
+    BuildContext context,
+    WidgetRef ref,
+    int balance,
+  ) async {
     if (balance != 0) {
       await showDialog<void>(
         context: context,
@@ -131,7 +136,9 @@ class FundDetailScreen extends ConsumerWidget {
       // Race condition hiếm gặp — số dư vừa đổi giữa lúc đọc và lúc xoá.
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Quỹ vừa có giao dịch mới, thử lại sau.')),
+          const SnackBar(
+            content: Text('Quỹ vừa có giao dịch mới, thử lại sau.'),
+          ),
         );
       }
     }
@@ -151,7 +158,11 @@ class _BalanceCard extends StatelessWidget {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
-          BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: const Offset(0, 4)),
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
@@ -212,11 +223,17 @@ class _EntryRow extends StatelessWidget {
                   transaction.note.isEmpty
                       ? (isTopUp ? 'Nạp quỹ' : 'Ghi khoản mua')
                       : transaction.note,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                  ),
                 ),
                 Text(
                   Formatters.dayMonth(transaction.transactionDate),
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ),

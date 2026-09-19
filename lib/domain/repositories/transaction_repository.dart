@@ -1,3 +1,4 @@
+import '../entities/obligation_direction.dart';
 import '../entities/transaction.dart';
 
 /// `Transaction` là **append-only** cho mọi field ảnh hưởng balance (mục 21
@@ -75,5 +76,66 @@ abstract class TransactionRepository {
     String? memberRefId,
     DateTime? transactionDate,
     String? statusId,
+  });
+
+  /// Phase 8.7 — tất toán (thu hồi Receivable / trả nợ Payable) 1
+  /// `Obligation`. Tự tính outstanding hiện tại và phân bổ "trừ gốc trước,
+  /// dư ra là lãi" (principal-first, đã approve) — Repository ghi 1 dòng
+  /// (không lãi) hoặc 2 dòng ATOMIC trong 1 DB transaction (Receivable có
+  /// lãi — xem `docs/financial-core-v2.md` audit "atomicity + idempotency"
+  /// Phase 8.7). Payable KHÔNG BAO GIỜ trả về `interest` (luôn gộp 1 dòng —
+  /// xem `buildObligationSettlementLegs`).
+  ///
+  /// **Idempotency:** [principalId]/[principalClientTxId]/[interestId]/
+  /// [interestClientTxId] do CALLER (Application, qua
+  /// `SettleObligationCommand`) sinh 1 lần và giữ nguyên qua các lần gọi lại
+  /// (retry) — cùng contract `clientTxId` như `addTransaction`. Ném
+  /// [SettlementIntegrityException] nếu phát hiện half-state (1 trong 2 leg
+  /// tồn tại, leg kia thì không) — KHÔNG tự vá.
+  ///
+  /// Ném [ObligationCreationNotFoundException] nếu chưa có giao dịch TẠO
+  /// khoản vay. Ném [InsufficientBalanceException] nếu Receivable-principal
+  /// sẽ làm pool `receivable` âm (không nên xảy ra vì `principalPortion`
+  /// luôn `<= outstanding`, nhưng vẫn validate qua đúng cơ chế chung).
+  Future<({Transaction principal, Transaction? interest})> settleObligation({
+    required String obligationId,
+    required ObligationDirection direction,
+    required String memberRefId,
+    required int amountMinor,
+    required DateTime transactionDate,
+    String note = '',
+    required String categoryId,
+    required String interestCategoryId,
+    required String principalId,
+    required String principalClientTxId,
+    required String interestId,
+    required String interestClientTxId,
+  });
+
+  /// Hoàn tác TOÀN BỘ 1 lần tất toán (1 hoặc 2 leg, xác định qua
+  /// `settlementGroupId`) — ATOMIC, cùng 1 hành động người dùng ("Undo tất
+  /// toán"), không để lộ 2 nút "Xoá giao dịch" riêng cho 2 leg kỹ thuật.
+  /// [anyLegTransactionId] có thể là id của leg principal HOẶC leg interest
+  /// — Repository tự resolve group. Ném [AlreadyReversedException] nếu bất
+  /// kỳ leg nào đã bị hoàn tác.
+  Future<void> reverseObligationSettlement(String anyLegTransactionId);
+
+  /// Sửa 1 lần tất toán — chiến lược "hoàn tác cả group cũ rồi tạo lại từ
+  /// đầu với số tiền mới" (đã approve), ATOMIC trong 1 DB transaction. Tự
+  /// chuyển đổi đúng số leg (1↔2) theo số tiền MỚI so với outstanding vừa
+  /// khôi phục — không cần code riêng cho từng chiều chuyển đổi.
+  ///
+  /// Ném [NotLatestSettlementException] nếu [anyLegTransactionId] không
+  /// thuộc lần tất toán MỚI NHẤT còn hiệu lực của khoản vay (chính sách đã
+  /// approve — chỉ sửa được lần gần nhất).
+  Future<({Transaction principal, Transaction? interest})> correctObligationSettlement(
+    String anyLegTransactionId, {
+    required int newAmountMinor,
+    required String categoryId,
+    required String interestCategoryId,
+    required String newPrincipalId,
+    required String newPrincipalClientTxId,
+    required String newInterestId,
+    required String newInterestClientTxId,
   });
 }

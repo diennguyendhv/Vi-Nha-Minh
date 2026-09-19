@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/commands/create_transaction_command.dart';
+import '../../../core/constants/advanced_system_categories.dart';
 import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
@@ -15,6 +16,9 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/entities/transfer_kind.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
+import '../../widgets/amount_input_formatter.dart';
+import '../../widgets/sheet_error_banner.dart';
+import '../../widgets/tap_guard.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/fund_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
@@ -59,6 +63,8 @@ Future<void> showAddTransactionSheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    isDismissible: false,
+    enableDrag: false,
     backgroundColor: Colors.transparent,
     builder: (context) => AddTransactionSheet(
       initialType: initialType,
@@ -76,7 +82,8 @@ String _dateLabel(DateTime date) {
   final now = DateTime.now();
   final isToday =
       date.year == now.year && date.month == now.month && date.day == now.day;
-  final text = '${date.day.toString().padLeft(2, '0')}/'
+  final text =
+      '${date.day.toString().padLeft(2, '0')}/'
       '${date.month.toString().padLeft(2, '0')}/${date.year}';
   return isToday ? 'Hôm nay · $text' : text;
 }
@@ -122,13 +129,15 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
 
 class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   bool get _isRecoveryMode => widget.recoveryTarget != null;
-  late EntryType _entryType =
-      widget.recoveryTarget != null ? EntryType.thu : widget.initialType;
+  late EntryType _entryType = widget.recoveryTarget != null
+      ? EntryType.thu
+      : widget.initialType;
   String? _categoryId;
   late FamilyMember _member = widget.initialMember ?? FamilyMember.vo;
   String? _statusId;
-  late String? _sourceFundId =
-      widget.initialTransferSubKind == null ? widget.initialFundId : null;
+  late String? _sourceFundId = widget.initialTransferSubKind == null
+      ? widget.initialFundId
+      : null;
 
   late TransferSubKind _transferSubKind =
       widget.initialTransferSubKind ?? TransferSubKind.member;
@@ -146,11 +155,43 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   String _amountDigits = '';
   String _note = '';
+
+  /// Nhóm chính đang chọn (2 lựa chọn mỗi loại): Thu = Doanh thu | Khoản thu
+  /// khác; Chi = Chi tiêu | Chi phí kinh doanh. Chỉ dùng để LỌC danh sách
+  /// danh mục con — nhóm thật của danh mục do `excludeFromTotals`/`groupKey`
+  /// quyết định.
+  bool _otherInflow = false;
+  bool _businessExpense = false;
+
+  /// Ô Ghi chú tự do (không bắt buộc) — dùng chung cho MỌI luồng trong sheet
+  /// này (Thu, Chi, Chuyển thành viên, Tiết kiệm nạp/rút/đổi, Quỹ nạp/rút,
+  /// Hoàn tiền/Thu hồi). Note chỉ là mô tả: không đổi loại giao dịch, hạng
+  /// mục hay số dư, và không bao giờ được parse để suy luận ý nghĩa tài chính.
+  final _noteController = TextEditingController();
+
+  /// Ô số tiền dùng bàn phím số của hệ điều hành (không keypad tự vẽ).
+  /// `_amountDigits` luôn là bản sao đã qua [AmountInputFormatter] (chỉ chữ
+  /// số, không số 0 đứng đầu) của controller này.
+  final _amountController = TextEditingController();
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
   DateTime _transactionDate = DateTime.now();
 
   /// Logical request đã "đóng băng" từ lần bấm Lưu gần nhất chưa thành công
   /// — Phase 6 mục 9/10. `null` nghĩa là chưa có gì đang chờ (form sạch,
   /// hoặc lần Lưu trước đã thành công/command trước đã bị vô hiệu).
+  /// Lỗi của lần Lưu gần nhất, hiển thị NGAY TRONG sheet (F1 — SnackBar bị
+  /// che sau lớp modal). Chỉ hiện khi form vẫn y hệt lúc lỗi (`_errorIntent`
+  /// == intent hiện tại): người dùng sửa bất kỳ trường nào thì banner tự ẩn.
+  String? _errorText;
+  _TransactionIntent? _errorIntent;
+
   CreateTransactionCommand? _pendingCommand;
 
   /// Snapshot các field logic tại thời điểm `_pendingCommand` được tạo —
@@ -175,20 +216,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     if (picked != null) setState(() => _transactionDate = picked);
   }
 
-  void _pressKey(String key) {
-    setState(() {
-      if (key == '⌫') {
-        _amountDigits = _amountDigits.isEmpty
-            ? ''
-            : _amountDigits.substring(0, _amountDigits.length - 1);
-        return;
-      }
-      final next = (_amountDigits + key).replaceFirst(RegExp(r'^0+(?=\d)'), '');
-      if (next.length > 9) return;
-      _amountDigits = next;
-    });
-  }
-
   Category? _findCategory(List<Category> categories, String? id) {
     if (id == null) return null;
     for (final c in categories) {
@@ -200,7 +227,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   void _pickCategory(Category category) {
     setState(() {
       _categoryId = category.id;
-      _statusId = category.hasStatus ? category.statuses.first.id : null;
+      _statusId = category.hasStatus ? category.activeStatuses.first.id : null;
     });
   }
 
@@ -214,7 +241,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     final intent = _buildLogicalIntent(categories);
     if (intent == null) return;
 
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _errorText = null;
+      _errorIntent = null;
+    });
     try {
       CreateTransactionCommand command;
       if (_pendingCommand != null && _pendingIntent == intent) {
@@ -252,7 +283,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       // WatchTransactionsUseCase), KHÔNG tự thêm vào state nào ở đây (mục 20/21).
       _pendingCommand = null;
       _pendingIntent = null;
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) closeSheetAfterSave(context, ref);
     } catch (error) {
       if (error is ClientTxIdConflictException) {
         // Xung đột thật trên chính clientTxId đang giữ — retry lại với cùng
@@ -263,9 +294,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         _pendingIntent = null;
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        setState(() {
+          _errorText = _errorMessage(error);
+          _errorIntent = intent;
+        });
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -322,7 +354,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         destinationRefId: _member.name,
         amountMinor: _amount,
         transactionDate: _transactionDate,
-        note: _note,
+        note: _note.trim(),
         statusId: null,
         recoveryOfTxId: target.id,
       );
@@ -331,7 +363,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     switch (_entryType) {
       case EntryType.thu:
         final category = _findCategory(categories, _categoryId);
-        if (category == null) return null;
+        if (category == null || category.type != TransactionType.income) {
+          return null;
+        }
         return (
           type: TransactionType.income,
           transferKind: null,
@@ -342,14 +376,16 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           destinationRefId: _member.name,
           amountMinor: _amount,
           transactionDate: _transactionDate,
-          note: _note,
+          note: _note.trim(),
           statusId: category.hasStatus ? _statusId : null,
           recoveryOfTxId: null,
         );
 
       case EntryType.chi:
         final category = _findCategory(categories, _categoryId);
-        if (category == null) return null;
+        if (category == null || category.type != TransactionType.expense) {
+          return null;
+        }
         final fundId = _sourceFundId;
         return (
           type: TransactionType.expense,
@@ -361,7 +397,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           destinationRefId: null,
           amountMinor: _amount,
           transactionDate: _transactionDate,
-          note: _note,
+          note: _note.trim(),
           statusId: category.hasStatus ? _statusId : null,
           recoveryOfTxId: null,
         );
@@ -380,7 +416,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               destinationRefId: _transferTo.name,
               amountMinor: _amount,
               transactionDate: _transactionDate,
-              note: _note,
+              note: _note.trim(),
               statusId: null,
               recoveryOfTxId: null,
             );
@@ -399,7 +435,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationRefId: fundId,
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
-                  note: _note,
+                  note: _note.trim(),
                   statusId: null,
                   recoveryOfTxId: null,
                 );
@@ -414,7 +450,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationRefId: _member.name,
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
-                  note: _note,
+                  note: _note.trim(),
                   statusId: null,
                   recoveryOfTxId: null,
                 );
@@ -435,7 +471,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationRefId: savingsAssetRefId(assetTypeId, member),
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
-                  note: _note,
+                  note: _note.trim(),
                   statusId: null,
                   recoveryOfTxId: null,
                 );
@@ -450,7 +486,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationRefId: member.name,
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
-                  note: _note,
+                  note: _note.trim(),
                   statusId: null,
                   recoveryOfTxId: null,
                 );
@@ -467,7 +503,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   destinationRefId: savingsAssetRefId(targetId, member),
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
-                  note: _note,
+                  note: _note.trim(),
                   statusId: null,
                   recoveryOfTxId: null,
                 );
@@ -480,155 +516,237 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   Widget build(BuildContext context) {
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
-    final assetTypes = ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final assetTypes =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
 
-    final activeCategories = categories.where((c) => c.isActive).toList();
+    // Bộ chọn chỉ liệt kê danh mục thường: bỏ tính năng nâng cao (Vay,
+    // Hoàn tiền…) và lọc theo nhóm chính đang chọn.
+    final activeCategories = categories
+        .where((c) => c.isActive && !AdvancedSystemCategories.contains(c.id))
+        .toList();
     final incomeCategories = activeCategories
-        .where((c) => c.type == TransactionType.income)
+        .where(
+          (c) =>
+              c.type == TransactionType.income &&
+              c.excludeFromTotals == _otherInflow,
+        )
         .toList();
     final expenseCategories = activeCategories
-        .where((c) => c.type == TransactionType.expense)
+        .where(
+          (c) =>
+              c.type == TransactionType.expense &&
+              c.isBusinessExpense == _businessExpense,
+        )
         .toList();
     final activeFunds = funds.where((f) => f.isActive).toList();
     final activeAssetTypes = assetTypes.where((a) => a.isActive).toList();
 
-    final canSave = !_submitting && _buildLogicalIntent(categories) != null;
+    final currentIntent = _buildLogicalIntent(categories);
+    final canSave = !_submitting && currentIntent != null;
+    final showError = _errorText != null && _errorIntent == currentIntent;
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.88,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-          ),
-          child: Column(
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE5E3DB),
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    // Nâng sheet lên trên bàn phím hệ thống khi đang nhập Ghi chú.
+    return PopScope(
+      canPop: !_submitting,
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.88,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          shouldCloseOnMinExtent: false,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _isRecoveryMode ? 'Hoàn tiền / Thu hồi' : 'Thêm giao dịch',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E3DB),
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close_rounded),
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppColors.chipBackground,
-                        shape: const CircleBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
-                  children: [
-                    if (_isRecoveryMode)
-                      _RecoveryTargetBanner(target: widget.recoveryTarget!)
-                    else ...[
-                      const _SectionLabel('Loại giao dịch'),
-                      const SizedBox(height: 8),
-                      _TypeSegmented(
-                        value: _entryType,
-                        onChanged: (t) => setState(() => _entryType = t),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Center(
-                      child: Text(
-                        Formatters.amount(_amount),
-                        style: const TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.2,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Center(
-                      child: TextButton.icon(
-                        onPressed: _pickDate,
-                        icon: const Icon(Icons.calendar_today_rounded, size: 14),
-                        label: Text(_dateLabel(_transactionDate)),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ..._buildPanel(
-                      incomeCategories: incomeCategories,
-                      expenseCategories: expenseCategories,
-                      funds: activeFunds,
-                      transactions: transactions,
-                      assetTypes: activeAssetTypes,
-                    ),
-                    const SizedBox(height: 16),
-                    const _SectionLabel('Ghi chú'),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: DefaultCategories.quickNotes
-                          .map(
-                            (n) => _NoteChip(
-                              label: n,
-                              selected: n == _note,
-                              onTap: () =>
-                                  setState(() => _note = n == _note ? '' : n),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    _Keypad(onKey: _pressKey),
-                    const SizedBox(height: 14),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: canSave ? () => _save(categories) : null,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          disabledBackgroundColor: AppColors.disabledButton,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                        ),
-                        child: Text(
-                          _submitting ? 'Đang lưu...' : 'Lưu giao dịch',
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 12, 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _isRecoveryMode
+                              ? 'Hoàn tiền / Thu hồi'
+                              : 'Thêm giao dịch',
                           style: const TextStyle(
-                            fontSize: 15,
+                            fontSize: 16,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
-                      ),
+                        IconButton(
+                          onPressed: _submitting
+                              ? null
+                              : () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close_rounded),
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.chipBackground,
+                            shape: const CircleBorder(),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 22),
+                      children: [
+                        if (_isRecoveryMode)
+                          _RecoveryTargetBanner(target: widget.recoveryTarget!)
+                        else ...[
+                          const _SectionLabel('Loại giao dịch'),
+                          const SizedBox(height: 8),
+                          _TypeSegmented(
+                            value: _entryType,
+                            onChanged: (t) => setState(() {
+                              _entryType = t;
+                              _categoryId = null;
+                              _statusId = null;
+                            }),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        Center(
+                          child: SizedBox(
+                            width: 280,
+                            child: TextField(
+                              key: const Key('add_amount_field'),
+                              controller: _amountController,
+                              keyboardType: TextInputType.number,
+                              textInputAction: TextInputAction.done,
+                              inputFormatters: const [AmountInputFormatter()],
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 34,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                                color: AppColors.textPrimary,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: '0',
+                                hintStyle: TextStyle(
+                                  color: AppColors.textMuted,
+                                ),
+                                suffixText: 'đ',
+                                isDense: true,
+                                border: OutlineInputBorder(),
+                              ),
+                              onChanged: (v) =>
+                                  setState(() => _amountDigits = v),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Center(
+                          child: Text(
+                            key: const Key('add_amount_preview'),
+                            Formatters.amount(_amount),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                        Center(
+                          child: TextButton.icon(
+                            onPressed: _pickDate,
+                            icon: const Icon(
+                              Icons.calendar_today_rounded,
+                              size: 14,
+                            ),
+                            label: Text(_dateLabel(_transactionDate)),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        ..._buildPanel(
+                          incomeCategories: incomeCategories,
+                          expenseCategories: expenseCategories,
+                          funds: activeFunds,
+                          transactions: transactions,
+                          assetTypes: activeAssetTypes,
+                        ),
+                        const SizedBox(height: 16),
+                        const _SectionLabel('Ghi chú (không bắt buộc)'),
+                        const SizedBox(height: 8),
+                        TextField(
+                          key: const Key('add_note_field'),
+                          controller: _noteController,
+                          textInputAction: TextInputAction.done,
+                          textCapitalization: TextCapitalization.sentences,
+                          maxLines: 1,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          onChanged: (v) => setState(() => _note = v),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      8,
+                      20,
+                      12 + MediaQuery.of(context).padding.bottom,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (showError) ...[
+                          SheetErrorBanner(message: _errorText!),
+                          const SizedBox(height: 12),
+                        ],
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: canSave ? () => _save(categories) : null,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accent,
+                              disabledBackgroundColor: AppColors.disabledButton,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: Text(
+                              _submitting ? 'Đang lưu...' : 'Lưu giao dịch',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -653,7 +771,21 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       case EntryType.thu:
         final category = _findCategory(incomeCategories, _categoryId);
         return [
-          const _SectionLabel('Hạng mục'),
+          const _SectionLabel('Nhóm'),
+          const SizedBox(height: 8),
+          _Segmented<bool>(
+            key: const Key('add_income_group'),
+            value: _otherInflow,
+            options: const [false, true],
+            labelOf: (v) => v ? 'Khoản thu khác' : 'Doanh thu',
+            onChanged: (v) => setState(() {
+              _otherInflow = v;
+              _categoryId = null;
+              _statusId = null;
+            }),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Danh mục'),
           const SizedBox(height: 8),
           _CategoryChipGrid(
             categories: incomeCategories,
@@ -682,7 +814,21 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       case EntryType.chi:
         final category = _findCategory(expenseCategories, _categoryId);
         return [
-          const _SectionLabel('Hạng mục'),
+          const _SectionLabel('Nhóm'),
+          const SizedBox(height: 8),
+          _Segmented<bool>(
+            key: const Key('add_expense_group'),
+            value: _businessExpense,
+            options: const [false, true],
+            labelOf: (v) => v ? 'Chi phí kinh doanh' : 'Chi tiêu',
+            onChanged: (v) => setState(() {
+              _businessExpense = v;
+              _categoryId = null;
+              _statusId = null;
+            }),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Danh mục'),
           const SizedBox(height: 8),
           _CategoryChipGrid(
             categories: expenseCategories,
@@ -807,7 +953,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ),
           const SizedBox(height: 12),
           _SectionLabel(
-            _savingsAction == SavingsAction.convert ? 'Từ loại tài sản' : 'Loại tài sản',
+            _savingsAction == SavingsAction.convert
+                ? 'Từ loại tài sản'
+                : 'Loại tài sản',
           ),
           const SizedBox(height: 8),
           _AssetTypeChipGrid(
@@ -815,7 +963,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             selectedId: _savingsAssetTypeId,
             onTap: (id) => setState(() {
               _savingsAssetTypeId = id;
-              if (_savingsTargetAssetTypeId == id) _savingsTargetAssetTypeId = null;
+              if (_savingsTargetAssetTypeId == id) {
+                _savingsTargetAssetTypeId = null;
+              }
             }),
           ),
           if (_savingsAction == SavingsAction.convert) ...[
@@ -823,7 +973,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             const _SectionLabel('Sang loại tài sản'),
             const SizedBox(height: 8),
             _AssetTypeChipGrid(
-              assetTypes: assetTypes.where((a) => a.id != _savingsAssetTypeId).toList(),
+              assetTypes: assetTypes
+                  .where((a) => a.id != _savingsAssetTypeId)
+                  .toList(),
               selectedId: _savingsTargetAssetTypeId,
               onTap: (id) => setState(() => _savingsTargetAssetTypeId = id),
             ),
@@ -870,7 +1022,10 @@ class _RecoveryTargetBanner extends StatelessWidget {
           ),
           Text(
             Formatters.amount(target.amountMinor),
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 12.5,
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -1077,7 +1232,9 @@ class _CategoryChipGrid extends StatelessWidget {
         style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
       );
     }
-    final validSelectedId = categories.any((c) => c.id == selectedId) ? selectedId : null;
+    final validSelectedId = categories.any((c) => c.id == selectedId)
+        ? selectedId
+        : null;
     return DropdownButtonFormField<String>(
       value: validSelectedId,
       isExpanded: true,
@@ -1086,7 +1243,7 @@ class _CategoryChipGrid extends StatelessWidget {
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(),
       ),
-      hint: const Text('Chọn hạng mục'),
+      hint: const Text('Chọn danh mục'),
       items: categories
           .map(
             (c) => DropdownMenuItem(
@@ -1097,7 +1254,10 @@ class _CategoryChipGrid extends StatelessWidget {
                   Container(
                     width: 10,
                     height: 10,
-                    decoration: BoxDecoration(color: c.color, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: c.color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(c.name),
@@ -1137,7 +1297,9 @@ class _AssetTypeChipGrid extends StatelessWidget {
         style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
       );
     }
-    final validSelectedId = assetTypes.any((a) => a.id == selectedId) ? selectedId : null;
+    final validSelectedId = assetTypes.any((a) => a.id == selectedId)
+        ? selectedId
+        : null;
     return DropdownButtonFormField<String>(
       value: validSelectedId,
       isExpanded: true,
@@ -1157,7 +1319,10 @@ class _AssetTypeChipGrid extends StatelessWidget {
                   Container(
                     width: 10,
                     height: 10,
-                    decoration: BoxDecoration(color: a.color, shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: a.color,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text(a.name),
@@ -1187,7 +1352,9 @@ class _StatusChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final validSelectedId =
-        category.statuses.any((s) => s.id == selectedId) ? selectedId : null;
+        category.activeStatuses.any((s) => s.id == selectedId)
+        ? selectedId
+        : null;
     return DropdownButtonFormField<String>(
       value: validSelectedId,
       isExpanded: true,
@@ -1197,7 +1364,7 @@ class _StatusChips extends StatelessWidget {
         border: OutlineInputBorder(),
       ),
       hint: const Text('Chọn trạng thái'),
-      items: category.statuses
+      items: category.activeStatuses
           .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
           .toList(),
       onChanged: (id) {
@@ -1227,7 +1394,8 @@ class _FundPickRow extends StatelessWidget {
 
   List<DropdownMenuItem<String?>> _buildItems() {
     final items = <DropdownMenuItem<String?>>[
-      if (walletLabel != null) DropdownMenuItem(value: null, child: Text(walletLabel!)),
+      if (walletLabel != null)
+        DropdownMenuItem(value: null, child: Text(walletLabel!)),
     ];
     for (final f in funds) {
       final balance = computeFundBalance(f.id, transactions);
@@ -1258,100 +1426,6 @@ class _FundPickRow extends StatelessWidget {
       ),
       items: _buildItems(),
       onChanged: onSelect,
-    );
-  }
-}
-
-class _NoteChip extends StatelessWidget {
-  const _NoteChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.accent.withValues(alpha: 0.14)
-              : AppColors.chipBackground,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? AppColors.accent : Colors.transparent,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: selected ? AppColors.accent : const Color(0xFF4B4F49),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Keypad extends StatelessWidget {
-  const _Keypad({required this.onKey});
-
-  final ValueChanged<String> onKey;
-
-  static const _keys = [
-    '1',
-    '2',
-    '3',
-    '4',
-    '5',
-    '6',
-    '7',
-    '8',
-    '9',
-    '000',
-    '0',
-    '⌫',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.4,
-      children: _keys
-          .map(
-            (k) => Material(
-              color: AppColors.keypadTile,
-              borderRadius: BorderRadius.circular(14),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(14),
-                onTap: () => onKey(k),
-                child: Center(
-                  child: Text(
-                    k,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          )
-          .toList(),
     );
   }
 }

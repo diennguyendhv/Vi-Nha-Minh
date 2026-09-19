@@ -38,6 +38,7 @@ class LocalCategoryRepository implements CategoryRepository {
       statsEnabled: row.statsEnabled,
       excludeFromTotals: row.excludeFromTotals,
       linkedExpenseCategoryId: row.linkedExpenseCategoryId,
+      groupKey: row.groupKey,
       isDefault: row.isDefault,
       isActive: row.isActive,
     );
@@ -52,6 +53,7 @@ class LocalCategoryRepository implements CategoryRepository {
       statsEnabled: Value(c.statsEnabled),
       excludeFromTotals: Value(c.excludeFromTotals),
       linkedExpenseCategoryId: Value(c.linkedExpenseCategoryId),
+      groupKey: Value(c.groupKey),
       isDefault: Value(c.isDefault),
       isActive: Value(c.isActive),
     );
@@ -100,6 +102,7 @@ class LocalCategoryRepository implements CategoryRepository {
         statsEnabled: Value(category.statsEnabled),
         excludeFromTotals: Value(category.excludeFromTotals),
         linkedExpenseCategoryId: Value(category.linkedExpenseCategoryId),
+        groupKey: Value(category.groupKey),
         isActive: Value(category.isActive),
       ),
     );

@@ -8,18 +8,23 @@ import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
+import 'package:vi_nha_minh/domain/entities/obligation.dart';
+import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/repositories/category_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
+import 'package:vi_nha_minh/domain/repositories/obligation_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/presentation/features/home/home_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/feature_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 /// Widget test cho Phase 8 — Trang chủ (Dashboard rút gọn). Chỉ kiểm tra
@@ -71,6 +76,52 @@ class _FakeTransactionRepository implements TransactionRepository {
   }) async {}
 
   Future<void> dispose() => _controller.close();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})> settleObligation({
+    required String obligationId,
+    required ObligationDirection direction,
+    required String memberRefId,
+    required int amountMinor,
+    required DateTime transactionDate,
+    String note = '',
+    required String categoryId,
+    required String interestCategoryId,
+    required String principalId,
+    required String principalClientTxId,
+    required String interestId,
+    required String interestClientTxId,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> reverseObligationSettlement(String anyLegTransactionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<({Transaction principal, Transaction? interest})> correctObligationSettlement(
+    String anyLegTransactionId, {
+    required int newAmountMinor,
+    required String categoryId,
+    required String interestCategoryId,
+    required String newPrincipalId,
+    required String newPrincipalClientTxId,
+    required String newInterestId,
+    required String newInterestClientTxId,
+  }) => throw UnimplementedError();
+}
+
+/// Phase 8.8 — Home giờ cũng watch `obligationsStreamProvider` (thẻ "Vay &
+/// Cho vay"). Fake rỗng, tương tự `_StaticCategoryRepository`.
+class _StaticObligationRepository implements ObligationRepository {
+  @override
+  Future<Transaction> createObligationWithOpeningTransaction(Obligation obligation, Transaction opening) =>
+      throw UnimplementedError();
+  @override
+  Stream<List<Obligation>> watchObligations() => Stream.value(const []);
+  @override
+  Future<void> addObligation(Obligation obligation) async {}
+  @override
+  Future<void> updateObligation(Obligation obligation) async {}
 }
 
 class _StaticCategoryRepository implements CategoryRepository {
@@ -136,10 +187,12 @@ Future<void> _pumpHome(
   List<Category>? categories,
   List<Fund>? funds,
   List<SavingsAssetType>? assetTypes,
+  bool advancedFeatures = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        advancedFeaturesEnabledProvider.overrideWithValue(advancedFeatures),
         transactionRepositoryProvider.overrideWithValue(fakeRepo),
         categoryRepositoryProvider.overrideWithValue(
           _StaticCategoryRepository(categories ?? DefaultCategories.all),
@@ -150,6 +203,7 @@ Future<void> _pumpHome(
         savingsAssetTypeRepositoryProvider.overrideWithValue(
           _StaticSavingsAssetTypeRepository(assetTypes ?? DefaultSavingsAssetTypes.all),
         ),
+        obligationRepositoryProvider.overrideWithValue(_StaticObligationRepository()),
       ],
       child: const MaterialApp(home: Scaffold(body: HomeScreen())),
     ),
@@ -174,6 +228,60 @@ void main() {
     await tester.pump();
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('Phase 8.8 — Vay & Cho vay ẩn khỏi Trang chủ mặc định; bật tính năng nâng cao thì hiện lại', (tester) async {
+    await _pumpHome(tester, fakeRepo: fakeRepo);
+    fakeRepo.emit(const []);
+    await tester.pumpAndSettle();
+    expect(find.text('Vay & Cho vay'), findsNothing);
+    expect(find.textContaining('Phải thu'), findsNothing);
+    expect(find.textContaining('Phải trả'), findsNothing);
+
+    await _pumpHome(tester, fakeRepo: fakeRepo, advancedFeatures: true);
+    fakeRepo.emit(const []);
+    await tester.pumpAndSettle();
+    expect(find.text('Vay & Cho vay'), findsOneWidget);
+  });
+
+  testWidgets('Phase 8.8 — giao dịch Vay / Hoàn tiền cũ (tính năng đang ẩn) vẫn hiển thị an toàn trong lịch sử', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final now = DateTime.now();
+    Transaction tx(String id, TransactionType type, String category, PoolKind from, PoolKind to,
+        {String? fromRef, String? toRef, String? obligationId, String? recoveryOf}) => Transaction(
+      id: id,
+      type: type,
+      categoryId: category,
+      sourceKind: from,
+      sourceRefId: fromRef,
+      destinationKind: to,
+      destinationRefId: toRef,
+      amountMinor: 100000,
+      obligationId: obligationId,
+      recoveryOfTxId: recoveryOf,
+      transactionDate: now,
+      createdAt: now,
+      clientTxId: 'c-$id',
+    );
+    await _pumpHome(tester, fakeRepo: fakeRepo);
+    fakeRepo.emit([
+      tx('spend', TransactionType.expense, 'dau_tu', PoolKind.memberAvailable, PoolKind.external, fromRef: 'vo'),
+      tx('lend', TransactionType.transfer, 'cho_vay', PoolKind.memberAvailable, PoolKind.receivable,
+          fromRef: 'vo', toRef: 'ob-1', obligationId: 'ob-1'),
+      tx('borrow', TransactionType.income, 'vay_no', PoolKind.external, PoolKind.memberAvailable,
+          toRef: 'vo', obligationId: 'ob-2'),
+      tx('back', TransactionType.income, 'hoan_tien_thu_hoi', PoolKind.external, PoolKind.memberAvailable,
+          toRef: 'vo', recoveryOf: 'spend'),
+    ]);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Chi tiêu · Đầu tư'), findsOneWidget);
+    expect(find.text('Cho vay'), findsOneWidget);
+    expect(find.text('Đi vay'), findsOneWidget);
+    expect(find.text('Hoàn tiền / Thu hồi'), findsOneWidget);
   });
 
   testWidgets('16 — Empty ledger: mọi số về 0đ, không crash', (tester) async {

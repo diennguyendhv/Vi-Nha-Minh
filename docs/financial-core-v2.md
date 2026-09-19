@@ -1,5 +1,12 @@
 # Financial Core V2 — Audit & Thiết kế lại
 
+> Phase 8.8 review (2026-09-18), atomic persistence invariant được duyệt:
+> một thao tác Tạo khoản vay phải commit Obligation metadata và opening
+> Transaction trong cùng SQLite transaction hoặc rollback cả hai. Counterparty
+> độc lập, có thể tồn tại chưa có khoản vay. Cùng command/clientTxId retry phải
+> idempotent, đổi payload cùng identity phải conflict. Không thay Financial
+> Engine, principal-first allocation, reporting/recovery hay schema v6.
+
 **Trạng thái: ĐÃ CODE (Giai đoạn A, phase 1-17) + ĐÃ ĐỒNG BỘ TÀI LIỆU (2026-09-16).** Tài liệu này là kết quả Phase 1-5 (Đọc → Audit → Liệt kê vấn đề → Thiết kế V2 → Financial Core Spec) theo đúng yêu cầu review, và là **source of truth duy nhất** cho business logic tài chính — mọi mâu thuẫn giữa tài liệu này với `spec.md`/`CLAUDE.md`/`docs/design.html` đều được giải quyết bằng cách sửa 3 file kia theo đúng tài liệu này (không giữ song song 2 cách định nghĩa).
 
 **Đã chốt toàn bộ 10 quyết định ở mục 26** (6 quyết định gốc + 4 quyết định bổ sung sau đợt audit trước-khi-code ngày 2026-09-16 — xem `docs/audit-pre-implementation.md`): `MEMBER_AVAILABLE` không được âm (giống Fund/Savings) · nạp quỹ/tiết kiệm có category riêng để lên báo cáo · sửa/xoá giao dịch dùng **reversal ledger đầy đủ** (không dùng soft-delete đơn giản) · công thức tài chính dùng 3 tổng tách biệt · Status không ảnh hưởng balance · chuyển khoản giữa thành viên gộp thành 1 luồng chọn người nhận tự do (bỏ 2 category "Chồng đưa vợ"/"Vợ đưa chồng" cứng) · Fund→Fund và Savings(A)→Savings(B) chưa hỗ trợ trong MVP · giao dịch Transfer cấm source=destination · sửa giao dịch nhiều lần liên tiếp luôn thao tác trên bản mới nhất · hoàn tác 2 lần trên cùng 1 giao dịch bị chặn.
@@ -64,8 +71,8 @@ Thay vì object rời rạc (`memberBalances`, `funds`, `savings` tách biệt n
 
 | kind | refId | Ý nghĩa |
 |---|---|---|
-| `MEMBER_AVAILABLE` | uid | Tiền có thể chi của 1 thành viên |
-| `MEMBER_SAVINGS_ASSET` | `assetTypeId|uid` (ghép chuỗi, xem mục 9) | Số dư của 1 thành viên trong 1 **loại tài sản tiết kiệm tự do do gia đình tạo** (`SavingsAssetType` — Tiền mặt, Ngân hàng, Chứng khoán...; KHÔNG còn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) |
+| `MEMBER_AVAILABLE` | uid | Tiền có thể chi của 1 thành viên (tiền mặt + tiền trong tài khoản ngân hàng dùng hằng ngày, gộp làm một) |
+| `MEMBER_SAVINGS_ASSET` | `assetTypeId|uid` (ghép chuỗi, xem mục 9) | Số dư của 1 thành viên trong 1 **loại tài sản tiết kiệm tự do do gia đình tạo** (`SavingsAssetType` — Gửi ngân hàng, Vàng, Chứng khoán...; KHÔNG còn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) |
 | `FUND` | fundId | 1 quỹ cụ thể (Quỹ tiền ăn, Quỹ sinh hoạt...) |
 | `EXTERNAL` | — | Bên ngoài hệ thống (lương từ công ty, tiền trả cho người bán...) |
 
@@ -147,9 +154,9 @@ TRANSACTION
 | Chồng đưa vợ 3 triệu | TRANSFER (MEMBER_TO_MEMBER) | MEMBER_AVAILABLE(Chồng) | MEMBER_AVAILABLE(Vợ) |
 | Nạp quỹ tiền ăn 2 triệu | TRANSFER (FUND_TOPUP) | MEMBER_AVAILABLE(Vợ) | FUND(quỹ tiền ăn) |
 | Rút hết quỹ về ví (trước khi xoá quỹ) | TRANSFER (FUND_WITHDRAW) | FUND(quỹ tiền ăn) | MEMBER_AVAILABLE(người nhận) |
-| Nạp tiết kiệm 2 triệu (loại "Tiền mặt") | TRANSFER (SAVINGS_TOPUP) | MEMBER_AVAILABLE(X) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) |
-| Rút tiết kiệm 500k về ví | TRANSFER (SAVINGS_WITHDRAW) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) | MEMBER_AVAILABLE(X) |
-| Chuyển tiết kiệm sang loại khác (vd "Ngân hàng", hoặc bất kỳ loại nào X tự tạo) | TRANSFER (SAVINGS_CONVERT) | MEMBER_SAVINGS_ASSET(Tiền mặt, X) | MEMBER_SAVINGS_ASSET(Ngân hàng, X) |
+| Nạp tiết kiệm 2 triệu (loại "Gửi ngân hàng") | TRANSFER (SAVINGS_TOPUP) | MEMBER_AVAILABLE(X) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) |
+| Rút tiết kiệm 500k về ví | TRANSFER (SAVINGS_WITHDRAW) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) | MEMBER_AVAILABLE(X) |
+| Chuyển tiết kiệm sang loại khác (vd "Gửi ngân hàng" → "Vàng", hoặc bất kỳ loại nào X tự tạo) | TRANSFER (SAVINGS_CONVERT) | MEMBER_SAVINGS_ASSET(Gửi ngân hàng, X) | MEMBER_SAVINGS_ASSET(Vàng, X) |
 
 **Financial Engine — 1 hàm duy nhất xử lý mọi loại:**
 
@@ -200,20 +207,21 @@ Test 8 — Spend without Fund 500k: Member 3 → 2.5, Fund 2 → 2 (KHÔNG ĐỔ
 
 ## 9. Savings Model — cập nhật: loại tài sản tự do, không còn cố định cash/bank
 
-**Đã tổng quát hoá so với bản đầu** (từng cố định đúng 2 pool `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) — thực tế gia đình có thể "tiết kiệm" dưới nhiều hình thức khác nhau: tiền mặt, gửi ngân hàng, mua chứng khoán, mua bất động sản... Không hardcode danh sách hình thức, đúng nguyên tắc "dữ liệu, không phải hằng số cứng" đã áp dụng cho Category/Fund.
+**Đã tổng quát hoá so với bản đầu** (từng cố định đúng 2 pool `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK`) — thực tế gia đình có thể "tiết kiệm" dưới nhiều hình thức khác nhau: gửi ngân hàng, mua vàng, mua chứng khoán, mua bất động sản... (tiền mặt và tiền tài khoản dùng hằng ngày KHÔNG phải tiết kiệm — đó là tiền khả dụng) Không hardcode danh sách hình thức, đúng nguyên tắc "dữ liệu, không phải hằng số cứng" đã áp dụng cho Category/Fund.
 
 ```
 SAVINGS_ASSET_TYPE
   assetTypeId PK, familyId FK, name, color, isActive (soft delete)
 ```
 
-`SAVINGS_ASSET_TYPE` là dữ liệu gia đình tự tạo — y hệt `FUND` về hình dạng (chỉ id/tên/màu/isActive, không cache balance), khác `FUND` ở chỗ **mỗi loại tài sản là 1 pool RIÊNG cho TỪNG thành viên** (Fund thì dùng chung cả nhà). Pool kind mới `PoolKind.memberSavingsAsset` với `refId` là khoá ghép `"${assetTypeId}|${memberName}"` (hàm `savingsAssetRefId`/`parseSavingsAssetRefId`) — thay hẳn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK` của bản đầu. 2 loại seed mặc định "Tiền mặt"/"Ngân hàng" vẫn được tạo sẵn (giữ đúng trải nghiệm cũ), nhưng giờ chỉ là 2 hàng dữ liệu bình thường — xoá/thêm/sửa qua UI như bất kỳ loại nào khác, xoá được khi mọi thành viên đều về 0 ở loại đó (giống quy tắc Fund mục 8).
+`SAVINGS_ASSET_TYPE` là dữ liệu gia đình tự tạo — y hệt `FUND` về hình dạng (chỉ id/tên/màu/isActive, không cache balance), khác `FUND` ở chỗ **mỗi loại tài sản là 1 pool RIÊNG cho TỪNG thành viên** (Fund thì dùng chung cả nhà). Pool kind mới `PoolKind.memberSavingsAsset` với `refId` là khoá ghép `"${assetTypeId}|${memberName}"` (hàm `savingsAssetRefId`/`parseSavingsAssetRefId`) — thay hẳn 2 kind cố định `MEMBER_SAVINGS_CASH`/`MEMBER_SAVINGS_BANK` của bản đầu. 4 loại seed mặc định "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" được tạo sẵn, nhưng chỉ là 4 hàng dữ liệu bình thường — xoá/thêm/sửa qua UI như bất kỳ loại nào khác, xoá được khi mọi thành viên đều về 0 ở loại đó (giống quy tắc Fund mục 8).
 
 Toàn bộ thao tác tiết kiệm vẫn là `TRANSFER`, gắn 1 category riêng **"Tiết kiệm"** (`type = TRANSFER`, seed mặc định, dùng chung cho cả 3 `transferKind` bên dưới — phân biệt bằng `transferKind`, không cần 1 category riêng cho từng loại tài sản):
 
 - **Nạp:** `MEMBER_AVAILABLE(X) -tiền` → `memberSavingsAsset(loại Y, X) +tiền` — `transferKind = SAVINGS_TOPUP`.
 - **Rút về ví:** `memberSavingsAsset(loại Y, X) -tiền` → `MEMBER_AVAILABLE(X) +tiền` — `transferKind = SAVINGS_WITHDRAW`.
-- **Chuyển đổi loại tài sản** (vd Tiền mặt → Ngân hàng, hoặc Ngân hàng → Chứng khoán): `memberSavingsAsset(loại Y, X) -tiền` → `memberSavingsAsset(loại Z, X) +tiền` — `transferKind = SAVINGS_CONVERT` (thay `SAVINGS_TO_BANK` cố định của bản đầu — giờ chuyển được giữa BẤT KỲ 2 loại nào, không riêng "sang ngân hàng").
+- **Chuyển đổi loại tài sản** (vd Gửi ngân hàng → Vàng, hoặc Vàng → Chứng khoán): `memberSavingsAsset(loại Y, X) -tiền` → `memberSavingsAsset(loại Z, X) +tiền` — `transferKind = SAVINGS_CONVERT` (thay `SAVINGS_TO_BANK` cố định của bản đầu — giờ chuyển được giữa BẤT KỲ 2 loại nào, không riêng "sang ngân hàng").
+- **Quyết định sản phẩm (chủ dự án, 2026-09-19) — Available vs Savings:** tiền mặt và tiền trong tài khoản ngân hàng dùng hằng ngày là CÙNG một khái niệm — tiền khả dụng (`MEMBER_AVAILABLE`), KHÔNG phải hai `SavingsAssetType` khác nhau. Tiết kiệm là khi tiền rời khỏi khả dụng để thành một dạng tài sản khác. 4 loại seed mặc định: **Gửi ngân hàng** (tiền gửi tiết kiệm/sinh lời, KHÔNG phải tài khoản thanh toán; `assetTypeId` giữ `savings_bank` để tương thích), **Vàng**, **Chứng khoán**, **Khác**. Ví dụ đúng: `Available → Gửi ngân hàng`, `Available → Vàng`, `Gửi ngân hàng → Vàng`, `Vàng → Available`. KHÔNG thiết kế "Tiền mặt → Ngân hàng" như một `SAVINGS_CONVERT`. Seed chỉ chạy khi tạo DB mới; DB đã seed từ trước với "Tiền mặt"/"Ngân hàng" giữ nguyên (không migration, không reinterpret dữ liệu).
 
 Cả 3 đều KHÔNG đổi Total Assets (tiền chỉ đổi pool, không rời hệ thống). Không có màn nhập riêng cho tiết kiệm — cả 3 hành động đều mở lại chính màn Thêm giao dịch (`docs/design.html` màn 09, loại "Chuyển" → "Tiết kiệm", thêm bước chọn loại tài sản), tránh 2 luồng code trùng nhau cho cùng 1 việc. Màn "Tiết kiệm" riêng (Cài đặt → Tiết kiệm) chỉ để xem số dư từng loại theo từng thành viên + tạo/xoá loại tài sản, không nhập giao dịch trực tiếp — giống hệt nguyên tắc màn Quỹ.
 
@@ -246,6 +254,8 @@ Bỏ hẳn `isSaving` và `transferToUid` khỏi Category (F-04) — 2 field nà
 **`excludeFromTotals` — ví dụ dùng: category seed "Số dư ban đầu"** (`type=INCOME`). Khi mới dùng app, tiền đang có sẵn (không phải kiếm được trong kỳ) vẫn cần 1 giao dịch `INCOME` thật để cộng vào `availableBalance` — nhưng không nên tính vào `totalIncome` hàng tháng vì sẽ làm sai lệch báo cáo thu nhập thật. Cờ này là thuộc tính chung của mọi `CATEGORY` (đúng nguyên tắc "category là dữ liệu"), không hardcode riêng cho "Số dư ban đầu" — gia đình nào cũng tự đánh dấu được cho category tự tạo.
 
 **`linkedExpenseCategoryId` — ví dụ dùng: "Doanh thu" (Thu) liên kết "Chi phí vận hành" (Chi).** Đây là câu trả lời cho mẫu "thu hộ — phải trả lại" (thu tiền về nhưng phải trả 1 phần chi phí thuê ngoài): **vẫn ghi 2 giao dịch riêng biệt** (1 `INCOME` "Doanh thu" + 1 `EXPENSE` "Chi phí vận hành" có `statuses` Chưa gửi/Đã gửi để theo dõi tiến độ trả) — **không dùng số âm trên Income** (vi phạm Invariant 12), và **không gộp Chi vào trong Thu** thành 1 giao dịch (sẽ phá nguyên tắc 1 giao dịch chỉ có 1 `type`/1 cặp source-destination). Field này chỉ làm đúng 1 việc: đánh dấu category Thu "Doanh thu" biết category Chi nào là khoản nó phải trả lại, để UI tính và hiển thị thêm chỉ số **"Thu nhập ròng" = Doanh thu − Chi phí vận hành** (mục 17) — hoàn toàn không đụng tới `applyEffect`, không đổi `Total Income`/`Total External Expense`/`Total Assets`. Optional — chỉ set khi gia đình cần loại báo cáo "thu hộ" này, phần lớn category Thu (Lương, Thu nhập khác...) để `null`.
+
+**Quyết định sản phẩm (2026-09-19) — tối giản trước: Category = nhóm thống kê, Note = khoản cụ thể là gì.** Dữ liệu Excel thật ghi học phí là hạng mục "Thu nhập" với Note "HP chị Lam", còn lương/quảng cáo/bảo hành là hạng mục "Chi phí kinh doanh" với Note "Lương cô Bích"... — không cần hạng mục ghép cặp. Vì vậy: (1) cấu hình `linkedExpenseCategoryId` / "Tính thu nhập ròng" **bị ẩn hoàn toàn khỏi UI** Danh mục, Tổng hợp; cột dữ liệu, `computeNetIncome` và Test 18 giữ nguyên (không migration), và giá trị đã có được **bảo toàn** khi mở/lưu danh mục cũ; nếu sau này cần Business Profit thì thiết kế riêng theo use case thật. (2) "Chi phí kinh doanh" là category Chi mặc định BÌNH THƯỜNG (id `chi_phi_kinh_doanh`, không status/link/loại trừ), chỉ được seed khi tạo DB mới. (3) Ô **Ghi chú tự do** (không bắt buộc) có ở mọi luồng tạo giao dịch; **Note chỉ là mô tả** — không đổi loại giao dịch, hạng mục, Income/Expense hay balance, và Financial Core KHÔNG BAO GIỜ parse Note để suy luận ý nghĩa tài chính.
 
 `STATUS` (subcollection của Category) giữ nguyên như V1: `statusId, categoryId, name, sortOrder` — không đổi.
 
@@ -287,7 +297,7 @@ BUDGET
 | `CATEGORY` | Nhãn phân loại | categoryId PK, familyId FK | `isActive` | bỏ `isSaving`/`transferToUid`, thêm `type` (3 giá trị) |
 | `STATUS` | Bước tiến độ (con của Category) | statusId PK, categoryId FK | `isActive` | không đổi |
 | `FUND` | 1 pool tiền dạng quỹ | fundId PK, familyId FK | `isActive` | không đổi, bỏ subcollection `entries` |
-| `SAVINGS_ASSET_TYPE` | 1 "loại" tài sản tiết kiệm gia đình tự đặt (Tiền mặt, Ngân hàng, Chứng khoán...) | assetTypeId PK, familyId FK | `isActive` | xem mục 9 — mỗi loại là 1 pool RIÊNG cho TỪNG thành viên (`PoolKind.memberSavingsAsset`, refId ghép `assetTypeId|member`), khác `FUND` (dùng chung cả nhà). **Đây là mô hình Savings chính thức duy nhất — không còn field `savingsCash`/`savingsBank` cố định ở bất kỳ entity nào.** |
+| `SAVINGS_ASSET_TYPE` | 1 "loại" tài sản tiết kiệm gia đình tự đặt (Gửi ngân hàng, Vàng, Chứng khoán...) | assetTypeId PK, familyId FK | `isActive` | xem mục 9 — mỗi loại là 1 pool RIÊNG cho TỪNG thành viên (`PoolKind.memberSavingsAsset`, refId ghép `assetTypeId|member`), khác `FUND` (dùng chung cả nhà). **Đây là mô hình Savings chính thức duy nhất — không còn field `savingsCash`/`savingsBank` cố định ở bất kỳ entity nào.** |
 | `TRANSACTION` | **Nguồn sự thật duy nhất** — mọi chuyển động tiền | txId PK, familyId FK | `deletedAt` | xem mục 6, thay thế cả `transactions` và `funds/{id}/entries` của V1 |
 | `MEMBER_BALANCE` | Cache số dư `MEMBER_AVAILABLE` của 1 thành viên + map số dư theo từng `SavingsAssetType` | uid PK | không cần (derived) | `availableBalance` (1 field cố định) + `savingsByAssetType: { assetTypeId: amountMinor }` (map động theo số loại tài sản gia đình đã tạo — KHÔNG còn 2 field cố định `savingsCash`/`savingsBank`, xem mục 9) |
 | `MONTH_SUMMARY` | Rollup tháng | yearMonth PK, familyId FK | không cần (derived) | xem mục 17 |
@@ -370,6 +380,8 @@ Tổng "tiền ra" của 1 thành viên theo hạng mục (`computeMemberOutflow
 
 **Số dư còn lại (`availableBalance`) là 1 chuỗi liên tục, không có khái niệm "số dư ban đầu của tháng" lưu riêng.** Công thức tương đương tính tay hàng tháng ("số dư ban đầu + doanh thu − chi phí vận hành − chi tiêu − tiết kiệm = số dư hiện tại") **đúng tự động** nhờ cách balance luôn = tổng cộng dồn mọi transaction từ đầu tới nay (Invariant 10) — không cần field `openingBalance` riêng cho mỗi tháng, vì "số dư cuối tháng trước" chính là điểm mà tổng cộng dồn đang dừng ở đó, tự động trở thành điểm bắt đầu của tháng sau khi cộng thêm giao dịch mới. Đây là lý do tách biệt `availableBalance` (không reset) khỏi `MONTH_SUMMARY.totalIncome/totalExpense` (reset mỗi tháng, chỉ để báo cáo).
 
+**Thu nhập theo thành viên dùng CÙNG ngữ nghĩa với Total Income của gia đình (F25, 2026-09-19).** Không phải mọi `INCOME` đi vào ví thành viên đều là thu nhập: Số dư ban đầu (`excludeFromTotals`) tăng Available/Total Assets nhưng không phải thu nhập; gốc tiền Đi vay tạo Payable, không phải thu nhập; phần hoàn vốn của Linked Refund/Asset Recovery không phải thu nhập, chỉ phần lợi nhuận vượt chi phí gốc mới là thu nhập. Quy tắc nằm ở MỘT nơi duy nhất — `computeReportableIncomeEntries` (`lib/domain/usecases/compute_reportable_income.dart`) — và cả `computeThreeTotals` (thu nhập gia đình) lẫn `computeMemberIncomeTotal` (thu nhập từng người) cộng từ cùng danh sách đó, nên `Σ thu nhập thành viên == Total Income gia đình` trong cùng kỳ (lọc theo `transactionDate`, chỉ giao dịch `isVisible` nên reversal/correction không đếm đôi). Không viết lại quy tắc này ở Presentation và không hard-code `categoryId` nào.
+
 ---
 
 ## 18. Invariants bắt buộc
@@ -388,7 +400,7 @@ Tổng "tiền ra" của 1 thành viên theo hạng mục (`computeMemberOutflow
 12. `amountMinor` luôn dương; dấu suy ra từ `type` + vị trí source/destination.
 13. **`reverseTransaction`/`deleteTransaction` phải từ chối nếu giao dịch gốc đã có `reversedByTxId != null`** (đã bị hoàn tác/thay thế trước đó) — chống hoàn tác 2 lần trên cùng 1 giao dịch, vốn sẽ áp dụng hiệu ứng đảo ngược 2 lần vào balance (vì `computeAllPoolBalances` cộng dồn TOÀN BỘ transaction, không lọc). Ném lỗi rõ ràng (`AlreadyReversedException` hoặc tương đương) thay vì âm thầm tạo thêm 1 bản reversal chồng chéo. **[IMPLEMENTATION BLOCKER / TODO]** — chưa có guard này trong `LocalTransactionRepository` hiện tại; bắt buộc thêm trước khi PR tiếp theo đụng tới `reverseTransaction`/`deleteTransaction` được coi là hoàn chỉnh.
 14. **Sửa giao dịch (`updateTransaction`) luôn phải thao tác trên bản ghi mới nhất của 1 chuỗi sửa** (`reversedByTxId == null`) — UI không bao giờ được hiển thị nút "Sửa"/"Xoá" trên 1 bản ghi đã có `reversedByTxId != null`, kể cả khi đó là bản gốc của 1 giao dịch đã từng sửa 1 lần. Sửa lần thứ N luôn tạo `correctsTxId` trỏ tới bản thay thế gần nhất (lần N-1), không trỏ ngược về bản gốc ban đầu. **[IMPLEMENTATION BLOCKER / TODO]** — cần xác nhận `transaction_detail_screen.dart` luôn điều hướng theo `txId` mới nhất, chưa audit code UI này.
-15. **`TRANSFER` không được có source và destination là cùng 1 pool** (cùng `kind` và cùng `refId`) — chặn ở cả UI (không cho chọn người nhận = người gửi, loại tài sản đích = loại tài sản nguồn) lẫn tầng ghi dữ liệu, để không tạo ra giao dịch "rỗng" vô nghĩa trong lịch sử. **Ví dụ cụ thể cho `SAVINGS_CONVERT`:** nếu loại tài sản nguồn = loại tài sản đích (cùng `assetTypeId`, cùng thành viên) — vd chọn "Tiền mặt → Tiền mặt" — **giao dịch phải bị REJECT ngay lúc submit**, không tạo transaction "chuyển đổi cùng loại" (vô nghĩa về nghiệp vụ, dù không gây sai balance vì tự triệt tiêu). **[IMPLEMENTATION BLOCKER / TODO]** — chưa có validate này trong `LocalTransactionRepository`/UI `add_transaction_sheet.dart`.
+15. **`TRANSFER` không được có source và destination là cùng 1 pool** (cùng `kind` và cùng `refId`) — chặn ở cả UI (không cho chọn người nhận = người gửi, loại tài sản đích = loại tài sản nguồn) lẫn tầng ghi dữ liệu, để không tạo ra giao dịch "rỗng" vô nghĩa trong lịch sử. **Ví dụ cụ thể cho `SAVINGS_CONVERT`:** nếu loại tài sản nguồn = loại tài sản đích (cùng `assetTypeId`, cùng thành viên) — vd chọn "Vàng → Vàng" — **giao dịch phải bị REJECT ngay lúc submit**, không tạo transaction "chuyển đổi cùng loại" (vô nghĩa về nghiệp vụ, dù không gây sai balance vì tự triệt tiêu). **[IMPLEMENTATION BLOCKER / TODO]** — chưa có validate này trong `LocalTransactionRepository`/UI `add_transaction_sheet.dart`.
 
 ---
 
@@ -591,3 +603,9 @@ Mỗi quyết định phạm vi dưới đây dùng đúng 1 trong 3 nhãn: **`S
 | Đổi `transactionDate` của giao dịch cũ | `updateTransaction(txId, transactionDate mới)` | Update thẳng, không qua reversal, giao dịch chuyển sang rollup tháng khác | **ACCEPT** | Mục 21 — field này không ảnh hưởng balance. |
 | Offline retry (Giai đoạn B, mất mạng giữa lúc gửi) | Client gửi lại đúng request cũ (cùng `clientTxId`) khi có mạng lại | Không tạo trùng | **ACCEPT** (idempotent) | Mục 14, mục 22. |
 | Transfer source = destination (mọi loại) | `MEMBER_TO_MEMBER` người nhận = người gửi, hoặc `SAVINGS_CONVERT` cùng loại tài sản | Từ chối | **REJECT** | Invariant 15 — `[IMPLEMENTATION BLOCKER / TODO]`. |
+
+## Phase 8.8 — 4 nhóm Thu/Chi (báo cáo, KHÔNG đổi Financial Core)
+- Schema v7: `category_rows.group_key` (nullable; giá trị hợp lệ duy nhất `business_expense`). Chỉ có nghĩa với Category Chi; không ảnh hưởng `applyEffect`, số dư, Total Assets, reversal/correction.
+- Nhóm Thu = cờ `excludeFromTotals` (false → Doanh thu, true → Khoản thu khác). Nhóm Chi: `groupKey == business_expense` → Chi phí kinh doanh, ngược lại → Chi tiêu.
+- `computeGroupedTotals` (chỉ đọc, dùng cùng danh sách giao dịch hiệu lực): Doanh thu = `computeReportableIncomeEntries`; Khoản thu khác = tiền vào còn lại; Chi tiêu + Chi phí kinh doanh = `ThreeTotals.totalExpense`; Thu nhập ròng = Doanh thu − Chi phí kinh doanh; Dòng tiền = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí kinh doanh. Đổi nhóm 1 danh mục chỉ đổi báo cáo (giao dịch giữ nguyên `categoryId`).
+- Tính năng nâng cao (Vay & Cho vay, Hoàn tiền/Thu hồi) ẩn khỏi UI mặc định bằng ID hệ thống; engine/lịch sử giữ nguyên.

@@ -86,7 +86,7 @@ void main() {
           .insert(FundRowsCompanion.insert(id: 'f1', name: 'Quỹ tiền ăn', colorValue: 1));
       await db
           .into(db.savingsAssetTypeRows)
-          .insert(SavingsAssetTypeRowsCompanion.insert(id: 's1', name: 'Tiền mặt', colorValue: 1));
+          .insert(SavingsAssetTypeRowsCompanion.insert(id: 's1', name: 'Gửi ngân hàng', colorValue: 1));
       await insertCategory('c1');
 
       // DB được seed sẵn dữ liệu mặc định lúc tạo mới (`seedDefaults`) —
@@ -600,6 +600,138 @@ void main() {
           isNot(contains('recovery_of_tx_id')),
           reason: 'schema chưa hề được nâng cấp — đúng nghĩa rollback sạch, không nửa vời',
         );
+      },
+    );
+  });
+
+  group('Migration v5 → v6 (Phase 8.7 — Counterparty/Obligation + obligation_id/settlement_group_id)', () {
+    /// Dựng file schema v5 thủ công (đúng shape trước Phase 8.7: có
+    /// `recovery_of_tx_id` nhưng CHƯA có `obligation_id`/
+    /// `settlement_group_id`, chưa có bảng `counterparty_rows`/
+    /// `obligation_rows`), seed vài dòng dữ liệu đã có từ trước — kể cả 1
+    /// dòng recovery để chứng minh field Phase 8.6 cũng không bị đụng tới.
+    File buildV5Fixture(String path) {
+      final file = File(path);
+      final legacy = sqlite3_pkg.sqlite3.open(file.path);
+      legacy.execute('''
+        CREATE TABLE category_rows (
+          id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, color_value INTEGER NOT NULL,
+          type TEXT NOT NULL, stats_enabled INTEGER NOT NULL DEFAULT 0,
+          exclude_from_totals INTEGER NOT NULL DEFAULT 0, linked_expense_category_id TEXT NULL,
+          is_default INTEGER NOT NULL DEFAULT 1, is_active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE status_rows (
+          id TEXT NOT NULL PRIMARY KEY,
+          category_id TEXT NOT NULL REFERENCES category_rows (id),
+          name TEXT NOT NULL, sort_order INTEGER NOT NULL, is_active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX ix_status_category ON status_rows (category_id);
+        CREATE TABLE transaction_rows (
+          id TEXT NOT NULL PRIMARY KEY, type TEXT NOT NULL, transfer_kind TEXT NULL,
+          category_id TEXT NOT NULL REFERENCES category_rows (id), source_kind TEXT NOT NULL,
+          source_ref_id TEXT NULL, destination_kind TEXT NOT NULL, destination_ref_id TEXT NULL,
+          amount_minor INTEGER NOT NULL, currency TEXT NOT NULL DEFAULT 'VND',
+          note TEXT NOT NULL DEFAULT '', status_id TEXT NULL REFERENCES status_rows (id),
+          status_updated_at INTEGER NULL, transaction_date INTEGER NOT NULL, created_at INTEGER NOT NULL,
+          reversal_of_tx_id TEXT NULL, corrects_tx_id TEXT NULL, reversed_by_tx_id TEXT NULL,
+          recovery_of_tx_id TEXT NULL,
+          client_tx_id TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE UNIQUE INDEX ux_transaction_client_tx_id ON transaction_rows (client_tx_id);
+        CREATE INDEX ix_transaction_source ON transaction_rows (source_kind, source_ref_id);
+        CREATE INDEX ix_transaction_destination ON transaction_rows (destination_kind, destination_ref_id);
+        CREATE INDEX ix_transaction_category_status ON transaction_rows (category_id, status_id);
+        CREATE INDEX ix_transaction_recovery_of ON transaction_rows (recovery_of_tx_id);
+        CREATE TABLE fund_rows (
+          id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, color_value INTEGER NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE savings_asset_type_rows (
+          id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, color_value INTEGER NOT NULL,
+          is_active INTEGER NOT NULL DEFAULT 1
+        );
+      ''');
+      legacy.execute('''
+        INSERT INTO category_rows (id, name, color_value, type) VALUES ('c1', 'Sinh hoạt', 255, 'expense');
+      ''');
+      legacy.execute('''
+        INSERT INTO transaction_rows
+          (id, type, category_id, source_kind, destination_kind, destination_ref_id,
+           amount_minor, transaction_date, created_at, client_tx_id)
+        VALUES
+          ('tx-old', 'expense', 'c1', 'memberAvailable', 'external', NULL,
+           2000000, 1756684800000, 1756684800000, 'v5-client-1');
+      ''');
+      legacy.execute('''
+        INSERT INTO transaction_rows
+          (id, type, category_id, source_kind, destination_kind, destination_ref_id,
+           amount_minor, transaction_date, created_at, client_tx_id, recovery_of_tx_id)
+        VALUES
+          ('tx-recovery-old', 'income', 'c1', 'external', 'memberAvailable', 'vo',
+           500000, 1756684800000, 1756684800000, 'v5-client-2', 'tx-old');
+      ''');
+      legacy.execute('PRAGMA user_version = 5;');
+      legacy.close();
+      return file;
+    }
+
+    test(
+      'migrate từ schema v5 (chưa có obligation_id/settlement_group_id/Counterparty/Obligation) lên v6 '
+      'không mất dữ liệu, mọi row cũ có obligationId/settlementGroupId = null, KHÔNG reinterpret '
+      'dòng nào (kể cả dòng đã là recovery từ Phase 8.6)',
+      () async {
+        final dir = Directory.systemTemp.createTempSync('vnm_migration_v6_test');
+        addTearDown(() => dir.deleteSync(recursive: true));
+        final file = buildV5Fixture('${dir.path}/v5.sqlite');
+
+        final migrated = AppDatabase.forTesting(NativeDatabase(file));
+        addTearDown(migrated.close);
+
+        final txs = await migrated.select(migrated.transactionRows).get();
+        expect(txs, hasLength(2));
+        final old = txs.firstWhere((t) => t.id == 'tx-old');
+        expect(old.amountMinor, 2000000);
+        expect(old.obligationId, isNull, reason: 'dữ liệu cũ KHÔNG được reinterpret — mục T MIGRATION STRATEGY');
+        expect(old.settlementGroupId, isNull);
+        final recovery = txs.firstWhere((t) => t.id == 'tx-recovery-old');
+        expect(recovery.recoveryOfTxId, 'tx-old', reason: 'field Phase 8.6 KHÔNG bị đụng tới');
+        expect(recovery.obligationId, isNull);
+
+        // Constraint cũ (FK + unique clientTxId) vẫn còn hiệu lực sau migrate.
+        expect(
+          () => migrated
+              .into(migrated.transactionRows)
+              .insert(txCompanion(id: 'tx-new', categoryId: 'khong_ton_tai')),
+          throwsA(isA<SqliteException>()),
+        );
+
+        // Bảng mới (Counterparty/Obligation) dùng được ngay.
+        await migrated.into(migrated.counterpartyRows).insert(
+          CounterpartyRowsCompanion.insert(id: 'cp-1', displayName: 'Chị Hằng'),
+        );
+        await migrated.into(migrated.obligationRows).insert(
+          ObligationRowsCompanion.insert(id: 'oblig-1', counterpartyId: 'cp-1', direction: 'receivable'),
+        );
+        final obligations = await migrated.select(migrated.obligationRows).get();
+        expect(obligations, hasLength(1));
+        expect(obligations.single.counterpartyId, 'cp-1');
+
+        // Cột mới (`obligation_id`/`settlement_group_id`) dùng được bình thường.
+        await migrated.into(migrated.transactionRows).insert(
+          txCompanion(id: 'settlement-1', categoryId: 'c1', clientTxId: 'v6-client-1'),
+        );
+        await (migrated.update(migrated.transactionRows)..where((r) => r.id.equals('settlement-1')))
+            .write(
+              const TransactionRowsCompanion(
+                obligationId: Value('oblig-1'),
+                settlementGroupId: Value('settlement-1'),
+              ),
+            );
+        final settlement = await (migrated.select(
+          migrated.transactionRows,
+        )..where((r) => r.id.equals('settlement-1'))).getSingle();
+        expect(settlement.obligationId, 'oblig-1');
+        expect(settlement.settlementGroupId, 'settlement-1');
       },
     );
   });

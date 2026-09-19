@@ -2,15 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction_type.dart';
-import '../../../domain/usecases/compute_net_income.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/status_providers.dart';
-import '../../providers/transaction_providers.dart';
 
 const _swatches = <Color>[
   Color(0xFFE8A23E),
@@ -21,12 +18,29 @@ const _swatches = <Color>[
   Color(0xFF8FA3B3),
 ];
 
-/// Màn "Danh mục — Chỉnh sửa" (`docs/design.html` màn 07) — CRUD danh mục +
-/// trạng thái con (phase 12). `categoryId == null` = tạo mới.
+/// Màn "Danh mục — Thêm/Sửa" (`docs/design.html` màn 07) — CRUD danh mục +
+/// bước trạng thái con. `categoryId == null` = tạo mới.
+///
+/// SIMPLE BY DEFAULT, POWERFUL WHEN NEEDED: mặc định chỉ có Tên + Phân loại
+/// (Thu/Chi) + Lưu. Mọi thiết lập nâng cao (màu, theo dõi tiến độ, hiện ở
+/// Tổng hợp, không tính vào thu nhập, thu nhập ròng) nằm trong "Tuỳ chọn
+/// nâng cao" — thu gọn khi Thêm, tự mở khi Sửa một danh mục đã có thiết lập
+/// nâng cao. Các giá trị luôn nằm trong state của màn này nên thu gọn phần
+/// nâng cao KHÔNG làm mất cấu hình đã có.
 class CategoryEditScreen extends ConsumerStatefulWidget {
-  const CategoryEditScreen({super.key, this.categoryId});
+  const CategoryEditScreen({
+    super.key,
+    this.categoryId,
+    this.initialType,
+    this.initialSecondGroup = false,
+  });
 
   final String? categoryId;
+
+  /// Chỉ dùng khi TẠO MỚI từ 1 nhóm trong màn Danh mục: điền sẵn Thu/Chi và
+  /// nhóm thứ hai (Khoản thu khác / Chi phí kinh doanh) để giảm thao tác.
+  final TransactionType? initialType;
+  final bool initialSecondGroup;
 
   @override
   ConsumerState<CategoryEditScreen> createState() => _CategoryEditScreenState();
@@ -38,14 +52,50 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   TransactionType _type = TransactionType.expense;
   Color _color = _swatches.first;
   bool _statsEnabled = false;
+
+  /// Nhóm của danh mục THU: false = Doanh thu, true = Khoản thu khác (chính
+  /// là cờ `excludeFromTotals` — không có trường thứ hai).
   bool _excludeFromTotals = false;
+
+  /// Nhóm của danh mục CHI: null = Chi tiêu, `business_expense` = Chi phí
+  /// kinh doanh (`Category.groupKey`).
+  String? _groupKey;
+
+  /// Cấu hình "thu nhập ròng" cũ (`linkedExpenseCategoryId`) KHÔNG còn hiện
+  /// trên UI (quyết định sản phẩm: đơn giản trước, chi tiết đi trong Ghi
+  /// chú). Giá trị đã có vẫn được ĐỌC vào đây và GHI LẠI nguyên vẹn khi lưu,
+  /// để mở/lưu danh mục cũ không làm mất dữ liệu.
   String? _linkedExpenseCategoryId;
+
+  /// TẤT CẢ các bước, kể cả bước đã ẩn (`isActive == false`) — để cho phép
+  /// "Sử dụng lại" và không làm mất bước khi lưu.
   List<Status> _statuses = [];
   List<Status> _originalStatuses = [];
   bool _initialized = false;
+  bool _advancedOpen = false;
+  bool _nameError = false;
+
+  /// Id của bước trạng thái mà tên vừa nhập trùng (đang dùng hoặc ngừng sử
+  /// dụng) — hiện thông báo thay vì âm thầm tạo bản trùng.
+  String? _duplicateStatusId;
   late final String _categoryId = widget.categoryId ?? IdGenerator.generate();
 
   bool get _isNew => widget.categoryId == null;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_isNew) {
+      _type = widget.initialType ?? _type;
+      if (widget.initialSecondGroup) {
+        if (_type == TransactionType.income) {
+          _excludeFromTotals = true;
+        } else {
+          _groupKey = CategoryGroupKey.businessExpense;
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -54,21 +104,39 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     super.dispose();
   }
 
+  /// Danh mục đã có thiết lập nâng cao nào không (không tính màu — màu luôn
+  /// có giá trị). Dùng để tự mở "Tuỳ chọn nâng cao" khi Sửa.
+  static bool _hasAdvancedConfig(Category c) =>
+      c.statuses.isNotEmpty || c.statsEnabled;
+
   void _initFrom(Category category) {
     _nameController.text = category.name;
     _type = category.type;
     _color = category.color;
     _statsEnabled = category.statsEnabled;
     _excludeFromTotals = category.excludeFromTotals;
+    _groupKey = category.groupKey;
     _linkedExpenseCategoryId = category.linkedExpenseCategoryId;
     _statuses = List.of(category.statuses);
     _originalStatuses = List.of(category.statuses);
+    _advancedOpen = _hasAdvancedConfig(category);
   }
+
+  static String _norm(String value) =>
+      value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
   void _addStatus() {
     final name = _newStatusController.text.trim();
     if (name.isEmpty) return;
+    // Kiểm tra CẢ bước đang dùng lẫn đã ngừng sử dụng: không âm thầm tạo bản
+    // trùng (mỗi bản trùng là 1 status id thừa).
+    final clash = _statuses.where((s) => _norm(s.name) == _norm(name));
+    if (clash.isNotEmpty) {
+      setState(() => _duplicateStatusId = clash.first.id);
+      return;
+    }
     setState(() {
+      _duplicateStatusId = null;
       _statuses = [
         ..._statuses,
         Status(
@@ -82,13 +150,88 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     });
   }
 
-  void _removeStatus(Status status) {
-    setState(() => _statuses = _statuses.where((s) => s.id != status.id).toList());
+  /// "Ngừng sử dụng": bước đã lưu chỉ đặt `isActive = false` (KHÔNG xoá cứng —
+  /// giao dịch cũ vẫn giữ `statusId` và vẫn thấy tên). Bước mới chưa từng
+  /// lưu thì bỏ hẳn khỏi danh sách nháp.
+  void _stopUsingStatus(Status status) {
+    final existed = _originalStatuses.any((o) => o.id == status.id);
+    setState(() {
+      _statuses = existed
+          ? [
+              for (final s in _statuses)
+                s.id == status.id ? s.copyWith(isActive: false) : s,
+            ]
+          : _statuses.where((s) => s.id != status.id).toList();
+    });
+  }
+
+  /// "Sử dụng lại": giữ NGUYÊN id cũ, chỉ `isActive = true`.
+  void _reuseStatus(Status status) {
+    setState(() {
+      _statuses = [
+        for (final s in _statuses)
+          s.id == status.id ? s.copyWith(isActive: true) : s,
+      ];
+      if (_duplicateStatusId == status.id) {
+        _duplicateStatusId = null;
+        _newStatusController.clear();
+      }
+    });
+  }
+
+  Future<void> _renameStatus(Status status) async {
+    final controller = TextEditingController(text: status.name);
+    String? error;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setLocal) => AlertDialog(
+          title: const Text('Đổi tên trạng thái'),
+          content: TextField(
+            key: const Key('status_rename_field'),
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(errorText: error),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Huỷ'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                if (value.isEmpty) return;
+                final clash = _statuses.any(
+                  (s) => s.id != status.id && _norm(s.name) == _norm(value),
+                );
+                if (clash) {
+                  setLocal(() => error = 'Đã có trạng thái tên này');
+                  return;
+                }
+                Navigator.of(context).pop(value);
+              },
+              child: const Text('Lưu'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    setState(() {
+      _statuses = [
+        for (final s in _statuses)
+          s.id == status.id ? s.copyWith(name: name) : s,
+      ];
+    });
   }
 
   Future<void> _save(List<Category> allCategories) async {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    if (name.isEmpty) {
+      setState(() => _nameError = true);
+      return;
+    }
 
     final category = Category(
       id: _categoryId,
@@ -98,8 +241,10 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
       statuses: _statuses,
       statsEnabled: _statsEnabled,
       excludeFromTotals: _excludeFromTotals,
-      linkedExpenseCategoryId:
-          _type == TransactionType.income ? _linkedExpenseCategoryId : null,
+      groupKey: _type == TransactionType.expense ? _groupKey : null,
+      linkedExpenseCategoryId: _type == TransactionType.income
+          ? _linkedExpenseCategoryId
+          : null,
       isDefault: false,
     );
 
@@ -111,28 +256,28 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     }
 
     final statusRepository = ref.read(statusRepositoryProvider);
-    final originalIds = _originalStatuses.map((s) => s.id).toSet();
-    final currentIds = _statuses.map((s) => s.id).toSet();
-
-    for (final removed in _originalStatuses) {
-      if (!currentIds.contains(removed.id)) {
-        await statusRepository.softDeleteStatus(removed.id);
-      }
-    }
     for (final s in _statuses) {
-      if (originalIds.contains(s.id)) {
-        final original = _originalStatuses.firstWhere((o) => o.id == s.id);
-        if (original.name != s.name) {
-          await statusRepository.renameStatus(s.id, s.name);
-        }
-      } else {
+      final matches = _originalStatuses.where((o) => o.id == s.id);
+      if (matches.isEmpty) {
         await statusRepository.addStatus(s);
+        continue;
+      }
+      final original = matches.first;
+      if (original.name != s.name) {
+        await statusRepository.renameStatus(s.id, s.name);
+      }
+      if (original.isActive && !s.isActive) {
+        await statusRepository.softDeleteStatus(s.id);
+      } else if (!original.isActive && s.isActive) {
+        await statusRepository.reactivateStatus(s.id);
       }
     }
-    await statusRepository.reorderStatuses(
-      _categoryId,
-      _statuses.map((s) => s.id).toList(),
-    );
+    if (_statuses.isNotEmpty) {
+      await statusRepository.reorderStatuses(
+        _categoryId,
+        _statuses.map((s) => s.id).toList(),
+      );
+    }
 
     if (mounted) Navigator.of(context).pop();
   }
@@ -145,21 +290,16 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   @override
   Widget build(BuildContext context) {
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? [];
 
     if (!_isNew && !_initialized) {
       for (final c in categories) {
         if (c.id == widget.categoryId) {
           _initFrom(c);
+          _initialized = true;
           break;
         }
       }
-      _initialized = true;
     }
-
-    final expenseCategoriesForLink = categories
-        .where((c) => c.type == TransactionType.expense && c.id != _categoryId)
-        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -168,143 +308,112 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
           if (!_isNew)
             TextButton(
               onPressed: _delete,
-              child: const Text('Xoá', style: TextStyle(color: AppColors.expenseAmount)),
+              child: const Text(
+                'Xoá',
+                style: TextStyle(color: AppColors.expenseAmount),
+              ),
             ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Text('Tên danh mục', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+          const Text(
+            'Tên danh mục',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 6),
           TextField(
+            key: const Key('category_name'),
             controller: _nameController,
-            decoration: const InputDecoration(border: OutlineInputBorder()),
+            onChanged: (_) {
+              if (_nameError) setState(() => _nameError = false);
+            },
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              errorText: _nameError ? 'Nhập tên danh mục' : null,
+            ),
           ),
           const SizedBox(height: 18),
-          const Text('Phân loại', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
+          const Text(
+            'Phân loại',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+          ),
           const SizedBox(height: 6),
           SegmentedButton<TransactionType>(
+            key: const Key('category_type'),
             segments: const [
               ButtonSegment(value: TransactionType.income, label: Text('Thu')),
               ButtonSegment(value: TransactionType.expense, label: Text('Chi')),
             ],
             selected: {_type},
-            onSelectionChanged: (s) => setState(() => _type = s.first),
-          ),
-          if (_type == TransactionType.income) ...[
-            const SizedBox(height: 18),
-            const Text(
-              'Danh mục chi liên kết (tuỳ chọn, để tính Thu nhập ròng)',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 6),
-            DropdownButtonFormField<String?>(
-              value: _linkedExpenseCategoryId,
-              isExpanded: true,
-              decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Không liên kết')),
-                for (final c in expenseCategoriesForLink)
-                  DropdownMenuItem(value: c.id, child: Text(c.name)),
-              ],
-              onChanged: (id) => setState(() => _linkedExpenseCategoryId = id),
-            ),
-            if (_linkedExpenseCategoryId != null) ...[
-              const SizedBox(height: 10),
-              Builder(
-                builder: (context) {
-                  final linked = expenseCategoriesForLink.firstWhere(
-                    (c) => c.id == _linkedExpenseCategoryId,
-                  );
-                  final draft = Category(
-                    id: _categoryId,
-                    name: _nameController.text,
-                    color: _color,
-                    type: TransactionType.income,
-                  );
-                  final net = computeNetIncome(draft, linked, transactions) ?? 0;
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      'Thu nhập ròng hiện tại: ${Formatters.amount(net)}',
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-                    ),
-                  );
-                },
-              ),
-            ],
-            const SizedBox(height: 12),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Không tính vào Tổng thu'),
-              subtitle: const Text('excludeFromTotals — vd "Số dư ban đầu"'),
-              value: _excludeFromTotals,
-              onChanged: (v) => setState(() => _excludeFromTotals = v),
-            ),
-          ],
-          const SizedBox(height: 18),
-          const Text('Màu', style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary)),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: _swatches
-                .map(
-                  (c) => GestureDetector(
-                    onTap: () => setState(() => _color = c),
-                    child: CircleAvatar(
-                      backgroundColor: c,
-                      radius: 16,
-                      child: _color == c
-                          ? const Icon(Icons.check, color: Colors.white, size: 16)
-                          : null,
-                    ),
-                  ),
-                )
-                .toList(),
+            onSelectionChanged: (s) => setState(() {
+              _type = s.first;
+              _excludeFromTotals = false;
+              _groupKey = null;
+            }),
           ),
           const SizedBox(height: 18),
           const Text(
-            'Trạng thái (để trống nếu không cần theo dõi)',
+            'Thuộc nhóm',
             style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
-          const SizedBox(height: 8),
-          for (final s in _statuses)
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.drag_handle),
-              title: Text(s.name),
-              trailing: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => _removeStatus(s),
+          const SizedBox(height: 6),
+          if (_type == TransactionType.income)
+            SegmentedButton<bool>(
+              key: const Key('category_group'),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Doanh thu')),
+                ButtonSegment(value: true, label: Text('Khoản thu khác')),
+              ],
+              selected: {_excludeFromTotals},
+              onSelectionChanged: (s) =>
+                  setState(() => _excludeFromTotals = s.first),
+            )
+          else
+            SegmentedButton<bool>(
+              key: const Key('category_group'),
+              segments: const [
+                ButtonSegment(value: false, label: Text('Chi tiêu')),
+                ButtonSegment(value: true, label: Text('Chi phí kinh doanh')),
+              ],
+              selected: {_groupKey == CategoryGroupKey.businessExpense},
+              onSelectionChanged: (s) => setState(
+                () => _groupKey = s.first
+                    ? CategoryGroupKey.businessExpense
+                    : null,
               ),
             ),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _newStatusController,
-                  decoration: const InputDecoration(hintText: 'Thêm bước trạng thái...'),
-                  onSubmitted: (_) => _addStatus(),
-                ),
+          const SizedBox(height: 8),
+          InkWell(
+            key: const Key('category_advanced_toggle'),
+            onTap: () => setState(() => _advancedOpen = !_advancedOpen),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    _advancedOpen
+                        ? Icons.keyboard_arrow_down_rounded
+                        : Icons.keyboard_arrow_right_rounded,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    'Tuỳ chọn nâng cao',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
-              IconButton(icon: const Icon(Icons.add_circle), onPressed: _addStatus),
-            ],
+            ),
           ),
+          if (_advancedOpen) ..._advancedSection(),
           const SizedBox(height: 12),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Thống kê'),
-            subtitle: const Text('Hiện danh mục này ở màn Tổng hợp trạng thái'),
-            value: _statsEnabled,
-            onChanged: (v) => setState(() => _statsEnabled = v),
-          ),
-          const SizedBox(height: 20),
           ElevatedButton(
+            key: const Key('category_save'),
             onPressed: () => _save(categories),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.accent,
@@ -315,6 +424,198 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  List<Widget> _advancedSection() {
+    final hasActiveStatus = _statuses.any((s) => s.isActive);
+
+    return [
+      const Text(
+        'Màu',
+        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        children: _swatches
+            .map(
+              (c) => GestureDetector(
+                onTap: () => setState(() => _color = c),
+                child: CircleAvatar(
+                  backgroundColor: c,
+                  radius: 16,
+                  child: _color == c
+                      ? const Icon(Icons.check, color: Colors.white, size: 16)
+                      : null,
+                ),
+              ),
+            )
+            .toList(),
+      ),
+      const SizedBox(height: 18),
+      const Text(
+        'Theo dõi tiến độ',
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+        ),
+      ),
+      const SizedBox(height: 2),
+      const Text(
+        'Tuỳ chọn — ví dụ: Chưa chuẩn bị → Đã chuẩn bị → Đã gửi. Để trống nếu không cần.',
+        style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+      ),
+      const SizedBox(height: 8),
+      ..._statusSection(),
+      if (hasActiveStatus) ...[
+        const SizedBox(height: 12),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Hiện ở màn Tổng hợp'),
+          subtitle: const Text('Xem tổng tiền theo từng bước tiến độ'),
+          value: _statsEnabled,
+          onChanged: (v) => setState(() => _statsEnabled = v),
+        ),
+      ],
+      const SizedBox(height: 8),
+    ];
+  }
+
+  List<Widget> _statusSection() {
+    final active = _statuses.where((s) => s.isActive).toList();
+    final stopped = _statuses.where((s) => !s.isActive).toList();
+    final duplicate = _duplicateStatusId == null
+        ? null
+        : _statuses.where((s) => s.id == _duplicateStatusId).firstOrNull;
+
+    return [
+      if (active.isNotEmpty) ...[
+        const Text(
+          'Đang sử dụng',
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+        for (final s in active)
+          Padding(
+            key: Key('status_${s.id}'),
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Expanded(child: Text(s.name)),
+                _StatusAction(
+                  key: Key('status_edit_${s.id}'),
+                  label: 'Sửa',
+                  onPressed: () => _renameStatus(s),
+                ),
+                _StatusAction(
+                  key: Key('status_stop_${s.id}'),
+                  label: 'Ngừng sử dụng',
+                  onPressed: () => _stopUsingStatus(s),
+                ),
+              ],
+            ),
+          ),
+      ],
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: const Key('status_add_field'),
+              controller: _newStatusController,
+              decoration: const InputDecoration(hintText: '+ Thêm trạng thái'),
+              onChanged: (_) {
+                if (_duplicateStatusId != null) {
+                  setState(() => _duplicateStatusId = null);
+                }
+              },
+              onSubmitted: (_) => _addStatus(),
+            ),
+          ),
+          IconButton(
+            key: const Key('status_add_button'),
+            icon: const Icon(Icons.add_circle),
+            onPressed: _addStatus,
+          ),
+        ],
+      ),
+      if (duplicate != null)
+        Padding(
+          key: const Key('status_duplicate_notice'),
+          padding: const EdgeInsets.only(top: 6),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  duplicate.isActive
+                      ? 'Trạng thái này đã có.'
+                      : 'Trạng thái này đã tồn tại nhưng đang ngừng sử dụng.',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.expenseAmount,
+                  ),
+                ),
+              ),
+              if (!duplicate.isActive)
+                _StatusAction(
+                  key: const Key('status_duplicate_reuse'),
+                  label: 'Sử dụng lại',
+                  onPressed: () => _reuseStatus(duplicate),
+                ),
+            ],
+          ),
+        ),
+      if (stopped.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        Text(
+          'Ngừng sử dụng (${stopped.length})',
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+        for (final s in stopped)
+          Padding(
+            key: Key('status_${s.id}'),
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    s.name,
+                    style: const TextStyle(color: AppColors.textMuted),
+                  ),
+                ),
+                _StatusAction(
+                  key: Key('status_reuse_${s.id}'),
+                  label: 'Sử dụng lại',
+                  onPressed: () => _reuseStatus(s),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ];
+  }
+}
+
+class _StatusAction extends StatelessWidget {
+  const _StatusAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(0, 36),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 13)),
     );
   }
 }

@@ -1,6 +1,7 @@
 import '../../domain/entities/transaction.dart';
 import '../../domain/repositories/transaction_repository.dart';
 import '../commands/create_transaction_command.dart';
+import '../commands/transaction_from_command.dart';
 
 /// Orchestration DUY NHẤT giữa 1 [CreateTransactionCommand] và
 /// [TransactionRepository.addTransaction] — Phase 4 mục 11.
@@ -31,32 +32,6 @@ class AddTransactionUseCase {
   final TransactionRepository _repository;
 
   Future<Transaction> call(CreateTransactionCommand command) {
-    final transaction = Transaction(
-      id: command.id,
-      type: command.type,
-      transferKind: command.transferKind,
-      categoryId: command.categoryId,
-      sourceKind: command.sourceKind,
-      sourceRefId: command.sourceRefId,
-      destinationKind: command.destinationKind,
-      destinationRefId: command.destinationRefId,
-      amountMinor: command.amountMinor,
-      note: command.note,
-      statusId: command.statusId,
-      recoveryOfTxId: command.recoveryOfTxId,
-      transactionDate: command.transactionDate,
-      // Audit timestamp của LẦN THỬ NÀY — cố tình sinh mới mỗi lần `call()`
-      // chạy (khác `command.transactionDate`/`clientTxId`, được freeze 1
-      // lần ở command). Không đổi convention hiện tại của project (naive
-      // local DateTime, không toUtc() — `docs/global-readiness-audit.md`
-      // mục 11).
-      createdAt: DateTime.now(),
-      clientTxId: command.clientTxId,
-      // Snapshot từ command (đã resolve 1 lần lúc tạo qua
-      // CreateTransactionCommandFactory) — KHÔNG dùng default `'VND'` ẩn
-      // của Transaction entity, KHÔNG có literal currency nào ở đây.
-      currency: command.baseCurrencyCode,
-    );
-    return _repository.addTransaction(transaction);
+    return _repository.addTransaction(transactionFromCommand(command));
   }
 }

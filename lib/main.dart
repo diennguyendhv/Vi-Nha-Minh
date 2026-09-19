@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'presentation/widgets/tap_guard.dart';
+
 import 'package:google_fonts/google_fonts.dart';
 
 import 'core/router/app_router.dart';
@@ -31,6 +34,8 @@ class ViNhaMinhApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: appRouter,
+      builder: (context, child) =>
+          TapGuardScope(child: child ?? const SizedBox.shrink()),
     );
   }
 }

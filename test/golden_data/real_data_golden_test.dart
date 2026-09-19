@@ -13,6 +13,7 @@ import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
+import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_three_totals.dart';
 
 /// PHASE 8.5 — REAL-DATA GOLDEN TEST.
@@ -90,7 +91,7 @@ void main() {
   ];
 
   const legacyAssetType = SavingsAssetType(id: 'legacy', name: 'Tiết kiệm (legacy)', color: Color(0xFF000010));
-  const bankAssetType = SavingsAssetType(id: 'ngan_hang', name: 'Ngân hàng', color: Color(0xFF000011));
+  const bankAssetType = SavingsAssetType(id: 'ngan_hang', name: 'Gửi ngân hàng', color: Color(0xFF000011));
   final assetTypes = <SavingsAssetType>[legacyAssetType, bankAssetType];
   const noFunds = <Fund>[];
 
@@ -177,7 +178,7 @@ void main() {
   // ---- Synthetic STATE_SPLIT (mục 4, LEGACY_RULES "STATE SPLIT" policy) —
   // KHÔNG phải 1 dòng raw cụ thể: dữ liệu gốc chỉ có 1 pool tiết kiệm chung
   // cho Chồng, không phân biệt "Ngân hàng"/"khác" theo từng dòng. Người
-  // dùng xác nhận tách 70.000.000 sang loại tài sản "Ngân hàng" bằng ĐÚNG
+  // dùng xác nhận tách 70.000.000 sang loại tài sản "Gửi ngân hàng" (id 'ngan_hang') bằng ĐÚNG
   // 1 giao dịch SAVINGS_CONVERT, Total Assets không đổi.
   final stateSplitTx = Transaction(
     id: 'state-split-bank',
@@ -436,6 +437,65 @@ void main() {
       // legacy nào.
       final transferTx = realTx.where((t) => t.categoryId == 'chuyen_tien_thanh_vien').toList();
       expect(transferTx.length, 58, reason: '49 Chồng đưa vợ + 9 Vợ đưa chồng, KHÔNG có dòng Vợ chồng nào lọt vào (đã IGNORE ở bước export)');
+    });
+  });
+
+  // ---- Phase 8.8 — 4 nhóm Thu/Chi trên DỮ LIỆU THẬT (chỉ THÊM số báo cáo,
+  // không đổi expected core nào ở trên).
+  group('Phase 8.8 — 4 nhóm Thu/Chi (report-only) khớp Financial Core trên dữ liệu thật', () {
+    final groupCategories = [
+      for (final c in categories)
+        c.id == 'chi_phi_kinh_doanh'
+            ? c.copyWith(groupKey: CategoryGroupKey.businessExpense)
+            : c,
+    ];
+    final ledger = [...openingTx, ...realTx];
+
+    test('Doanh thu == totalIncome và Chi tiêu + Chi phí KD == totalExpense (toàn kỳ + từng tháng)', () {
+      final three = computeThreeTotals(ledger, groupCategories);
+      final grouped = computeGroupedTotals(ledger, groupCategories);
+      expect(grouped.revenue, three.totalIncome);
+      expect(grouped.spending + grouped.businessExpense, three.totalExpense);
+      for (var m = 1; m <= 12; m++) {
+        final month = DateTime(2026, m);
+        final t = computeThreeTotals(ledger, groupCategories, month: month);
+        final g = computeGroupedTotals(ledger, groupCategories, month: month);
+        expect(g.revenue, t.totalIncome, reason: 'tháng $m');
+        expect(g.spending + g.businessExpense, t.totalExpense, reason: 'tháng $m');
+      }
+    });
+
+    test('Chi phí kinh doanh = đúng tổng các dòng chi_phi_kinh_doanh; Số dư ban đầu + Thu hồi nằm ở Khoản thu khác', () {
+      final grouped = computeGroupedTotals(ledger, groupCategories);
+      final expectedBusiness = ledger
+          .where((t) => isVisible(t) && t.categoryId == 'chi_phi_kinh_doanh')
+          .fold<int>(0, (s, t) => s + t.amountMinor);
+      expect(expectedBusiness, greaterThan(0), reason: 'dữ liệu thật có 24 dòng chi phí kinh doanh');
+      expect(grouped.businessExpense, expectedBusiness);
+
+      final expectedOther = ledger
+          .where((t) =>
+              isVisible(t) &&
+              t.type == TransactionType.income &&
+              (t.categoryId == 'so_du_ban_dau' || t.categoryId == 'thu_hoi_tai_san_hoan_tien'))
+          .fold<int>(0, (s, t) => s + t.amountMinor);
+      expect(grouped.otherInflow, expectedOther);
+      expect(grouped.netIncome, grouped.revenue - grouped.businessExpense);
+    });
+
+    test('Đổi nhóm chi_phi_kinh_doanh sang Chi tiêu chỉ đổi báo cáo: số dư/Total Assets y hệt', () {
+      final asSpending = [
+        for (final c in groupCategories)
+          c.id == 'chi_phi_kinh_doanh' ? c.copyWith(groupKey: null) : c,
+      ];
+      final a = computeGroupedTotals(ledger, groupCategories);
+      final b = computeGroupedTotals(ledger, asSpending);
+      expect(b.businessExpense, 0);
+      expect(b.spending, a.spending + a.businessExpense);
+      expect(b.cashFlow, a.cashFlow, reason: 'Dòng tiền không đổi khi đổi nhóm Chi');
+      final balancesA = computeAllPoolBalances(ledger);
+      final balancesB = computeAllPoolBalances(ledger);
+      expect(balancesA, balancesB);
     });
   });
 }

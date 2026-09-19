@@ -4,6 +4,8 @@ import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
+import 'package:vi_nha_minh/domain/entities/obligation.dart';
+import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -33,6 +35,8 @@ void main() {
     String? reversalOfTxId,
     String? correctsTxId,
     String? reversedByTxId,
+    String? recoveryOfTxId,
+    String? obligationId,
   }) {
     seq++;
     return Transaction(
@@ -51,6 +55,8 @@ void main() {
       reversalOfTxId: reversalOfTxId,
       correctsTxId: correctsTxId,
       reversedByTxId: reversedByTxId,
+      recoveryOfTxId: recoveryOfTxId,
+      obligationId: obligationId,
       clientTxId: 'client-$seq',
     );
   }
@@ -63,14 +69,15 @@ void main() {
   );
   const fundA = Fund(id: 'fund_a', name: 'Quỹ A', color: Color(0xFF111111));
   const fundB = Fund(id: 'fund_b', name: 'Quỹ B', color: Color(0xFF222222));
-  const cashType = SavingsAssetType(id: 'cash', name: 'Tiền mặt', color: Color(0xFF333333));
-  const bankType = SavingsAssetType(id: 'bank', name: 'Ngân hàng', color: Color(0xFF444444));
+  const depositType = SavingsAssetType(id: 'deposit', name: 'Gửi ngân hàng', color: Color(0xFF333333));
+  const goldType = SavingsAssetType(id: 'gold', name: 'Vàng', color: Color(0xFF444444));
 
   FinancialSummary summarize(
     List<Transaction> txs, {
     List<Category> categories = const [],
     List<Fund> funds = const [],
     List<SavingsAssetType> assetTypes = const [],
+    List<Obligation> obligations = const [],
     DateTime? month,
   }) {
     return computeFinancialSummary(
@@ -78,6 +85,7 @@ void main() {
       categories: categories,
       funds: funds,
       assetTypes: assetTypes,
+      obligations: obligations,
       month: month,
     );
   }
@@ -206,7 +214,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         amountMinor: 1000000,
       );
       final after = seedAndAssets([topup]);
@@ -220,7 +228,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         amountMinor: 1000000,
       );
       final before = seedAndAssets([topup]);
@@ -228,7 +236,7 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsWithdraw,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        sourceRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         destinationKind: PoolKind.memberAvailable,
         destinationRefId: 'vo',
         amountMinor: 400000,
@@ -244,7 +252,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         amountMinor: 1000000,
       );
       final beforeSummary = summarize(
@@ -258,15 +266,15 @@ void main() {
           ),
           topup,
         ],
-        assetTypes: [cashType, bankType],
+        assetTypes: [depositType, goldType],
       );
       final convert = tx(
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        sourceRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(bankType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(goldType.id, FamilyMember.vo),
         amountMinor: 600000,
       );
       final afterSummary = summarize(
@@ -281,13 +289,13 @@ void main() {
           topup,
           convert,
         ],
-        assetTypes: [cashType, bankType],
+        assetTypes: [depositType, goldType],
       );
 
       expect(afterSummary.totalAssets, beforeSummary.totalAssets);
       expect(afterSummary.savingsByMember[FamilyMember.vo], beforeSummary.savingsByMember[FamilyMember.vo]);
-      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![cashType.id], 400000);
-      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![bankType.id], 600000);
+      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 400000);
+      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![goldType.id], 600000);
     });
   });
 
@@ -299,7 +307,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(cashType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
         amountMinor: 1200000,
       );
       final bankTopup = tx(
@@ -308,13 +316,13 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(bankType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(goldType.id, FamilyMember.vo),
         amountMinor: 8000000,
       );
-      final s = summarize([cashTopup, bankTopup], assetTypes: [cashType, bankType]);
+      final s = summarize([cashTopup, bankTopup], assetTypes: [depositType, goldType]);
 
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![cashType.id], 1200000);
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![bankType.id], 8000000);
+      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 1200000);
+      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![goldType.id], 8000000);
       expect(s.savingsByMember[FamilyMember.vo], 9200000);
       expect(s.totalSavings, 9200000);
     });
@@ -476,7 +484,7 @@ void main() {
 
   group('16 — Empty ledger', () {
     test('Không có transaction nào → mọi số về 0, không crash', () {
-      final s = summarize([], funds: [fundA, fundB], assetTypes: [cashType, bankType]);
+      final s = summarize([], funds: [fundA, fundB], assetTypes: [depositType, goldType]);
       expect(s.totalAvailable, 0);
       expect(s.totalSavings, 0);
       expect(s.totalFunds, 0);
@@ -486,7 +494,7 @@ void main() {
       expect(s.monthlyNet, 0);
       expect(s.fundBalances[fundA.id], 0);
       expect(s.fundBalances[fundB.id], 0);
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![cashType.id], 0);
+      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 0);
     });
   });
 
@@ -546,6 +554,185 @@ void main() {
       expect(s.totalAvailable, 15000000, reason: 'opening balance vẫn cộng đúng vào pool balance');
       expect(s.monthlyIncome, 10000000, reason: 'nhưng KHÔNG tính vào Total Income — mục 17');
       expect(s.totalAssets, 15000000);
+    });
+  });
+
+  // Phase 8.6B — REQUIRED CASE: "Mua 6.000.000 / Bán 6.500.000" phải chứng
+  // minh qua chính `computeFinancialSummary` (production Financial Core),
+  // không chỉ qua `computeRecoverySummary` (read model cho Transaction
+  // Detail) — đúng STOP condition của Phase 8.6B.
+  group('Phase 8.6B — Financial Core: bán có lãi qua computeFinancialSummary', () {
+    const recoveryCategory = Category(
+      id: 'hoan_tien_thu_hoi',
+      name: 'Hoàn tiền / Thu hồi',
+      color: Color(0xFF5FA88A),
+      type: TransactionType.income,
+      excludeFromTotals: true,
+    );
+    const expenseCategory = Category(
+      id: 'dau_tu',
+      name: 'Đầu tư',
+      color: Color(0xFFC9A23E),
+      type: TransactionType.expense,
+    );
+
+    test('Available +6.500.000, Total Assets +6.500.000, monthlyIncome CHỈ +500.000', () {
+      final purchase = tx(
+        type: TransactionType.expense,
+        categoryId: expenseCategory.id,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        amountMinor: 6000000,
+      );
+      final resale = tx(
+        type: TransactionType.income,
+        categoryId: recoveryCategory.id,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 6500000,
+        recoveryOfTxId: purchase.id,
+      );
+
+      final s = summarize(
+        [purchase, resale],
+        categories: [expenseCategory, recoveryCategory],
+        month: DateTime(2026, 9),
+      );
+
+      expect(
+        s.availableByMember[FamilyMember.chong],
+        -6000000 + 6500000,
+        reason: 'Available effect từ resale = +6.500.000 (STOP condition)',
+      );
+      expect(s.totalAssets, 500000, reason: 'Total Assets tăng đúng net +500.000 (-6m +6.5m)');
+      expect(
+        s.monthlyIncome,
+        500000,
+        reason: 'monthlyIncome CHỈ tăng đúng phần lợi nhuận 500.000, KHÔNG phải toàn bộ 6.500.000',
+      );
+      expect(s.monthlyExpense, 6000000, reason: 'Expense gốc vẫn còn nguyên trong lịch sử/báo cáo');
+    });
+
+    test('bán lỗ (6m → 4.5m): monthlyIncome KHÔNG âm, chỉ = 0', () {
+      final purchase = tx(
+        type: TransactionType.expense,
+        categoryId: expenseCategory.id,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'chong',
+        destinationKind: PoolKind.external,
+        amountMinor: 6000000,
+      );
+      final resale = tx(
+        type: TransactionType.income,
+        categoryId: recoveryCategory.id,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'chong',
+        amountMinor: 4500000,
+        recoveryOfTxId: purchase.id,
+      );
+
+      final s = summarize(
+        [purchase, resale],
+        categories: [expenseCategory, recoveryCategory],
+        month: DateTime(2026, 9),
+      );
+
+      expect(s.availableByMember[FamilyMember.chong], -6000000 + 4500000);
+      expect(s.monthlyIncome, 0, reason: 'bán lỗ không tạo "income âm"');
+      expect(s.monthlyExpense, 6000000);
+    });
+  });
+
+  // Phase 8.7 — Receivable/Payable qua chính computeFinancialSummary (audit
+  // mục F: totalAssets KHÔNG đổi ý nghĩa, totalPayables/netWorth là field
+  // MỚI tách riêng).
+  group('Phase 8.7 — totalReceivables/totalPayables/netWorth', () {
+    const choVayCategory = Category(
+      id: 'cho_vay',
+      name: 'Cho vay',
+      color: Color(0xFF4F8AB0),
+      type: TransactionType.transfer,
+    );
+    const vayNoCategory = Category(
+      id: 'vay_no',
+      name: 'Đi vay',
+      color: Color(0xFFB0834F),
+      type: TransactionType.income,
+    );
+
+    test('Example A — Cho vay 1.2m: totalReceivables +1.2m, totalAssets 0 change, netWorth unchanged', () {
+      final available = tx(
+        type: TransactionType.income,
+        categoryId: incomeCategory.id,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 5000000,
+      );
+      final lend = tx(
+        type: TransactionType.transfer,
+        categoryId: choVayCategory.id,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.receivable,
+        destinationRefId: 'oblig-r',
+        amountMinor: 1200000,
+      );
+      final before = summarize([available], categories: [incomeCategory]);
+      final after = summarize([available, lend], categories: [incomeCategory, choVayCategory]);
+
+      expect(after.totalReceivables, 1200000);
+      expect(after.totalAssets, before.totalAssets, reason: 'Total Assets 0 change khi cho vay');
+      expect(after.netWorth, after.totalAssets, reason: 'không có Payable → netWorth == totalAssets');
+    });
+
+    test('Example D — Mượn 700k: totalAssets tăng 700k, netWorth KHÔNG đổi (Payable trừ đúng ra)', () {
+      final available = tx(
+        type: TransactionType.income,
+        categoryId: incomeCategory.id,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 1000000,
+      );
+      final borrow = tx(
+        type: TransactionType.income,
+        categoryId: vayNoCategory.id,
+        sourceKind: PoolKind.external,
+        destinationKind: PoolKind.memberAvailable,
+        destinationRefId: 'vo',
+        amountMinor: 700000,
+        obligationId: 'oblig-p',
+      );
+      final obligation = const Obligation(
+        id: 'oblig-p',
+        counterpartyId: 'cp-1',
+        direction: ObligationDirection.payable,
+      );
+
+      final before = summarize([available], categories: [incomeCategory]);
+      final after = summarize(
+        [available, borrow],
+        categories: [incomeCategory, vayNoCategory],
+        obligations: [obligation],
+      );
+
+      expect(after.totalAvailable, 1700000, reason: 'Available tăng đúng 700k khi vay');
+      expect(
+        after.totalAssets,
+        before.totalAssets + 700000,
+        reason: 'Total Assets ĐƯỢC PHÉP tăng — không phải "báo giàu thêm" vì netWorth sẽ trừ lại',
+      );
+      expect(after.totalPayables, 700000);
+      expect(
+        after.netWorth,
+        before.netWorth,
+        reason: 'Net Worth KHÔNG đổi — 700k Available mới bị 700k Payable trừ lại đúng',
+      );
+      expect(after.monthlyIncome, before.monthlyIncome, reason: 'tiền vay KHÔNG phải Income');
     });
   });
 }
