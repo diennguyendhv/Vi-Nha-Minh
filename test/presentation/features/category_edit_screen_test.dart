@@ -176,7 +176,6 @@ Future<void> _selectType(WidgetTester tester, String label) async {
 const _advancedTexts = [
   'Màu',
   'Theo dõi tiến độ',
-  'Hiện ở màn Tổng hợp',
 ];
 
 void main() {
@@ -285,7 +284,7 @@ void main() {
     expect(find.textContaining('excludeFromTotals'), findsNothing);
   });
 
-  testWidgets('C2 — Thêm 1 bước trạng thái thì công tắc "Hiện ở màn Tổng hợp" mới xuất hiện', (tester) async {
+  testWidgets('C2 — Thêm 1 bước trạng thái: KHÔNG có công tắc "Hiện ở màn Tổng hợp" (Tổng hợp lọc theo Trạng thái, không cần cờ)', (tester) async {
     await _pump(tester);
     await _openAdvanced(tester);
 
@@ -294,10 +293,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Đã gửi'), findsOneWidget);
-    expect(find.text('Hiện ở màn Tổng hợp'), findsOneWidget);
+    expect(find.text('Hiện ở màn Tổng hợp'), findsNothing);
+    expect(find.byType(SwitchListTile), findsNothing);
   });
 
-  testWidgets('D — Sửa CĐ: nâng cao tự mở, giữ nguyên 3 bước + thống kê; lưu không đổi thì không ghi gì thừa', (
+  testWidgets('D — Sửa CĐ: nâng cao tự mở, giữ nguyên 3 bước; cờ cũ statsEnabled được giữ nguyên giá trị khi lưu; lưu không đổi thì không ghi gì thừa', (
     tester,
   ) async {
     final repos = await _pump(tester, categoryId: 'cho_di');
@@ -306,10 +306,7 @@ void main() {
     expect(find.text('CCB'), findsOneWidget);
     expect(find.text('ĐCB'), findsOneWidget);
     expect(find.text('ĐG'), findsOneWidget);
-    expect(
-      tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Hiện ở màn Tổng hợp')).value,
-      isTrue,
-    );
+    expect(find.text('Hiện ở màn Tổng hợp'), findsNothing);
 
     await _tapSave(tester);
     final c = repos.cats.updated.single;

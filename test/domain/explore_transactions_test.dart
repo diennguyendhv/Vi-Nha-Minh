@@ -222,25 +222,24 @@ void main() {
       expect(r.rows.any((t) => t.note == 'Đi chợ'), isFalse);
     });
 
-    test('F — nhóm chính; Chuyển không thuộc nhóm nào', () {
-      final byGroup = {
-        for (final g in MainGroup.values) g: _run(ledger, TransactionFilter(group: g)),
-      };
-      expect(byGroup[MainGroup.revenue]!.count, 2);
-      expect(byGroup[MainGroup.otherInflow]!.count, 1);
-      expect(byGroup[MainGroup.spending]!.count, 4);
-      expect(byGroup[MainGroup.businessExpense]!.count, 1);
-      expect(byGroup.values.fold<int>(0, (s, r) => s + r.count), 8, reason: '1 dòng Chuyển không thuộc nhóm nào');
+    test('F — nhóm chính suy từ cờ của Category (chỉ để phân nhóm hiển thị); Chuyển không thuộc nhóm nào', () {
+      MainGroup? g(String id) => categoryGroupOf(_byId[id]!, _hidden);
+      expect(g('hoc_phi'), MainGroup.revenue);
+      expect(g('thu_khac'), MainGroup.otherInflow);
+      expect(g('sinh_hoat'), MainGroup.spending);
+      expect(g('luong_gv'), MainGroup.businessExpense);
+      expect(g('tiet_kiem'), isNull);
+      expect(g('vay_no'), isNull, reason: 'danh mục hệ thống nâng cao');
     });
 
     test('G — danh mục', () {
-      final r = _run(ledger, const TransactionFilter(categoryId: 'sinh_hoat'));
+      final r = _run(ledger, const TransactionFilter(categoryIds: {'sinh_hoat'}));
       expect(r.count, 2);
       expect(r.outflow, 125000, reason: 'khoản nhỏ 5.000đ vẫn có mặt và được cộng');
     });
 
     test('H — trạng thái', () {
-      final r = _run(ledger, const TransactionFilter(categoryId: 'cho_di', statusId: 'st_chua'));
+      final r = _run(ledger, const TransactionFilter(categoryIds: {'cho_di'}, statusIds: {'st_chua'}));
       expect(r.count, 1);
       expect(r.rows.single.note, 'CĐ tháng 9');
     });
@@ -312,7 +311,7 @@ void main() {
           ledger,
           const TransactionFilter(
             member: FamilyMember.vo,
-            categoryId: 'sinh_hoat',
+            categoryIds: {'sinh_hoat'},
             query: 'di',
           ),
         );
@@ -344,11 +343,10 @@ void main() {
       _out('luong_gv', 500000, from: 'vo', note: 'chợ', date: DateTime(2026, 9, 16)),
     ];
 
-    test('K — Tháng 9 + Vợ + Chi tiêu + Sinh hoạt + note "chợ" = đúng giao', () {
+    test('K — Tháng 9 + Vợ + Sinh hoạt + note "chợ" = đúng giao', () {
       var f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30));
       f = f.withMember(FamilyMember.vo);
-      f = f.withGroup(MainGroup.spending, _byId, hiddenCategoryIds: _hidden);
-      f = f.withCategory('sinh_hoat', _byId);
+      f = f.withCategories({'sinh_hoat'});
       f = f.withQuery('chợ');
       final r = _run(ledger, f);
       expect(r.count, 1);
@@ -359,7 +357,7 @@ void main() {
     test('Bỏ bớt từng điều kiện thì tập rộng dần', () {
       var f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30))
           .withMember(FamilyMember.vo)
-          .withCategory('sinh_hoat', _byId);
+          .withCategories({'sinh_hoat'});
       expect(_run(ledger, f).count, 2);
       f = f.withMember(null);
       expect(_run(ledger, f).count, 3);
@@ -368,49 +366,188 @@ void main() {
     });
   });
 
-  group('Quy tắc phụ thuộc Nhóm → Danh mục → Trạng thái', () {
-    test('đổi nhóm → xoá danh mục (và trạng thái) không còn thuộc nhóm', () {
-      var f = const TransactionFilter()
-          .withCategory('cho_di', _byId)
-          .withStatus('st_gui');
-      expect(f.categoryId, 'cho_di');
-      f = f.withGroup(MainGroup.businessExpense, _byId, hiddenCategoryIds: _hidden);
-      expect(f.group, MainGroup.businessExpense);
-      expect(f.categoryId, isNull);
-      expect(f.statusId, isNull);
+  group('Excel-like: nhiều lựa chọn, chiều độc lập, OR trong chiều / AND giữa chiều', () {
+    // st_chua/st_gui thuộc cho_di; st_khac thuộc dang_hien (cùng tên "ĐD" ở bài test riêng).
+    final ledger = [
+      _out('sinh_hoat', 1000, id: 'sh1', from: 'chong', note: 'gửi xe'),
+      _out('sinh_hoat', 120000, id: 'sh2', from: 'vo', note: 'Đi chợ'),
+      _out('luong_gv', 700000, id: 'gv1', from: 'chong', note: 'Lương cô Lam'),
+      _out('cho_di', 300000, id: 'cd1', from: 'chong', statusId: 'st_chua'),
+      _out('cho_di', 200000, id: 'cd2', from: 'chong', statusId: 'st_gui', note: 'lương tháng'),
+      _out('dang_hien', 150000, id: 'dh1', from: 'chong', statusId: 'st_khac'),
+      _in('hoc_phi', 2000000, id: 'in1', to: 'chong', note: 'HP lớp Excel'),
+    ];
+    Set<String> ids(ExplorerResult r) => {for (final t in r.rows) t.id};
+
+    test('Nhiều danh mục = OR; 0 danh mục = tất cả', () {
+      expect(ids(_run(ledger, const TransactionFilter(categoryIds: {'sinh_hoat', 'luong_gv'}))), {'sh1', 'sh2', 'gv1'});
+      expect(_run(ledger, const TransactionFilter()).count, ledger.length);
+      expect(_run(ledger, const TransactionFilter(categoryIds: {'khong_co'})).count, 0);
     });
 
-    test('đổi nhóm sang nhóm CHỨA danh mục hiện tại → giữ danh mục và trạng thái', () {
-      var f = const TransactionFilter().withCategory('cho_di', _byId).withStatus('st_gui');
-      f = f.withGroup(MainGroup.spending, _byId, hiddenCategoryIds: _hidden);
-      expect(f.categoryId, 'cho_di');
-      expect(f.statusId, 'st_gui');
-      f = f.withGroup(null, _byId);
-      expect(f.categoryId, 'cho_di');
+    test('Nhiều trạng thái = OR, không phụ thuộc danh mục', () {
+      final r = _run(ledger, const TransactionFilter(statusIds: {'st_chua', 'st_khac'}));
+      expect(ids(r), {'cd1', 'dh1'});
     });
 
-    test('Q — đổi sang danh mục không có / khác bộ trạng thái → xoá trạng thái', () {
-      var f = const TransactionFilter().withCategory('cho_di', _byId).withStatus('st_gui');
-      f = f.withCategory('sinh_hoat', _byId);
-      expect(f.statusId, isNull, reason: 'sinh_hoat không có trạng thái');
-      f = const TransactionFilter().withCategory('cho_di', _byId).withStatus('st_gui').withCategory('dang_hien', _byId);
-      expect(f.statusId, isNull, reason: 'st_gui không thuộc dang_hien');
-      f = const TransactionFilter().withCategory('cho_di', _byId).withStatus('st_gui').withCategory(null, _byId);
-      expect(f.statusId, isNull);
+    test('Trạng thái trùng tên ở 2 danh mục là 2 id khác nhau: chọn cả hai → giao dịch của CẢ HAI danh mục', () {
+      // "ĐD" của cho_di và "ĐD" của dang_hien: tạo bộ danh mục riêng.
+      const a = Status(id: 'dd_cd', categoryId: 'cho_di', name: 'ĐD', sortOrder: 0);
+      const b = Status(id: 'dd_dh', categoryId: 'dang_hien', name: 'ĐD', sortOrder: 0);
+      final cats = [
+        _cat('cho_di', TransactionType.expense, statuses: const [a]),
+        _cat('dang_hien', TransactionType.expense, statuses: const [b]),
+      ];
+      final txs = [
+        _out('cho_di', 10000, id: 'x1', statusId: 'dd_cd'),
+        _out('dang_hien', 20000, id: 'x2', statusId: 'dd_dh'),
+      ];
+      final both = exploreTransactions(txs, cats, const TransactionFilter(statusIds: {'dd_cd', 'dd_dh'}));
+      expect(ids(both), {'x1', 'x2'});
+      final onlyOne = exploreTransactions(txs, cats, const TransactionFilter(statusIds: {'dd_dh'}));
+      expect(ids(onlyOne), {'x2'});
+      final opts = explorerStatusOptions(cats, txs);
+      expect(opts.map((o) => o.label), ['ĐD · cho_di', 'ĐD · dang_hien'], reason: 'phân biệt bằng tên danh mục');
     });
 
-    test('Q — trạng thái đã ẩn (lịch sử) vẫn lọc được và vẫn resolve tên', () {
-      final ledger = [_out('cho_di', 70000, statusId: 'st_cu', note: 'cũ'), _out('cho_di', 1000, statusId: 'st_chua')];
-      final r = _run(ledger, const TransactionFilter(categoryId: 'cho_di', statusId: 'st_cu'));
-      expect(r.count, 1);
-      expect(_byId['cho_di']!.statusById('st_cu')!.name, 'Cũ');
+    test('"Không có trạng thái" = statusId null; kết hợp với trạng thái khác = null OR X', () {
+      final none = _run(ledger, const TransactionFilter(includeNoStatus: true));
+      expect(ids(none), {'sh1', 'sh2', 'gv1', 'in1'});
+      final noneOrChua = _run(ledger, const TransactionFilter(statusIds: {'st_chua'}, includeNoStatus: true));
+      expect(ids(noneOrChua), {'sh1', 'sh2', 'gv1', 'in1', 'cd1'});
+    });
+
+    test('Chéo chiều: Năm + Chồng + (A|B) + (X|Y) + note = giao đúng', () {
+      final f = TransactionFilter(from: DateTime(2026, 1, 1), to: DateTime(2026, 12, 31))
+          .withMember(FamilyMember.chong)
+          .withCategories({'luong_gv', 'cho_di', 'dang_hien'})
+          .withStatuses({'st_gui', 'st_khac'}, includeNone: true)
+          .withQuery('luong');
+      // gv1: luong_gv, không trạng thái, note "Lương cô Lam" → khớp.
+      // cd2: cho_di, st_gui, note "lương tháng" → khớp. cd1 sai note; dh1 sai note.
+      expect(ids(_run(ledger, f)), {'gv1', 'cd2'});
+    });
+
+    test('Giao rỗng → 0 kết quả, bộ lọc giữ nguyên (không tự nới)', () {
+      final f = const TransactionFilter().withCategories({'sinh_hoat'}).withStatuses({'st_khac'});
+      expect(_run(ledger, f).count, 0);
+      expect(f.categoryIds, {'sinh_hoat'});
+      expect(f.statusIds, {'st_khac'});
+    });
+
+    test('Độc lập thứ tự: chọn theo 2 thứ tự khác nhau ra cùng kết quả', () {
+      final range = (DateTime(2026, 1, 1), DateTime(2026, 12, 31));
+      final a = const TransactionFilter()
+          .withRange(range.$1, range.$2)
+          .withMember(FamilyMember.chong)
+          .withCategories({'cho_di', 'dang_hien'})
+          .withStatuses({'st_chua', 'st_khac'});
+      final b = const TransactionFilter()
+          .withStatuses({'st_chua', 'st_khac'})
+          .withCategories({'cho_di', 'dang_hien'})
+          .withMember(FamilyMember.chong)
+          .withRange(range.$1, range.$2);
+      expect(ids(_run(ledger, a)), ids(_run(ledger, b)));
+      expect(ids(_run(ledger, a)), {'cd1', 'dh1'});
+    });
+
+    test('Đổi/bỏ 1 chiều KHÔNG làm đổi chiều khác', () {
+      var f = const TransactionFilter().withCategories({'cho_di'}).withStatuses({'st_khac'});
+      f = f.withCategories({'dang_hien'});
+      expect(f.statusIds, {'st_khac'});
+      f = f.withCategories({});
+      expect(f.statusIds, {'st_khac'});
+      expect(f.hasStatusFilter, isTrue);
+    });
+
+    test('Sắp xếp: mặc định Ngày mới→cũ; Ngày ↑; Số tiền ↓/↑', () {
+      final dated = [
+        _out('sinh_hoat', 5000, id: 'a', date: DateTime(2026, 9, 1)),
+        _out('sinh_hoat', 9000, id: 'b', date: DateTime(2026, 9, 3)),
+        _out('sinh_hoat', 1000, id: 'c', date: DateTime(2026, 9, 2)),
+      ];
+      List<String> order(TransactionFilter f) => [for (final t in _run(dated, f).rows) t.id];
+      expect(order(const TransactionFilter()), ['b', 'c', 'a']);
+      expect(order(const TransactionFilter(sort: [SortRule(SortKey.date, ascending: true)])), ['a', 'c', 'b']);
+      expect(order(const TransactionFilter(sort: [SortRule(SortKey.amount)])), ['b', 'a', 'c']);
+      expect(order(const TransactionFilter(sort: [SortRule(SortKey.amount, ascending: true)])), ['c', 'a', 'b']);
+    });
+
+    test('Sắp xếp chỉ có 2 khóa: Ngày và Số tiền', () {
+      expect(SortKey.values, [SortKey.date, SortKey.amount]);
+    });
+
+    test('Cùng Số tiền: tie-break ổn định (Ngày ↓ rồi giờ tạo ↓ rồi id) — kết quả xác định qua nhiều lần chạy', () {
+      final txs = [
+        _out('sinh_hoat', 100, id: 'a', date: DateTime(2026, 9, 1)),
+        _out('sinh_hoat', 100, id: 'b', date: DateTime(2026, 9, 5)),
+        _out('sinh_hoat', 100, id: 'c', date: DateTime(2026, 9, 3)),
+      ];
+      List<String> order(bool asc) => [
+        for (final t in _run(txs, TransactionFilter(sort: [SortRule(SortKey.amount, ascending: asc)])).rows) t.id,
+      ];
+      expect(order(false), ['b', 'c', 'a']);
+      expect(order(true), ['b', 'c', 'a'], reason: 'tie-break luôn Ngày ↓, không đảo theo chiều');
+      expect(order(false), order(false));
+    });
+
+    test('Danh sách nhiều tiêu chí (domain) vẫn xếp đúng ưu tiên: Ngày ↓ rồi Số tiền ↓', () {
+      final txs = [
+        _out('sinh_hoat', 100, id: 's1', date: DateTime(2026, 9, 1)),
+        _out('sinh_hoat', 900, id: 's2', date: DateTime(2026, 9, 1)),
+        _out('sinh_hoat', 500, id: 's3', date: DateTime(2026, 9, 5)),
+        _out('sinh_hoat', 700, id: 's4', date: DateTime(2026, 9, 5)),
+      ];
+      final r = _run(txs, const TransactionFilter(sort: [SortRule(SortKey.date), SortRule(SortKey.amount)]));
+      expect([for (final t in r.rows) t.id], ['s4', 's3', 's2', 's1']);
+    });
+
+    test('Lọc rồi sắp xếp == sắp xếp rồi lọc (kết quả xác định)', () {
+      final f = const TransactionFilter().withCategories({'sinh_hoat', 'cho_di'});
+      final sorted = f.withSort(const [SortRule(SortKey.amount)]);
+      final a = [for (final t in _run(ledger, sorted).rows) t.id];
+      final b = [
+        for (final t in (_run(ledger, f).rows.toList()..sort((x, y) => y.amountMinor.compareTo(x.amountMinor)))) t.id,
+      ];
+      expect(a, b);
+    });
+
+    test('Tổng của tập đã lọc: Thu/Chi tách riêng; Chuyển chỉ đếm dòng', () {
+      final withMove = [...ledger, _move('chuyen', 500000)];
+      final r = _run(withMove, const TransactionFilter(categoryIds: {'sinh_hoat', 'hoc_phi', 'chuyen'}));
+      expect(r.count, 4);
+      expect(r.inflow, 2000000);
+      expect(r.outflow, 121000);
+    });
+
+    test('Bộ chọn danh mục: đang dùng luôn có; ngừng chỉ khi còn giao dịch; danh mục hệ thống ẩn', () {
+      final cats = [
+        _cat('a_live', TransactionType.expense),
+        Category(id: 'b_stopped_used', name: 'b_stopped_used', color: Colors.grey, type: TransactionType.expense, isActive: false),
+        Category(id: 'c_stopped_empty', name: 'c_stopped_empty', color: Colors.grey, type: TransactionType.expense, isActive: false),
+        _cat('vay_no', TransactionType.income),
+      ];
+      final txs = [_out('b_stopped_used', 1000, id: 'u')];
+      final opts = explorerCategoryOptions(cats, txs, hiddenCategoryIds: _hidden);
+      expect(opts.map((o) => o.id), ['a_live', 'b_stopped_used']);
+      expect(opts.last.label, 'b_stopped_used (đã ngừng)');
+      expect(opts.last.active, isFalse);
+    });
+
+    test('Bộ chọn trạng thái: trạng thái ngừng chỉ hiện khi còn giao dịch dùng; độc lập với danh mục đã chọn', () {
+      final txs = [_out('cho_di', 1000, id: 'u', statusId: 'st_cu')];
+      final opts = explorerStatusOptions(_cats, txs);
+      expect(opts.map((o) => o.id), containsAll(['st_chua', 'st_gui', 'st_cu', 'st_khac']));
+      expect(explorerStatusOptions(_cats, const []).map((o) => o.id), isNot(contains('st_cu')));
+      expect(opts.firstWhere((o) => o.id == 'st_cu').label, 'Cũ (đã ẩn) · cho_di');
     });
 
     test('hasNonDateFilter / advancedCount phản ánh đúng để hiện "Xoá bộ lọc"', () {
       expect(const TransactionFilter().hasNonDateFilter, isFalse);
       expect(const TransactionFilter(query: ' ').hasNonDateFilter, isFalse);
       expect(const TransactionFilter(member: FamilyMember.vo).hasNonDateFilter, isTrue);
-      final f = const TransactionFilter(group: MainGroup.spending, categoryId: 'sinh_hoat');
+      expect(const TransactionFilter(sort: [SortRule(SortKey.amount)]).hasNonDateFilter, isTrue);
+      final f = const TransactionFilter(categoryIds: {'sinh_hoat'}, includeNoStatus: true);
       expect(f.advancedCount, 2);
     });
   });
@@ -444,16 +581,118 @@ void main() {
 
       expect(_run(ledger).count, 4);
       expect(_run(ledger, const TransactionFilter(query: 'quạt')).count, 2);
-      for (final g in MainGroup.values) {
-        final r = _run(ledger, TransactionFilter(group: g));
-        expect(r.rows.any((t) => t.categoryId == 'hoan_tien_thu_hoi' || t.categoryId == 'vay_no' || t.categoryId == 'cho_vay'), isFalse);
+      for (final id in ['hoan_tien_thu_hoi', 'vay_no', 'cho_vay']) {
+        expect(categoryGroupOf(_byId[id]!, _hidden), isNull, reason: id);
       }
       // Lọc theo thành viên vẫn an toàn với dòng có đích là khoản vay.
       expect(_run(ledger, const TransactionFilter(member: FamilyMember.vo)).count, greaterThanOrEqualTo(3));
     });
   });
 
+  group('Thẻ tổng quan theo KỲ THỜI GIAN (không theo Danh mục/Trạng thái/Ghi chú)', () {
+    // Vợ: doanh thu 10tr (15/08), 5tr (10/09); chi phí KD 1tr (11/09); chi tiêu 200k (12/09).
+    // Chồng: doanh thu 2tr (20/09); chi tiêu 300k (20/09); chi phí KD 500k (20/09/2027).
+    final ledger = [
+      _in('hoc_phi', 10000000, to: 'vo', date: DateTime(2026, 8, 15)),
+      _in('hoc_phi', 5000000, to: 'vo', date: DateTime(2026, 9, 10)),
+      _out('luong_gv', 1000000, from: 'vo', date: DateTime(2026, 9, 11)),
+      _out('sinh_hoat', 200000, from: 'vo', date: DateTime(2026, 9, 12)),
+      _in('hoc_phi', 2000000, to: 'chong', date: DateTime(2026, 9, 20)),
+      _out('sinh_hoat', 300000, from: 'chong', date: DateTime(2026, 9, 20)),
+      _out('luong_gv', 500000, from: 'chong', date: DateTime(2027, 9, 20)),
+    ];
+    int net(FamilyMember m, {DateTime? from, DateTime? to}) =>
+        computeMemberNetIncome(m, ledger, _cats, from: from, to: to);
+    int spend({DateTime? from, DateTime? to}) =>
+        computeGroupedTotals(ledger, _cats, from: from, to: to).spending;
+
+    test('Ngày: chỉ giao dịch đúng ngày đó', () {
+      final d = DateTime(2026, 9, 20);
+      expect(net(FamilyMember.vo, from: d, to: d), 0);
+      expect(net(FamilyMember.chong, from: d, to: d), 2000000);
+      expect(spend(from: d, to: d), 300000);
+    });
+
+    test('Tháng: đúng tháng, khớp kết quả cũ theo `month`', () {
+      final from = DateTime(2026, 9, 1);
+      final to = DateTime(2026, 9, 30);
+      expect(net(FamilyMember.vo, from: from, to: to), 5000000 - 1000000);
+      expect(spend(from: from, to: to), 500000);
+      expect(net(FamilyMember.vo, from: from, to: to), computeMemberNetIncome(FamilyMember.vo, ledger, _cats, month: DateTime(2026, 9)));
+      expect(spend(from: from, to: to), computeGroupedTotals(ledger, _cats, month: DateTime(2026, 9)).spending);
+    });
+
+    test('Năm: cả năm (không lấn sang năm khác)', () {
+      final from = DateTime(2026, 1, 1);
+      final to = DateTime(2026, 12, 31);
+      expect(net(FamilyMember.vo, from: from, to: to), 10000000 + 5000000 - 1000000);
+      expect(net(FamilyMember.chong, from: from, to: to), 2000000, reason: 'chi phí KD 500k thuộc năm 2027');
+      expect(spend(from: from, to: to), 500000);
+    });
+
+    test('Khoảng ngày (bao gồm 2 đầu) và Tất cả thời gian', () {
+      expect(net(FamilyMember.vo, from: DateTime(2026, 9, 10), to: DateTime(2026, 9, 11)), 4000000);
+      expect(net(FamilyMember.vo), 10000000 + 5000000 - 1000000, reason: 'Tất cả: không giới hạn');
+      expect(net(FamilyMember.chong), 2000000 - 500000);
+      expect(spend(), 500000);
+    });
+
+    test('Không phụ thuộc bộ lọc Explorer: đổi Danh mục/Trạng thái/Ghi chú không đổi số tổng quan', () {
+      final f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30)).withCategories({'sinh_hoat'});
+      // Explorer chỉ thấy Chi tiêu; số tổng quan của kỳ vẫn tính đủ Doanh thu/Chi phí KD.
+      expect(_run(ledger, f).outflow, 500000);
+      expect(net(FamilyMember.vo, from: f.from, to: f.to), 4000000);
+    });
+  });
+
   group('Hiệu năng ~1.800 giao dịch (smoke)', () {
+    test('V2 — kịch bản Excel đầy đủ: Năm 2026 + 5 danh mục + 5 trạng thái + tìm ghi chú + sắp xếp Ngày ↓ rồi Số tiền ↓', () {
+      const sts = [
+        Status(id: 'p1', categoryId: 'c1', name: 'A', sortOrder: 0),
+        Status(id: 'p2', categoryId: 'c2', name: 'B', sortOrder: 0),
+        Status(id: 'p3', categoryId: 'c3', name: 'C', sortOrder: 0),
+        Status(id: 'p4', categoryId: 'c4', name: 'D', sortOrder: 0),
+        Status(id: 'p5', categoryId: 'c5', name: 'E', sortOrder: 0),
+      ];
+      final cats = [
+        for (var i = 1; i <= 6; i++)
+          _cat('c$i', TransactionType.expense, statuses: i <= 5 ? [sts[i - 1]] : const []),
+      ];
+      final ledger = <Transaction>[
+        for (var i = 0; i < 1900; i++)
+          _out(
+            'c${1 + i % 6}',
+            1000 + (i * 37) % 900000,
+            from: i.isEven ? 'vo' : 'chong',
+            date: DateTime(2026, 1 + i % 12, 1 + i % 28),
+            statusId: (i % 6) < 5 && i % 3 != 0 ? 'p${1 + i % 6}' : null,
+            note: i % 4 == 0 ? 'Lương tháng $i' : 'chi $i',
+          ),
+      ];
+      final f = TransactionFilter(from: DateTime(2026, 1, 1), to: DateTime(2026, 12, 31))
+          .withCategories({'c1', 'c2', 'c3', 'c4', 'c5'})
+          .withStatuses({'p1', 'p2', 'p3', 'p4', 'p5'}, includeNone: true)
+          .withQuery('luong')
+          .withSort(const [SortRule(SortKey.date), SortRule(SortKey.amount)]);
+      final sw = Stopwatch()..start();
+      late ExplorerResult r;
+      for (var i = 0; i < 5; i++) {
+        r = exploreTransactions(ledger, cats, f);
+      }
+      sw.stop();
+      // ignore: avoid_print
+      print('V2: 5 lần lọc+sắp xếp 1.900 dòng = ${sw.elapsedMilliseconds}ms; ${r.count} dòng khớp');
+      expect(r.count, greaterThan(0));
+      expect(r.rows.every((t) => t.note.contains('Lương') && t.categoryId != 'c6'), isTrue);
+      for (var i = 1; i < r.rows.length; i++) {
+        final a = r.rows[i - 1];
+        final b = r.rows[i];
+        final byDate = a.transactionDate.compareTo(b.transactionDate);
+        expect(byDate > 0 || (byDate == 0 && a.amountMinor >= b.amountMinor), isTrue);
+      }
+      expect(sw.elapsedMilliseconds, lessThan(2500));
+    });
+
     test('V — lọc/tìm/kết hợp trên 1.800 dòng nhanh và đúng', () {
       final ledger = <Transaction>[];
       for (var i = 0; i < 1800; i++) {
@@ -471,8 +710,9 @@ void main() {
         ledger,
         TransactionFilter(from: DateTime(2026, 3, 1), to: DateTime(2026, 6, 30))
             .withMember(FamilyMember.vo)
-            .withGroup(MainGroup.spending, _byId, hiddenCategoryIds: _hidden)
-            .withQuery('chợ'),
+            .withCategories({'sinh_hoat', 'luong_gv'})
+            .withQuery('chợ')
+            .withSort(const [SortRule(SortKey.date), SortRule(SortKey.amount)]),
       );
       final search = _run(ledger, const TransactionFilter(query: 'chi 1'));
       sw.stop();

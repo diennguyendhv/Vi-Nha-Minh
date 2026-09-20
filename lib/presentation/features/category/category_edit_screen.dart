@@ -56,6 +56,8 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   final _newStatusController = TextEditingController();
   TransactionType _type = TransactionType.expense;
   Color _color = _swatches.first;
+  /// Cờ cũ "hiện ở Tổng hợp": không còn UI/ngữ nghĩa (Tổng hợp lọc theo Trạng
+  /// thái), chỉ giữ nguyên giá trị khi lưu để không cần migration.
   bool _statsEnabled = false;
 
   /// Nhóm của danh mục THU: false = Doanh thu, true = Khoản thu khác (chính
@@ -116,7 +118,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   /// Danh mục đã có thiết lập nâng cao nào không (không tính màu — màu luôn
   /// có giá trị). Dùng để tự mở "Tuỳ chọn nâng cao" khi Sửa.
   static bool _hasAdvancedConfig(Category c) =>
-      c.statuses.isNotEmpty || c.statsEnabled;
+      c.statuses.isNotEmpty;
 
   void _initFrom(Category category) {
     _nameController.text = category.name;
@@ -533,7 +535,6 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   }
 
   List<Widget> _advancedSection() {
-    final hasActiveStatus = _statuses.any((s) => s.isActive);
 
     return [
       const Text(
@@ -574,16 +575,6 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
       ),
       const SizedBox(height: 8),
       ..._statusSection(),
-      if (hasActiveStatus) ...[
-        const SizedBox(height: 12),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Hiện ở màn Tổng hợp'),
-          subtitle: const Text('Xem tổng tiền theo từng bước tiến độ'),
-          value: _statsEnabled,
-          onChanged: (v) => setState(() => _statsEnabled = v),
-        ),
-      ],
       const SizedBox(height: 8),
     ];
   }

@@ -7,29 +7,29 @@ import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/savings_asset_type.dart';
-import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/usecases/compute_grouped_totals.dart';
-import '../../../domain/usecases/compute_status_breakdown.dart';
 import '../../../domain/usecases/explore_transactions.dart';
+import '../../../domain/usecases/time_selection.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/category_label.dart';
 import '../transactions/transaction_detail_screen.dart';
 
-enum _TimePreset { today, thisMonth, lastMonth, custom }
-
-/// Màn "Tổng hợp" — SIMPLE AT FIRST GLANCE, POWERFUL WHEN DRILLING DOWN.
+/// Màn "Tổng hợp" — hai phần rõ ràng:
 ///
-/// Mặc định chỉ có: Thu nhập ròng THÁNG NÀY của Vợ, của Chồng và Chi tiêu gia
-/// đình. Bên dưới là **Transaction Explorer**: mọi giao dịch đang hiệu lực,
-/// lọc kết hợp (AND) theo Thời gian · Thành viên · Nhóm chính · Danh mục ·
-/// Trạng thái · Tìm trong Ghi chú, kèm tổng của CHÍNH tập đang xem.
+/// - **TỔNG QUAN**: vài con số nhìn nhanh (Thu nhập ròng của Vợ / Chồng, Chi
+///   tiêu gia đình) theo KỲ THỜI GIAN đang chọn.
+/// - **GIAO DỊCH** (Transaction Explorer): mọi giao dịch đang hiệu lực, lọc kiểu
+///   Excel — Thời gian (Ngày/Tháng/Năm/Tất cả) · Vợ/Chồng · nhiều
+///   Danh mục · nhiều Trạng thái (kể cả "Không có trạng thái") · Ghi chú — và sắp xếp
+///   nhiều tầng (kể cả theo Số tiền). OR trong cùng 1 chiều, AND giữa các chiều; các
+///   chiều độc lập, chọn theo thứ tự nào cũng ra cùng kết quả.
 ///
-/// Không có logic báo cáo thứ hai: số Thu nhập ròng lấy từ
-/// [computeMemberNetIncome], lọc/tổng lấy từ [exploreTransactions].
+/// Không có logic báo cáo thứ hai: Thu nhập ròng lấy từ
+/// [computeMemberNetIncome], lọc/sắp xếp/tổng lấy từ [exploreTransactions].
 class SummaryScreen extends ConsumerStatefulWidget {
   const SummaryScreen({super.key});
 
@@ -39,9 +39,12 @@ class SummaryScreen extends ConsumerStatefulWidget {
 
 class _SummaryScreenState extends ConsumerState<SummaryScreen> {
   final _searchController = TextEditingController();
-  _TimePreset _preset = _TimePreset.thisMonth;
-  late TransactionFilter _filter = _rangeFor(_TimePreset.thisMonth, null);
-  bool _showAdvanced = false;
+  late TimeSelection _time = TimeSelection.month(DateTime.now());
+  late TransactionFilter _filter = const TransactionFilter().withRange(
+    _time.from,
+    _time.to,
+  );
+  bool _showFilters = false;
 
   static final _hidden = AdvancedSystemCategories.ids;
 
@@ -51,66 +54,27 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     super.dispose();
   }
 
-  TransactionFilter _rangeFor(
-    _TimePreset preset,
-    DateTimeRange? custom, [
-    TransactionFilter? base,
-  ]) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    DateTime from;
-    DateTime to;
-    switch (preset) {
-      case _TimePreset.today:
-        from = today;
-        to = today;
-      case _TimePreset.thisMonth:
-        from = DateTime(now.year, now.month);
-        to = DateTime(now.year, now.month + 1, 0);
-      case _TimePreset.lastMonth:
-        from = DateTime(now.year, now.month - 1);
-        to = DateTime(now.year, now.month, 0);
-      case _TimePreset.custom:
-        from = custom!.start;
-        to = custom.end;
-    }
-    return (base ?? const TransactionFilter()).withRange(from, to);
-  }
-
-  void _setPreset(_TimePreset preset) {
+  void _setTime(TimeSelection value) {
     setState(() {
-      _preset = preset;
-      _filter = _rangeFor(preset, null, _filter);
+      _time = value;
+      _filter = _filter.withRange(value.from, value.to);
     });
   }
 
-  Future<void> _pickCustomRange() async {
-    final now = DateTime.now();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(now.year + 1, 12, 31),
-      initialDateRange: DateTimeRange(
-        start: _filter.from ?? DateTime(now.year, now.month),
-        end: _filter.to ?? now,
-      ),
-    );
-    if (picked == null || !mounted) return;
-    setState(() {
-      _preset = _TimePreset.custom;
-      _filter = _rangeFor(_TimePreset.custom, picked, _filter);
-    });
-  }
+  bool get _isDefaultView =>
+      _time == TimeSelection.month(DateTime.now()) &&
+      !_filter.hasNonDateFilter;
 
-  bool get _isDefaultFilter =>
-      _preset == _TimePreset.thisMonth && !_filter.hasNonDateFilter;
-
-  void _clearFilters() {
+  void _clearAll() {
     _searchController.clear();
+    final defaultTime = TimeSelection.month(DateTime.now());
     setState(() {
-      _preset = _TimePreset.thisMonth;
-      _filter = _rangeFor(_TimePreset.thisMonth, null);
-      _showAdvanced = false;
+      _time = defaultTime;
+      _filter = const TransactionFilter().withRange(
+        defaultTime.from,
+        defaultTime.to,
+      );
+      _showFilters = false;
     });
   }
 
@@ -131,25 +95,29 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
         ref.watch(savingsAssetTypesStreamProvider).valueOrNull ??
         const <SavingsAssetType>[];
     final categoryById = {for (final c in categories) c.id: c};
-    final now = DateTime.now();
-    final month = DateTime(now.year, now.month);
-
+    // Thẻ tổng quan theo KỲ THỜI GIAN đang chọn (không theo Danh mục/Trạng thái/
+    // Ghi chú — phần đó nằm ở tổng của Explorer bên dưới). Dùng lại đúng các hàm
+    // báo cáo hiện có, không tính lại công thức.
+    final periodLabel = timeSelectionLabel(_time);
     final netVo = computeMemberNetIncome(
       FamilyMember.vo,
       transactions,
       categories,
-      month: month,
+      from: _time.from,
+      to: _time.to,
     );
     final netChong = computeMemberNetIncome(
       FamilyMember.chong,
       transactions,
       categories,
-      month: month,
+      from: _time.from,
+      to: _time.to,
     );
     final spending = computeGroupedTotals(
       transactions,
       categories,
-      month: month,
+      from: _time.from,
+      to: _time.to,
     ).spending;
 
     final result = exploreTransactions(
@@ -158,7 +126,12 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
       _filter,
       hiddenCategoryIds: _hidden,
     );
-    final statsCategories = categories.where((c) => c.statsEnabled).toList();
+    final categoryOptions = explorerCategoryOptions(
+      categories,
+      transactions,
+      hiddenCategoryIds: _hidden,
+    );
+    final statusOptions = explorerStatusOptions(categories, transactions);
 
     return CustomScrollView(
       slivers: [
@@ -175,13 +148,15 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                 ),
               ),
               const SizedBox(height: 14),
+              _SectionTitle('Tổng quan · $periodLabel'),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
                     child: _NetIncomeCard(
                       key: const Key('summary_net_vo'),
                       label: 'Vợ · Thu nhập ròng',
-                      month: now.month,
+                      period: periodLabel,
                       value: netVo,
                     ),
                   ),
@@ -190,7 +165,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                     child: _NetIncomeCard(
                       key: const Key('summary_net_chong'),
                       label: 'Chồng · Thu nhập ròng',
-                      month: now.month,
+                      period: periodLabel,
                       value: netChong,
                     ),
                   ),
@@ -199,56 +174,18 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               const SizedBox(height: 10),
               _SpendingCard(
                 key: const Key('summary_household_spending'),
-                month: now.month,
+                period: periodLabel,
                 value: spending,
               ),
-              if (statsCategories.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    key: const Key('summary_status_section'),
-                    tilePadding: EdgeInsets.zero,
-                    title: const Text(
-                      'Tổng theo trạng thái',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    children: [
-                      for (final category in statsCategories) ...[
-                        _StatusCard(
-                          category: category,
-                          breakdown: computeStatusBreakdown(
-                            transactions,
-                            category,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 18),
-              const Text(
-                'Giao dịch',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
-              ),
+              const SizedBox(height: 20),
+              const _SectionTitle('Giao dịch'),
               const SizedBox(height: 10),
+              _TimeBar(selection: _time, onChanged: _setTime),
+              const SizedBox(height: 8),
               _MemberChips(
                 selected: _filter.member,
                 onChanged: (m) =>
                     setState(() => _filter = _filter.withMember(m)),
-              ),
-              const SizedBox(height: 8),
-              _TimeChips(
-                preset: _preset,
-                filter: _filter,
-                onPreset: _setPreset,
-                onCustom: _pickCustomRange,
               ),
               const SizedBox(height: 8),
               TextField(
@@ -280,9 +217,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                   TextButton.icon(
                     key: const Key('summary_filter_toggle'),
                     onPressed: () =>
-                        setState(() => _showAdvanced = !_showAdvanced),
+                        setState(() => _showFilters = !_showFilters),
                     icon: Icon(
-                      _showAdvanced
+                      _showFilters
                           ? Icons.expand_less_rounded
                           : Icons.tune_rounded,
                       size: 18,
@@ -293,34 +230,44 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                           : 'Bộ lọc (${_filter.advancedCount})',
                     ),
                   ),
+                  TextButton.icon(
+                    key: const Key('summary_sort_button'),
+                    onPressed: () => _openSortSheet(context),
+                    icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                    label: Text(_sortLabel(_filter.sort)),
+                  ),
                   const Spacer(),
-                  if (!_isDefaultFilter)
+                  if (!_isDefaultView)
                     TextButton(
                       key: const Key('summary_clear_filters'),
-                      onPressed: _clearFilters,
+                      onPressed: _clearAll,
                       child: const Text('Xóa bộ lọc'),
                     ),
                 ],
               ),
-              if (_showAdvanced)
-                _AdvancedFilters(
+              _ActiveChips(
+                filter: _filter,
+                onClearCategories: () =>
+                    setState(() => _filter = _filter.withCategories({})),
+                onClearStatuses: () =>
+                    setState(() => _filter = _filter.withStatuses({})),
+              ),
+              if (_showFilters)
+                _FilterPanel(
                   filter: _filter,
-                  usedStatusIds: {
-                    for (final t in transactions)
-                      if (t.statusId != null &&
-                          t.categoryId == _filter.categoryId)
-                        t.statusId!,
-                  },
-                  categories: categories,
-                  categoryById: categoryById,
-                  hidden: _hidden,
-                  onChanged: (f) => setState(() => _filter = f),
+                  categoryOptions: categoryOptions,
+                  statusOptions: statusOptions,
+                  onCategories: (ids) =>
+                      setState(() => _filter = _filter.withCategories(ids)),
+                  onStatuses: (ids, none) => setState(
+                    () => _filter = _filter.withStatuses(ids, includeNone: none),
+                  ),
                 ),
               const SizedBox(height: 6),
               _ResultHeader(
                 key: const Key('summary_result_header'),
                 result: result,
-                filter: _filter,
+                selection: _time,
               ),
               const SizedBox(height: 4),
             ]),
@@ -343,7 +290,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                   const SizedBox(height: 8),
                   OutlinedButton(
                     key: const Key('summary_empty_clear'),
-                    onPressed: _clearFilters,
+                    onPressed: _clearAll,
                     child: const Text('Xóa bộ lọc'),
                   ),
                 ],
@@ -370,18 +317,52 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
       ],
     );
   }
+
+  static String _sortLabel(List<SortRule> rules) {
+    final r = rules.isEmpty ? const SortRule(SortKey.date) : rules.first;
+    final key = r.key == SortKey.date ? 'Ngày' : 'Số tiền';
+    return 'Sắp xếp: $key ${r.ascending ? '↑' : '↓'}';
+  }
+
+  Future<void> _openSortSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => _SortSheet(
+        current: _filter.sort.isEmpty
+            ? const SortRule(SortKey.date)
+            : _filter.sort.first,
+        onChanged: (rule) => setState(() => _filter = _filter.withSort([rule])),
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+    );
+  }
 }
 
 class _NetIncomeCard extends StatelessWidget {
   const _NetIncomeCard({
     super.key,
     required this.label,
-    required this.month,
+    required this.period,
     required this.value,
   });
 
   final String label;
-  final int month;
+  final String period;
   final int value;
 
   @override
@@ -402,7 +383,7 @@ class _NetIncomeCard extends StatelessWidget {
             style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
           ),
           Text(
-            'Tháng $month',
+            period,
             style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
           ),
         ],
@@ -412,9 +393,9 @@ class _NetIncomeCard extends StatelessWidget {
 }
 
 class _SpendingCard extends StatelessWidget {
-  const _SpendingCard({super.key, required this.month, required this.value});
+  const _SpendingCard({super.key, required this.period, required this.value});
 
-  final int month;
+  final String period;
   final int value;
 
   @override
@@ -427,7 +408,7 @@ class _SpendingCard extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Chi tiêu gia đình · tháng $month',
+              'Chi tiêu gia đình · $period',
               style: const TextStyle(
                 fontSize: 12.5,
                 color: AppColors.textSecondary,
@@ -486,101 +467,188 @@ class _MemberChips extends StatelessWidget {
   }
 }
 
-class _TimeChips extends StatelessWidget {
-  const _TimeChips({
-    required this.preset,
-    required this.filter,
-    required this.onPreset,
-    required this.onCustom,
-  });
+String _dateLabel(DateTime d) => Formatters.dayMonthYear(d);
 
-  final _TimePreset preset;
-  final TransactionFilter filter;
-  final ValueChanged<_TimePreset> onPreset;
-  final VoidCallback onCustom;
+String timeSelectionLabel(TimeSelection s) {
+  switch (s.kind) {
+    case TimeKind.day:
+      return _dateLabel(s.anchor);
+    case TimeKind.month:
+      return 'Tháng ${s.anchor.month}/${s.anchor.year}';
+    case TimeKind.year:
+      return 'Năm ${s.anchor.year}';
+    case TimeKind.all:
+      return 'Mọi thời gian';
+  }
+}
+
+/// Thời gian: [Ngày] [Tháng] [Năm] [Tất cả]. Bấm 1 chip = về KỲ HIỆN TẠI (hôm
+/// nay / tháng này / năm nay); mũi tên lùi/tiến để sang kỳ khác, bấm nhãn để chọn
+/// ngày cụ thể.
+class _TimeBar extends StatelessWidget {
+  const _TimeBar({required this.selection, required this.onChanged});
+
+  final TimeSelection selection;
+  final ValueChanged<TimeSelection> onChanged;
+
+  Future<void> _pickDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: selection.anchor,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(DateTime.now().year + 1, 12, 31),
+    );
+    if (picked == null) return;
+    switch (selection.kind) {
+      case TimeKind.day:
+        onChanged(TimeSelection.day(picked));
+      case TimeKind.month:
+        onChanged(TimeSelection.month(picked));
+      case TimeKind.year:
+        onChanged(TimeSelection.year(picked));
+      case TimeKind.all:
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    Widget chip(String keyName, String label, _TimePreset value) {
+    final today = DateTime.now();
+    Widget chip(String keyName, String label, TimeKind kind) {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: ChoiceChip(
           key: Key('summary_time_$keyName'),
           label: Text(label),
-          selected: preset == value,
-          onSelected: (_) => onPreset(value),
+          selected: selection.kind == kind,
+          onSelected: (_) => onChanged(TimeSelection.current(kind, today)),
         ),
       );
     }
 
-    final customLabel = preset == _TimePreset.custom && filter.from != null
-        ? '${Formatters.dayMonth(filter.from!)} – ${Formatters.dayMonth(filter.to ?? filter.from!)}'
-        : 'Tuỳ chọn';
+    final navigable = selection.kind == TimeKind.day ||
+        selection.kind == TimeKind.month ||
+        selection.kind == TimeKind.year;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          chip('today', 'Hôm nay', _TimePreset.today),
-          chip('this_month', 'Tháng này', _TimePreset.thisMonth),
-          chip('last_month', 'Tháng trước', _TimePreset.lastMonth),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              key: const Key('summary_time_custom'),
-              avatar: const Icon(Icons.date_range_rounded, size: 16),
-              label: Text(customLabel),
-              selected: preset == _TimePreset.custom,
-              onSelected: (_) => onCustom(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Xuống dòng thay vì cuộn ngang: mọi kiểu thời gian (kể cả "Tất cả")
+        // luôn nhìn thấy, không phải đoán là có thể vuốt.
+        Wrap(
+          runSpacing: 6,
+          children: [
+            chip('day', 'Ngày', TimeKind.day),
+            chip('month', 'Tháng', TimeKind.month),
+            chip('year', 'Năm', TimeKind.year),
+            chip('all', 'Tất cả', TimeKind.all),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            if (navigable)
+              IconButton(
+                key: const Key('summary_time_prev'),
+                icon: const Icon(Icons.chevron_left_rounded),
+                onPressed: () => onChanged(selection.shift(-1)),
+              ),
+            Expanded(
+              child: TextButton(
+                key: const Key('summary_time_label'),
+                onPressed: navigable ? () => _pickDate(context) : null,
+                child: Text(
+                  timeSelectionLabel(selection),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
+            if (navigable)
+              IconButton(
+                key: const Key('summary_time_next'),
+                icon: const Icon(Icons.chevron_right_rounded),
+                onPressed: () => onChanged(selection.shift(1)),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-/// Nhóm chính → Danh mục → Trạng thái. Đổi nhóm/danh mục tự xoá lựa chọn cũ
-/// không còn hợp lệ (logic nằm trong [TransactionFilter], được test riêng).
-class _AdvancedFilters extends StatelessWidget {
-  const _AdvancedFilters({
+/// Các bộ lọc đang bật, mỗi cái có nút [x] để bỏ RIÊNG nó — hiện cả khi kết quả
+/// rỗng để người dùng thấy lựa chọn của mình, không bị "tự nới" bộ lọc.
+class _ActiveChips extends StatelessWidget {
+  const _ActiveChips({
     required this.filter,
-    required this.usedStatusIds,
-    required this.categories,
-    required this.categoryById,
-    required this.hidden,
-    required this.onChanged,
+    required this.onClearCategories,
+    required this.onClearStatuses,
   });
 
   final TransactionFilter filter;
-
-  /// Trạng thái đang có giao dịch (kể cả giao dịch đã bị ẩn/hoàn tác) — bước
-  /// đã ngừng sử dụng chỉ được liệt kê khi còn lịch sử dùng nó.
-  final Set<String> usedStatusIds;
-  final List<Category> categories;
-  final Map<String, Category> categoryById;
-  final Set<String> hidden;
-  final ValueChanged<TransactionFilter> onChanged;
+  final VoidCallback onClearCategories;
+  final VoidCallback onClearStatuses;
 
   @override
   Widget build(BuildContext context) {
-    final options =
-        categories.where((c) {
-          if (hidden.contains(c.id)) return false;
-          if (filter.group == null) return true;
-          return categoryGroupOf(c, hidden) == filter.group;
-        }).toList()..sort((a, b) {
-          if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
-          return a.name.compareTo(b.name);
-        });
-    final selectedCategory = filter.categoryId == null
-        ? null
-        : categoryById[filter.categoryId];
-    final statuses = [
-      for (final s in selectedCategory?.statuses ?? const <Status>[])
-        if (s.isActive || usedStatusIds.contains(s.id)) s,
-    ];
+    final chips = <Widget>[];
+    if (filter.categoryIds.isNotEmpty) {
+      chips.add(
+        InputChip(
+          key: const Key('summary_chip_categories'),
+          label: Text('Danh mục: ${filter.categoryIds.length}'),
+          onDeleted: onClearCategories,
+        ),
+      );
+    }
+    if (filter.hasStatusFilter) {
+      final n = filter.statusIds.length + (filter.includeNoStatus ? 1 : 0);
+      chips.add(
+        InputChip(
+          key: const Key('summary_chip_statuses'),
+          label: Text('Trạng thái: $n'),
+          onDeleted: onClearStatuses,
+        ),
+      );
+    }
+    if (chips.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Wrap(spacing: 8, runSpacing: 4, children: chips),
+    );
+  }
+}
 
+/// Bảng bộ lọc: Danh mục (nhiều) · Trạng thái (nhiều) · Số tiền. Mỗi chiều độc
+/// lập với chiều còn lại.
+class _FilterPanel extends StatelessWidget {
+  const _FilterPanel({
+    required this.filter,
+    required this.categoryOptions,
+    required this.statusOptions,
+    required this.onCategories,
+    required this.onStatuses,
+  });
+
+  final TransactionFilter filter;
+  final List<ExplorerOption> categoryOptions;
+  final List<ExplorerOption> statusOptions;
+  final ValueChanged<Set<String>> onCategories;
+  final void Function(Set<String> ids, bool includeNone) onStatuses;
+
+  static const _categoryGroupOrder = [
+    'Doanh thu',
+    'Khoản thu khác',
+    'Chi tiêu',
+    'Chi phí kinh doanh',
+    'Chuyển',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(12),
@@ -591,100 +659,286 @@ class _AdvancedFilters extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Nhóm',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              ChoiceChip(
-                key: const Key('summary_group_all'),
-                label: const Text('Tất cả'),
-                selected: filter.group == null,
-                onSelected: (_) => onChanged(
-                  filter.withGroup(
-                    null,
-                    categoryById,
-                    hiddenCategoryIds: hidden,
-                  ),
-                ),
+          _PickerRow(
+            key: const Key('summary_pick_categories'),
+            label: 'Danh mục',
+            summary: filter.categoryIds.isEmpty
+                ? 'Tất cả'
+                : '${filter.categoryIds.length} đã chọn',
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => _MultiSelectSheet(
+                title: 'Danh mục',
+                options: categoryOptions,
+                groupOrder: _categoryGroupOrder,
+                initial: filter.categoryIds,
+                onChanged: (ids, _) => onCategories(ids),
               ),
-              for (final g in MainGroup.values)
-                ChoiceChip(
-                  key: Key('summary_group_${g.name}'),
-                  label: Text(g.label),
-                  selected: filter.group == g,
-                  onSelected: (_) => onChanged(
-                    filter.withGroup(
-                      g,
-                      categoryById,
-                      hiddenCategoryIds: hidden,
+            ),
+            onClear: filter.categoryIds.isEmpty ? null : () => onCategories({}),
+          ),
+          const SizedBox(height: 10),
+          _PickerRow(
+            key: const Key('summary_pick_statuses'),
+            label: 'Trạng thái',
+            summary: !filter.hasStatusFilter
+                ? 'Tất cả'
+                : '${filter.statusIds.length + (filter.includeNoStatus ? 1 : 0)} đã chọn',
+            onTap: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              showDragHandle: true,
+              builder: (_) => _MultiSelectSheet(
+                title: 'Trạng thái',
+                options: statusOptions,
+                initial: filter.statusIds,
+                noneLabel: 'Không có trạng thái',
+                initialNone: filter.includeNoStatus,
+                onChanged: onStatuses,
+              ),
+            ),
+            onClear: filter.hasStatusFilter ? () => onStatuses({}, false) : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PickerRow extends StatelessWidget {
+  const _PickerRow({
+    super.key,
+    required this.label,
+    required this.summary,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  final String label;
+  final String summary;
+  final VoidCallback onTap;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: onTap,
+            child: InputDecorator(
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: label,
+                border: const OutlineInputBorder(),
+                suffixIcon: const Icon(Icons.arrow_drop_down_rounded),
+              ),
+              child: Text(summary),
+            ),
+          ),
+        ),
+        if (onClear != null)
+          IconButton(
+            key: Key('${(key as ValueKey<String>).value}_clear'),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            tooltip: 'Bỏ lọc $label',
+            onPressed: onClear,
+          ),
+      ],
+    );
+  }
+}
+
+/// Bộ chọn NHIỀU mục có đánh dấu. Áp dụng ngay khi chạm (không cần "Xong" để
+/// lưu), nhóm chỉ để nhìn cho dễ. [noneLabel] thêm lựa chọn "Không có trạng thái".
+class _MultiSelectSheet extends StatefulWidget {
+  const _MultiSelectSheet({
+    required this.title,
+    required this.options,
+    required this.initial,
+    required this.onChanged,
+    this.groupOrder,
+    this.noneLabel,
+    this.initialNone = false,
+  });
+
+  final String title;
+  final List<ExplorerOption> options;
+  final Set<String> initial;
+  final List<String>? groupOrder;
+  final String? noneLabel;
+  final bool initialNone;
+  final void Function(Set<String> ids, bool includeNone) onChanged;
+
+  @override
+  State<_MultiSelectSheet> createState() => _MultiSelectSheetState();
+}
+
+class _MultiSelectSheetState extends State<_MultiSelectSheet> {
+  late Set<String> _selected = {...widget.initial};
+  late bool _none = widget.initialNone;
+
+  void _notify() => widget.onChanged({..._selected}, _none);
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String, List<ExplorerOption>>{};
+    for (final o in widget.options) {
+      (groups[o.groupLabel] ??= []).add(o);
+    }
+    final order = widget.groupOrder;
+    final keys = groups.keys.toList();
+    if (order != null) {
+      keys.sort((a, b) {
+        final ia = order.indexOf(a);
+        final ib = order.indexOf(b);
+        return (ia < 0 ? order.length : ia).compareTo(ib < 0 ? order.length : ib);
+      });
+    }
+    final height = MediaQuery.of(context).size.height * 0.75;
+    return SizedBox(
+      height: height,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 8, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Danh mục',
-            style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 6),
-          DropdownButtonFormField<String?>(
-            key: ValueKey(
-              'summary_category_${filter.group?.name}_${filter.categoryId}',
-            ),
-            initialValue: options.any((c) => c.id == filter.categoryId)
-                ? filter.categoryId
-                : null,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('Tất cả danh mục'),
-              ),
-              for (final c in options)
-                DropdownMenuItem<String?>(
-                  value: c.id,
-                  child: Text(c.isActive ? c.name : '${c.name} (đã ngừng)'),
+                TextButton(
+                  key: const Key('multi_clear'),
+                  onPressed: () {
+                    setState(() {
+                      _selected = {};
+                      _none = false;
+                    });
+                    _notify();
+                  },
+                  child: const Text('Bỏ chọn'),
                 ),
-            ],
-            onChanged: (v) => onChanged(filter.withCategory(v, categoryById)),
-          ),
-          if (statuses.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const Text(
-              'Trạng thái',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                ChoiceChip(
-                  key: const Key('summary_status_all'),
-                  label: const Text('Tất cả'),
-                  selected: filter.statusId == null,
-                  onSelected: (_) => onChanged(filter.withStatus(null)),
+                TextButton(
+                  key: const Key('multi_done'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Xong'),
                 ),
-                for (final s in statuses)
-                  ChoiceChip(
-                    key: Key('summary_status_${s.id}'),
-                    label: Text(s.isActive ? s.name : '${s.name} (đã ẩn)'),
-                    selected: filter.statusId == s.id,
-                    onSelected: (_) => onChanged(filter.withStatus(s.id)),
-                  ),
               ],
             ),
-          ],
+          ),
+          Expanded(
+            child: ListView(
+              children: [
+                if (widget.noneLabel != null)
+                  CheckboxListTile(
+                    key: const Key('multi_none'),
+                    dense: true,
+                    value: _none,
+                    title: Text(widget.noneLabel!),
+                    onChanged: (v) {
+                      setState(() => _none = v ?? false);
+                      _notify();
+                    },
+                  ),
+                for (final g in keys) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 2),
+                    child: Text(
+                      g.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMuted,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ),
+                  for (final o in groups[g]!)
+                    CheckboxListTile(
+                      key: Key('multi_${o.id}'),
+                      dense: true,
+                      value: _selected.contains(o.id),
+                      title: Text(
+                        o.label,
+                        style: TextStyle(
+                          color: o.active ? null : AppColors.textMuted,
+                        ),
+                      ),
+                      onChanged: (v) {
+                        setState(() {
+                          if (v ?? false) {
+                            _selected.add(o.id);
+                          } else {
+                            _selected.remove(o.id);
+                          }
+                        });
+                        _notify();
+                      },
+                    ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Sắp xếp: chọn 1 trong 4 (Ngày mới → cũ / cũ → mới, Số tiền lớn → nhỏ /
+/// nhỏ → lớn). Đơn giản, không nhiều tầng — tránh chọn hai tiêu chí làm rối.
+class _SortSheet extends StatelessWidget {
+  const _SortSheet({required this.current, required this.onChanged});
+
+  final SortRule current;
+  final ValueChanged<SortRule> onChanged;
+
+  static const _options = <(String keyName, String label, SortRule rule)>[
+    ('date_desc', 'Ngày: mới → cũ', SortRule(SortKey.date)),
+    ('date_asc', 'Ngày: cũ → mới', SortRule(SortKey.date, ascending: true)),
+    ('amount_desc', 'Số tiền: lớn → nhỏ', SortRule(SortKey.amount)),
+    (
+      'amount_asc',
+      'Số tiền: nhỏ → lớn',
+      SortRule(SortKey.amount, ascending: true),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+            child: Text(
+              'Sắp xếp',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ),
+          for (final o in _options)
+            ListTile(
+              key: Key('sort_option_${o.$1}'),
+              dense: true,
+              title: Text(o.$2),
+              trailing: current == o.$3
+                  ? const Icon(Icons.check_rounded, color: AppColors.accent)
+                  : null,
+              onTap: () {
+                onChanged(o.$3);
+                Navigator.of(context).pop();
+              },
+            ),
         ],
       ),
     );
@@ -694,18 +948,13 @@ class _AdvancedFilters extends StatelessWidget {
 /// "27 giao dịch · 01/09 – 30/09" + Thu/Chi của CHÍNH tập đang xem (không
 /// gộp thành một con số mơ hồ; Chuyển không tính vào Thu/Chi).
 class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({super.key, required this.result, required this.filter});
+  const _ResultHeader({super.key, required this.result, required this.selection});
 
   final ExplorerResult result;
-  final TransactionFilter filter;
+  final TimeSelection selection;
 
   @override
   Widget build(BuildContext context) {
-    final range = filter.from == null
-        ? 'Mọi ngày'
-        : (filter.to == null || filter.from == filter.to)
-        ? Formatters.dayMonth(filter.from!)
-        : '${Formatters.dayMonth(filter.from!)} – ${Formatters.dayMonth(filter.to!)}';
     final parts = <String>[
       if (result.inflow > 0) 'Thu ${Formatters.amount(result.inflow)}',
       if (result.outflow > 0) 'Chi ${Formatters.amount(result.outflow)}',
@@ -714,7 +963,7 @@ class _ResultHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${result.count} giao dịch · $range',
+          '${result.count} giao dịch · ${timeSelectionLabel(selection)}',
           style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
         if (parts.isNotEmpty)
@@ -852,79 +1101,3 @@ class _ExplorerRow extends StatelessWidget {
   }
 }
 
-/// Tổng tiền theo từng bước trạng thái của danh mục có `statsEnabled`
-/// (giữ nguyên tính năng cũ, thu gọn mặc định).
-class _StatusCard extends StatelessWidget {
-  const _StatusCard({required this.category, required this.breakdown});
-
-  final Category category;
-  final StatusBreakdown breakdown;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: category.color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                category.name,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                Formatters.amount(breakdown.total),
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          // Bước đã ẩn chỉ hiện khi còn giao dịch lịch sử ở bước đó.
-          for (final step in category.statuses)
-            if (step.isActive || (breakdown.totals[step.id] ?? 0) > 0)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        step.name,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      Formatters.amount(breakdown.totals[step.id] ?? 0),
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-        ],
-      ),
-    );
-  }
-}

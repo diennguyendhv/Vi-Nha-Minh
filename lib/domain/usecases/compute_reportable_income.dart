@@ -41,10 +41,37 @@ class ReportableIncome {
 /// Chỉ đếm giao dịch đang hiệu lực (`isVisible`) nên reversal/correction
 /// không bao giờ đếm đôi. [month] lọc theo `transactionDate` (cùng quy tắc
 /// với [computeThreeTotals]); bỏ trống để tính toàn bộ lịch sử.
+/// Giao dịch ngày [date] có thuộc kỳ báo cáo không: [month] (cả tháng) HOẶC
+/// khoảng ngày [from]..[to] (bao gồm 2 đầu, so theo NGÀY lịch; `null` = không
+/// giới hạn phía đó). Không truyền gì = toàn bộ lịch sử. Dùng chung cho mọi số
+/// báo cáo theo kỳ để Tổng quan và Explorer cùng 1 quy tắc.
+bool inReportPeriod(
+  DateTime date, {
+  DateTime? month,
+  DateTime? from,
+  DateTime? to,
+}) {
+  if (month != null &&
+      (date.year != month.year || date.month != month.month)) {
+    return false;
+  }
+  final day = DateTime(date.year, date.month, date.day);
+  if (from != null &&
+      day.isBefore(DateTime(from.year, from.month, from.day))) {
+    return false;
+  }
+  if (to != null && day.isAfter(DateTime(to.year, to.month, to.day))) {
+    return false;
+  }
+  return true;
+}
+
 List<ReportableIncome> computeReportableIncomeEntries(
   List<Transaction> transactions,
   List<Category> categories, {
   DateTime? month,
+  DateTime? from,
+  DateTime? to,
 }) {
   final categoryById = {for (final c in categories) c.id: c};
   final recoveryProfitPortions = computeRecoveryProfitPortions(transactions);
@@ -52,9 +79,7 @@ List<ReportableIncome> computeReportableIncomeEntries(
 
   for (final t in transactions) {
     if (!isVisible(t) || t.type != TransactionType.income) continue;
-    if (month != null &&
-        (t.transactionDate.year != month.year ||
-            t.transactionDate.month != month.month)) {
+    if (!inReportPeriod(t.transactionDate, month: month, from: from, to: to)) {
       continue;
     }
     final int amount;

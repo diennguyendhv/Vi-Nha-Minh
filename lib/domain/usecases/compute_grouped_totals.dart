@@ -60,14 +60,16 @@ FamilyMember? expenseSpender(Transaction t) {
   }
 }
 
-/// Tính [GroupedTotals] cho [month] (theo `transactionDate`; bỏ trống = toàn
-/// bộ lịch sử) và tuỳ chọn [member] (Vợ/Chồng). Chỉ đếm giao dịch đang hiệu
+/// Tính [GroupedTotals] cho [month] hoặc khoảng ngày [from]..[to] (theo
+/// `transactionDate`; bỏ trống = toàn bộ lịch sử) và tuỳ chọn [member] (Vợ/Chồng). Chỉ đếm giao dịch đang hiệu
 /// lực (`isVisible`) nên reversal/correction không bao giờ đếm đôi; đổi nhóm
 /// của 1 danh mục chỉ đổi số báo cáo này, không đổi giao dịch nào.
 GroupedTotals computeGroupedTotals(
   List<Transaction> transactions,
   List<Category> categories, {
   DateTime? month,
+  DateTime? from,
+  DateTime? to,
   FamilyMember? member,
 }) {
   final categoryById = {for (final c in categories) c.id: c};
@@ -79,6 +81,8 @@ GroupedTotals computeGroupedTotals(
       transactions,
       categories,
       month: month,
+      from: from,
+      to: to,
     ))
       e.transaction.id: e.amountMinor,
   };
@@ -90,9 +94,7 @@ GroupedTotals computeGroupedTotals(
 
   for (final t in transactions) {
     if (!isVisible(t)) continue;
-    if (month != null &&
-        (t.transactionDate.year != month.year ||
-            t.transactionDate.month != month.month)) {
+    if (!inReportPeriod(t.transactionDate, month: month, from: from, to: to)) {
       continue;
     }
     switch (t.type) {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +40,6 @@ Category _cat(
   excludeFromTotals: exclude,
   groupKey: group,
   statuses: statuses,
-  statsEnabled: statuses.isNotEmpty,
 );
 
 final _cats = <Category>[
@@ -149,6 +150,42 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
 
 Future<void> _openFilters(WidgetTester tester) async => _tapKey(tester, 'summary_filter_toggle');
 
+/// Mở bảng lọc → bộ chọn Danh mục / Trạng thái (đa chọn).
+Future<void> _openPicker(WidgetTester tester, String pickerKey) async {
+  if (find.byKey(Key(pickerKey)).evaluate().isEmpty) await _openFilters(tester);
+  await _tapKey(tester, pickerKey);
+}
+
+Future<void> _toggleOption(WidgetTester tester, String optionId) async {
+  final f = find.byKey(Key('multi_$optionId'));
+  await tester.ensureVisible(f);
+  await tester.pumpAndSettle();
+  await tester.tap(f);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _closeSheet(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('multi_done')));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _pickCategories(WidgetTester tester, List<String> ids) async {
+  await _openPicker(tester, 'summary_pick_categories');
+  for (final id in ids) {
+    await _toggleOption(tester, id);
+  }
+  await _closeSheet(tester);
+}
+
+Future<void> _pickStatuses(WidgetTester tester, List<String> ids, {bool none = false}) async {
+  await _openPicker(tester, 'summary_pick_statuses');
+  if (none) await _toggleOption(tester, 'none');
+  for (final id in ids) {
+    await _toggleOption(tester, id);
+  }
+  await _closeSheet(tester);
+}
+
 String _header(WidgetTester tester) {
   final texts = tester
       .widgetList<Text>(find.descendant(of: find.byKey(const Key('summary_result_header')), matching: find.byType(Text)))
@@ -215,7 +252,7 @@ void main() {
     expect(h, contains('Chi 4.625.000 đ'));
     expect(h, isNot(contains('Vào')));
     expect(h, isNot(contains('Ra ')));
-    expect(h, contains(' – '), reason: 'khoảng ngày tháng này');
+    expect(h, contains('Tháng ${_now.month}/${_now.year}'), reason: 'thời gian đang xem');
   });
 
   testWidgets('Chip thành viên: Tất cả / Vợ / Chồng → danh sách + tổng cập nhật; bấm liên tiếp không lệch trạng thái', (tester) async {
@@ -241,174 +278,277 @@ void main() {
     expect(_header(tester), contains('9 giao dịch'));
   });
 
-  testWidgets('Nhóm → Danh mục: chọn nhóm lọc danh sách danh mục; đổi nhóm xoá danh mục cũ không hợp lệ', (tester) async {
+  testWidgets('Nhiều danh mục (OR): Sinh hoạt + Lương nhân viên; bộ chọn nhóm theo Nhóm chính; bỏ riêng bằng chip', (tester) async {
     await _pump(tester, base);
-    await _openFilters(tester);
-    await _tapKey(tester, 'summary_group_spending');
-    expect(_header(tester), contains('4 giao dịch'));
-
-    // Chọn danh mục Sinh hoạt qua dropdown.
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    expect(find.text('Lương nhân viên'), findsNothing, reason: 'không thuộc nhóm Chi tiêu');
-    await tester.tap(find.text('Sinh hoạt').last);
-    await tester.pumpAndSettle();
+    await _openPicker(tester, 'summary_pick_categories');
+    for (final g in ['DOANH THU', 'KHOẢN THU KHÁC', 'CHI TIÊU', 'CHI PHÍ KINH DOANH', 'CHUYỂN']) {
+      expect(find.text(g), findsOneWidget, reason: 'nhóm $g chỉ để nhìn cho dễ');
+    }
+    await _toggleOption(tester, 'sinh_hoat');
     expect(_header(tester), contains('2 giao dịch'));
+    await _toggleOption(tester, 'luong_gv');
+    expect(_header(tester), contains('3 giao dịch'), reason: 'OR trong cùng chiều');
+    await _closeSheet(tester);
 
-    // Đổi sang nhóm khác → danh mục Sinh hoạt bị xoá.
-    await _tapKey(tester, 'summary_group_businessExpense');
-    expect(_header(tester), contains('1 giao dịch'));
-    expect(find.text('Lương cô Lam'), findsOneWidget);
-    expect(find.text('Bộ lọc (1)'), findsOneWidget, reason: 'chỉ còn nhóm, danh mục đã bị xoá');
+    expect(find.byKey(const Key('summary_chip_categories')), findsOneWidget);
+    expect(find.text('Danh mục: 2'), findsOneWidget);
+    expect(find.text('Bộ lọc (1)'), findsOneWidget);
+
+    // Bỏ RIÊNG bộ lọc danh mục qua chip, không đụng chiều khác.
+    await _tapKey(tester, 'summary_member_vo');
+    await tester.tap(find.descendant(of: find.byKey(const Key('summary_chip_categories')), matching: find.byIcon(Icons.clear)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('summary_chip_categories')), findsNothing);
+    expect(_header(tester), contains('5 giao dịch'), reason: 'Vợ vẫn giữ nguyên');
   });
 
-  testWidgets('Danh mục CĐ → hiện trạng thái (kể cả đã ẩn); chọn trạng thái lọc danh sách; đổi danh mục không trạng thái → xoá', (tester) async {
+  testWidgets('Trạng thái đa chọn ĐỘC LẬP với danh mục (chọn trạng thái trước); "Không có trạng thái" = OR với trạng thái khác', (tester) async {
     await _pump(tester, base);
-    await _openFilters(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('CĐ').last);
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('2 giao dịch'));
-
-    expect(find.byKey(const Key('summary_status_st_chua')), findsOneWidget);
-    expect(find.byKey(const Key('summary_status_st_gui')), findsOneWidget);
-    expect(find.text('Cũ (đã ẩn)'), findsNothing, reason: 'bước đã ẩn KHÔNG dùng → không làm rối bộ lọc');
-
-    await _tapKey(tester, 'summary_status_st_gui');
+    await _pickStatuses(tester, ['st_gui']);
     expect(_header(tester), contains('1 giao dịch'));
     expect(find.text('đã gửi'), findsOneWidget);
-    expect(find.text('CĐ tháng này'), findsNothing);
+    expect(find.byKey(const Key('summary_chip_categories')), findsNothing, reason: 'không cần chọn danh mục');
 
-    // Đổi sang danh mục không có trạng thái → nhóm trạng thái biến mất và điều kiện trạng thái bị xoá.
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sinh hoạt').last);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('summary_status_st_gui')), findsNothing);
-    expect(_header(tester), contains('2 giao dịch'));
+    await _pickStatuses(tester, [], none: true);
+    // 1 (ĐG) + 7 giao dịch không trạng thái = 8; CCB còn lại bị loại.
+    expect(_header(tester), contains('8 giao dịch'));
+    expect(find.text('CĐ tháng này'), findsNothing);
+    expect(find.text('Trạng thái: 2'), findsOneWidget);
   });
 
-  testWidgets('Bước trạng thái đã ẩn nhưng còn lịch sử → vẫn lọc được', (tester) async {
+  testWidgets('Trạng thái đã ẩn còn lịch sử → vẫn lọc được, nhãn kèm tên danh mục; không lịch sử thì không hiện', (tester) async {
     await _pump(tester, [
       _out('cho_di', 70000, statusId: 'st_cu', note: 'lịch sử cũ'),
       _out('cho_di', 1000, statusId: 'st_chua'),
     ]);
-    await _openFilters(tester);
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('CĐ').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Cũ (đã ẩn)'), findsOneWidget);
-    await _tapKey(tester, 'summary_status_st_cu');
+    await _openPicker(tester, 'summary_pick_statuses');
+    expect(find.text('Cũ (đã ẩn) · CĐ'), findsOneWidget);
+    expect(find.text('CCB · CĐ'), findsOneWidget);
+    await _toggleOption(tester, 'st_cu');
     expect(_header(tester), contains('1 giao dịch'));
     expect(find.text('lịch sử cũ'), findsOneWidget);
   });
 
-  testWidgets('Tìm ghi chú: gõ → cập nhật ngay, không phân biệt hoa/thường; xoá ô → trả về đủ', (tester) async {
+  testWidgets('Giao rỗng (Sinh hoạt + trạng thái ĐG): 0 kết quả, bộ lọc giữ nguyên, có [Xóa bộ lọc]', (tester) async {
     await _pump(tester, base);
-    await tester.enterText(find.byKey(const Key('summary_search')), 'LƯƠNG');
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('1 giao dịch'));
-    expect(find.text('Lương cô Lam'), findsOneWidget);
-
-    await tester.enterText(find.byKey(const Key('summary_search')), '  hp  ');
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('1 giao dịch'));
-
-    await tester.tap(find.byKey(const Key('summary_search_clear')));
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('9 giao dịch'));
-  });
-
-  testWidgets('Kết hợp 3+ bộ lọc = giao (Vợ + Chi tiêu + Sinh hoạt + "chợ")', (tester) async {
-    final ledger = [
-      ...base,
-      _out('sinh_hoat', 80000, from: 'chong', note: 'đi chợ'),
-      _out('sinh_hoat', 60000, from: 'vo', note: 'cà phê'),
-    ];
-    await _pump(tester, ledger);
-    await _tapKey(tester, 'summary_member_vo');
-    await _openFilters(tester);
-    await _tapKey(tester, 'summary_group_spending');
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sinh hoạt').last);
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('summary_search')), 'chợ');
-    await tester.pumpAndSettle();
-
-    expect(_header(tester), contains('1 giao dịch'));
-    expect(_header(tester), contains('Chi 120.000 đ'));
-    expect(find.text('Đi chợ'), findsOneWidget);
-  });
-
-  testWidgets('Tìm Ghi chú không dấu ↔ có dấu qua ô tìm; Thu/Chi header đổi theo', (tester) async {
-    final ledger = [
-      _out('sinh_hoat', 120000, from: 'vo', note: 'Đi chợ'),
-      _out('sinh_hoat', 70000, from: 'chong', note: 'di cho'),
-      _out('sinh_hoat', 5000, from: 'vo', note: 'cà phê'),
-    ];
-    await _pump(tester, ledger);
-    await tester.enterText(find.byKey(const Key('summary_search')), 'DI CHO');
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('2 giao dịch'));
-    expect(_header(tester), contains('Chi 190.000 đ'));
-    expect(find.text('Đi chợ'), findsOneWidget);
-    expect(find.text('di cho'), findsOneWidget);
-
-    await tester.enterText(find.byKey(const Key('summary_search')), 'cà phê');
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('1 giao dịch'));
-    await tester.enterText(find.byKey(const Key('summary_search')), 'ca phe');
-    await tester.pumpAndSettle();
-    expect(_header(tester), contains('1 giao dịch'));
-    expect(find.text('cà phê'), findsOneWidget);
-  });
-
-  testWidgets('Empty state + Xóa bộ lọc: về đúng mặc định trong 1 thao tác', (tester) async {
-    await _pump(tester, base);
-    await _tapKey(tester, 'summary_member_vo');
-    await tester.enterText(find.byKey(const Key('summary_search')), 'xyzabc');
-    await tester.pumpAndSettle();
+    await _pickCategories(tester, ['sinh_hoat']);
+    await _pickStatuses(tester, ['st_gui']);
     expect(find.text('Không tìm thấy giao dịch'), findsOneWidget);
     expect(_header(tester), contains('0 giao dịch'));
+    expect(find.text('Danh mục: 1'), findsOneWidget, reason: 'không tự bỏ/đổi lựa chọn');
+    expect(find.text('Trạng thái: 1'), findsOneWidget);
+    expect(find.byKey(const Key('summary_empty_clear')), findsOneWidget);
+  });
 
-    await tester.ensureVisible(find.byKey(const Key('summary_empty_clear')));
-    await tester.tap(find.byKey(const Key('summary_empty_clear')));
+  testWidgets('Danh mục ngừng: chỉ hiện trong bộ chọn khi còn giao dịch; nhãn "(đã ngừng)"', (tester) async {
+    final cats = [
+      ..._cats,
+      Category(id: 'cu_co_gd', name: 'Chi Phí Vận Hành', color: Colors.grey, type: TransactionType.expense, isActive: false),
+      Category(id: 'cu_khong_gd', name: 'Danh mục bỏ', color: Colors.grey, type: TransactionType.expense, isActive: false),
+    ];
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionsStreamProvider.overrideWith((ref) => Stream.value([_out('cu_co_gd', 5000, note: 'cũ')])),
+          categoriesStreamProvider.overrideWith((ref) => Stream.value(cats)),
+          obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
+          savingsAssetTypesStreamProvider.overrideWith((ref) => Stream.value(DefaultSavingsAssetTypes.all)),
+          counterpartiesStreamProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+        child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('Không tìm thấy giao dịch'), findsNothing);
-    expect(_header(tester), contains('9 giao dịch'));
-    expect(tester.widget<TextField>(find.byKey(const Key('summary_search'))).controller!.text, isEmpty);
-    expect(tester.widget<ChoiceChip>(find.byKey(const Key('summary_member_all'))).selected, isTrue);
-    expect(find.byKey(const Key('summary_clear_filters')), findsNothing, reason: 'đã ở mặc định');
+    await _openPicker(tester, 'summary_pick_categories');
+    expect(find.text('Chi Phí Vận Hành (đã ngừng)'), findsOneWidget);
+    expect(find.byKey(const Key('multi_cu_khong_gd')), findsNothing);
   });
 
-  testWidgets('Xóa bộ lọc (nút thường) xoá member/nhóm/danh mục/trạng thái/ghi chú/thời gian', (tester) async {
+  testWidgets('Không còn lọc theo số tiền (chỉ còn SẮP XẾP theo số tiền)', (tester) async {
     await _pump(tester, base);
-    await _tapKey(tester, 'summary_member_chong');
-    await _tapKey(tester, 'summary_time_last_month');
-    expect(_header(tester), contains('0 giao dịch'));
-    expect(find.byKey(const Key('summary_clear_filters')), findsOneWidget);
-    await _tapKey(tester, 'summary_clear_filters');
-    expect(_header(tester), contains('9 giao dịch'));
-    expect(tester.widget<ChoiceChip>(find.byKey(const Key('summary_time_this_month'))).selected, isTrue);
+    await _openFilters(tester);
+    expect(find.byKey(const Key('summary_amount_min')), findsNothing);
+    expect(find.byKey(const Key('summary_amount_max')), findsNothing);
+    expect(find.text('Số tiền'), findsNothing, reason: 'không có nhãn lọc "Số tiền"');
+    expect(find.byKey(const Key('summary_sort_button')), findsOneWidget);
   });
 
-  testWidgets('Thời gian: Hôm nay / Tháng trước dựa trên transactionDate', (tester) async {
+  testWidgets('Tổng quan theo KỲ THỜI GIAN đang chọn (tháng / năm / ngày / tất cả), không theo bộ lọc Danh mục/Trạng thái', (tester) async {
+    final lastYear = DateTime(_now.year - 1, 6, 10);
+    await _pump(tester, [
+      ...base,
+      _in('hoc_phi', 1000000, to: 'vo', note: 'năm ngoái', date: lastYear),
+    ]);
+    // Tháng hiện tại (mặc định): Vợ 10.000.000 − 4.000.000 = 6.000.000; Chồng 5.000.000.
+    expect(_valueText(tester, 'summary_net_vo', '').data, '6.000.000 đ');
+    expect(find.text('Tổng quan · Tháng ${_now.month}/${_now.year}'), findsOneWidget);
+
+    // Năm hiện tại: vẫn như tháng (dữ liệu mẫu chỉ trong tháng này), KHÔNG cộng doanh thu năm ngoái.
+    await _tapKey(tester, 'summary_time_year');
+    expect(find.text('Tổng quan · Năm ${_now.year}'), findsOneWidget);
+    expect(_valueText(tester, 'summary_net_vo', '').data, '6.000.000 đ');
+
+    // Lùi 1 năm: chỉ còn doanh thu năm ngoái của Vợ.
+    await _tapKey(tester, 'summary_time_prev');
+    expect(_valueText(tester, 'summary_net_vo', '').data, '1.000.000 đ');
+    expect(_valueText(tester, 'summary_net_chong', '').data, '0 đ');
+    expect(_valueText(tester, 'summary_household_spending', '').data, '0 đ');
+
+    // Tất cả thời gian: cộng mọi kỳ.
+    await _tapKey(tester, 'summary_time_all');
+    expect(find.text('Tổng quan · Mọi thời gian'), findsOneWidget);
+    expect(_valueText(tester, 'summary_net_vo', '').data, '7.000.000 đ');
+    expect(_valueText(tester, 'summary_household_spending', '').data, '625.000 đ');
+
+    // Bộ lọc Danh mục KHÔNG đổi số tổng quan (chỉ đổi tổng của Explorer).
+    await _pickCategories(tester, ['sinh_hoat']);
+    expect(_valueText(tester, 'summary_net_vo', '').data, '7.000.000 đ');
+    expect(_header(tester), contains('2 giao dịch'));
+  });
+
+  testWidgets('Hàng chip thời gian không bị cắt: cả 4 kiểu (Ngày/Tháng/Năm/Tất cả) đều nằm trong màn hình', (tester) async {
+    await _pump(tester, base);
+    final width = tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    for (final k in ['day', 'month', 'year', 'all']) {
+      final rect = tester.getRect(find.byKey(Key('summary_time_$k')));
+      expect(rect.left >= 0 && rect.right <= width, isTrue, reason: 'chip $k nằm trọn trong màn hình (${rect.left}..${rect.right} / $width)');
+    }
+    // Ở bề rộng điện thoại thật (Pixel 7a ≈ 411dp) vẫn thấy hết nhờ xuống dòng.
+    tester.view.physicalSize = const Size(411, 3200);
+    await tester.pumpAndSettle();
+    tester.takeException(); // tràn của hàng khác do font test rộng — không thuộc phạm vi kiểm tra này.
+    for (final k in ['day', 'month', 'year', 'all']) {
+      final rect = tester.getRect(find.byKey(Key('summary_time_$k')));
+      expect(rect.left >= 0 && rect.right <= 411, isTrue, reason: 'chip $k (411dp): ${rect.left}..${rect.right}');
+    }
+  });
+
+  testWidgets('Sắp xếp chỉ Ngày / Số tiền: mặc định Ngày ↓; chọn Số tiền lớn → nhỏ rồi nhỏ → lớn; nhãn nút phản ánh; không còn tiêu chí thứ 2', (tester) async {
+    await _pump(tester, base);
+    expect(find.text('Sắp xếp: Ngày ↓'), findsOneWidget);
+
+    Future<void> choose(String option) async {
+      await _tapKey(tester, 'summary_sort_button');
+      // 4 lựa chọn rõ ràng, không có Người/Danh mục/Trạng thái và không có "Rồi theo".
+      expect(find.byKey(const Key('sort_option_date_desc')), findsOneWidget);
+      expect(find.byKey(const Key('sort_option_date_asc')), findsOneWidget);
+      expect(find.byKey(const Key('sort_option_amount_desc')), findsOneWidget);
+      expect(find.byKey(const Key('sort_option_amount_asc')), findsOneWidget);
+      expect(find.text('Rồi theo'), findsNothing);
+      expect(find.text('Danh mục'), findsNothing, reason: 'không còn khóa sắp xếp Danh mục');
+      await tester.tap(find.byKey(Key('sort_option_$option')));
+      await tester.pumpAndSettle();
+    }
+
+    await choose('amount_desc');
+    expect(find.text('Sắp xếp: Số tiền ↓'), findsOneWidget);
+    var firstRow = find.byWidgetPredicate((w) => w.key is ValueKey<String> && ((w.key! as ValueKey<String>).value.startsWith('in-') || (w.key! as ValueKey<String>).value.startsWith('out-'))).first;
+    expect(find.descendant(of: firstRow, matching: find.text('+ 10.000.000 đ')), findsOneWidget);
+
+    await choose('amount_asc');
+    expect(find.text('Sắp xếp: Số tiền ↑'), findsOneWidget);
+    firstRow = find.byWidgetPredicate((w) => w.key is ValueKey<String> && ((w.key! as ValueKey<String>).value.startsWith('in-') || (w.key! as ValueKey<String>).value.startsWith('out-'))).first;
+    expect(find.descendant(of: firstRow, matching: find.text('- 5.000 đ')), findsOneWidget, reason: 'khoản nhỏ 5.000đ lên đầu');
+
+    await choose('date_desc');
+    expect(find.text('Sắp xếp: Ngày ↓'), findsOneWidget);
+  });
+
+  testWidgets('Sửa/xóa khi đang lọc: dòng không còn khớp biến mất ngay, bộ lọc giữ nguyên, tổng cập nhật', (tester) async {
+    final ledger = [
+      _out('sinh_hoat', 120000, id: 'a', from: 'vo', note: 'Đi chợ'),
+      _out('sinh_hoat', 30000, id: 'b', from: 'vo', note: 'cà phê'),
+      _out('luong_gv', 500000, id: 'c', from: 'vo', note: 'Lương'),
+    ];
+    final controller = StreamController<List<Transaction>>();
+    addTearDown(controller.close);
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          transactionsStreamProvider.overrideWith((ref) => controller.stream),
+          categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
+          obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
+          savingsAssetTypesStreamProvider.overrideWith((ref) => Stream.value(DefaultSavingsAssetTypes.all)),
+          counterpartiesStreamProvider.overrideWith((ref) => Stream.value(const [])),
+        ],
+        child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
+      ),
+    );
+    controller.add(ledger);
+    await tester.pumpAndSettle();
+    await _pickCategories(tester, ['sinh_hoat']);
+    expect(_header(tester), contains('2 giao dịch'));
+    expect(_header(tester), contains('Chi 150.000 đ'));
+
+    // Sửa "a" sang danh mục khác (dòng mới thay dòng cũ) → không còn khớp bộ lọc Sinh hoạt.
+    controller.add([
+      _out('luong_gv', 120000, id: 'a2', from: 'vo', note: 'Đi chợ'),
+      ledger[1],
+      ledger[2],
+    ]);
+    await tester.pumpAndSettle();
+    expect(_header(tester), contains('1 giao dịch'));
+    expect(_header(tester), contains('Chi 30.000 đ'));
+    expect(find.text('Đi chợ'), findsNothing);
+    expect(find.text('Danh mục: 1'), findsOneWidget, reason: 'bộ lọc không bị reset');
+
+    // Xóa "b" → hết dòng, bộ lọc vẫn còn.
+    controller.add([ledger[2]]);
+    await tester.pumpAndSettle();
+    expect(_header(tester), contains('0 giao dịch'));
+    expect(find.text('Không tìm thấy giao dịch'), findsOneWidget);
+    expect(find.text('Danh mục: 1'), findsOneWidget);
+  });
+
+  testWidgets('Thời gian: Ngày / Tháng / Năm / Tất cả; bấm chip luôn về kỳ HIỆN TẠI; không còn "Khoảng ngày"', (tester) async {
     final lastMonth = DateTime(_now.year, _now.month - 1, 15);
+    final lastYear = DateTime(_now.year - 1, 6, 10);
     await _pump(tester, [
       ...base,
       _out('sinh_hoat', 7000, note: 'tháng trước', date: lastMonth),
+      _out('sinh_hoat', 9000, note: 'năm ngoái', date: lastYear),
     ]);
-    expect(_header(tester), contains('9 giao dịch'), reason: 'Tháng này mặc định');
+    expect(find.text('Khoảng ngày'), findsNothing);
+    expect(find.byKey(const Key('summary_time_range')), findsNothing);
+    expect(_header(tester), contains('9 giao dịch'), reason: 'Tháng hiện tại mặc định');
+    expect(find.text('Tháng ${_now.month}/${_now.year}'), findsWidgets);
 
-    await _tapKey(tester, 'summary_time_last_month');
+    await _tapKey(tester, 'summary_time_prev');
     expect(_header(tester), contains('1 giao dịch'));
     expect(find.text('tháng trước'), findsOneWidget);
 
-    await _tapKey(tester, 'summary_time_today');
+    // Đang xem tháng trước → bấm "Tháng" quay về THÁNG NÀY (không giữ mốc cũ).
+    await _tapKey(tester, 'summary_time_month');
+    expect(find.text('Tháng ${_now.month}/${_now.year}'), findsWidgets);
+    expect(_header(tester), contains('9 giao dịch'));
+
+    // Đang xem năm ngoái → bấm "Năm" về NĂM NAY; bấm "Ngày" về HÔM NAY.
+    await _tapKey(tester, 'summary_time_year');
+    await _tapKey(tester, 'summary_time_prev');
+    expect(find.text('Năm ${_now.year - 1}'), findsWidgets);
+    expect(find.text('năm ngoái'), findsOneWidget);
+    await _tapKey(tester, 'summary_time_year');
+    expect(find.text('Năm ${_now.year}'), findsWidgets);
+    expect(find.text('năm ngoái'), findsNothing);
+
+    await _tapKey(tester, 'summary_time_prev');
+    await _tapKey(tester, 'summary_time_day');
+    final t = DateTime.now();
+    final todayLabel = '${t.day.toString().padLeft(2, '0')}/${t.month.toString().padLeft(2, '0')}/${t.year}';
+    expect(find.text(todayLabel), findsWidgets, reason: 'Ngày → HÔM NAY, không phải ngày 1/1');
     expect(_header(tester), contains('9 giao dịch'), reason: 'mọi giao dịch mẫu đều ghi hôm nay');
+
+    await _tapKey(tester, 'summary_time_all');
+    expect(_header(tester), contains('11 giao dịch'));
+    expect(_header(tester), contains('Mọi thời gian'));
   });
 
   testWidgets('Chuyển hiện đời thường; khoản nhỏ 5.000đ vẫn nhìn thấy', (tester) async {
@@ -502,8 +642,8 @@ void main() {
     await tester.enterText(find.byKey(const Key('summary_search')), 'quạt');
     await tester.pumpAndSettle();
     expect(_header(tester), contains('2 giao dịch'));
-    await _openFilters(tester);
-    await _tapKey(tester, 'summary_group_revenue');
+    await _openPicker(tester, 'summary_pick_categories');
+    await _toggleOption(tester, 'hoc_phi');
     expect(tester.takeException(), isNull);
   });
 
@@ -539,9 +679,11 @@ void main() {
     await _tapKey(tester, 'summary_member_vo');
     await tester.enterText(find.byKey(const Key('summary_search')), 'chợ');
     await tester.pumpAndSettle();
-    await _openFilters(tester);
-    await _tapKey(tester, 'summary_group_spending');
+    await _pickCategories(tester, ['sinh_hoat', 'luong_gv']);
     expect(_header(tester), isNot(contains('1800 giao dịch')));
+    await _tapKey(tester, 'summary_sort_button');
+    await tester.tap(find.byKey(const Key('sort_option_amount_desc')));
+    await tester.pumpAndSettle();
 
     await tester.drag(_scrollView(), const Offset(0, -1500));
     await tester.pumpAndSettle();
