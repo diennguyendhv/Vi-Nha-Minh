@@ -43,26 +43,34 @@ MainGroup? mainGroupOf(
   }
 }
 
-/// Khoá sắp xếp của Transaction Explorer: chỉ Ngày và Số tiền (quyết định sản
-/// phẩm — lọc đã đủ mạnh, sắp xếp chỉ cần 2 chiều này).
-enum SortKey { date, amount }
+/// Sắp xếp của Transaction Explorer — 2 TẦNG cố định, kiểu Excel:
+/// **ưu tiên 1 = Ngày** (theo ngày LỊCH), **ưu tiên 2 = Số tiền** (chỉ để xếp các
+/// giao dịch CÙNG ngày). Số tiền không bao giờ được xếp trước Ngày, không có tầng
+/// thứ 3, không đổi thứ tự ưu tiên.
+///
+/// Mặc định: Ngày ↓ (mới nhất trước), Số tiền ↓ (lớn trước trong từng ngày).
+class ExplorerSort {
+  const ExplorerSort({this.dateAscending = false, this.amountAscending = false});
 
-/// 1 tiêu chí sắp xếp: [key] + chiều. Danh sách nhiều tiêu chí (nếu có) xếp theo
-/// thứ tự ưu tiên; UI hiện chỉ đặt 1 tiêu chí.
-class SortRule {
-  const SortRule(this.key, {this.ascending = false});
+  final bool dateAscending;
+  final bool amountAscending;
 
-  final SortKey key;
-  final bool ascending;
+  bool get isDefault => !dateAscending && !amountAscending;
 
-  SortRule flipped() => SortRule(key, ascending: !ascending);
+  ExplorerSort copyWith({bool? dateAscending, bool? amountAscending}) =>
+      ExplorerSort(
+        dateAscending: dateAscending ?? this.dateAscending,
+        amountAscending: amountAscending ?? this.amountAscending,
+      );
 
   @override
   bool operator ==(Object other) =>
-      other is SortRule && other.key == key && other.ascending == ascending;
+      other is ExplorerSort &&
+      other.dateAscending == dateAscending &&
+      other.amountAscending == amountAscending;
 
   @override
-  int get hashCode => Object.hash(key, ascending);
+  int get hashCode => Object.hash(dateAscending, amountAscending);
 }
 
 /// Bộ lọc của Transaction Explorer, kiểu Excel.
@@ -82,7 +90,7 @@ class TransactionFilter {
     this.statusIds = const {},
     this.includeNoStatus = false,
     this.query = '',
-    this.sort = const [],
+    this.sort = const ExplorerSort(),
   });
 
   /// Khoảng ngày (bao gồm 2 đầu, so theo NGÀY). `null` = không giới hạn.
@@ -96,8 +104,8 @@ class TransactionFilter {
   final bool includeNoStatus;
   final String query;
 
-  /// Thứ tự sắp xếp; rỗng = Ngày mới → cũ.
-  final List<SortRule> sort;
+  /// Thứ tự sắp xếp 2 tầng (Ngày rồi Số tiền); mặc định Ngày ↓ · Số tiền ↓.
+  final ExplorerSort sort;
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -111,7 +119,7 @@ class TransactionFilter {
     Set<String>? statusIds,
     bool? includeNoStatus,
     String? query,
-    List<SortRule>? sort,
+    ExplorerSort? sort,
   }) => TransactionFilter(
     from: identical(from, _keep) ? this.from : from as DateTime?,
     to: identical(to, _keep) ? this.to : to as DateTime?,
@@ -138,8 +146,7 @@ class TransactionFilter {
 
   TransactionFilter withQuery(String value) => copyWith(query: value);
 
-  TransactionFilter withSort(List<SortRule> rules) =>
-      copyWith(sort: [...rules]);
+  TransactionFilter withSort(ExplorerSort value) => copyWith(sort: value);
 
   bool get hasStatusFilter => statusIds.isNotEmpty || includeNoStatus;
 
@@ -149,7 +156,7 @@ class TransactionFilter {
       categoryIds.isNotEmpty ||
       hasStatusFilter ||
       query.trim().isNotEmpty ||
-      sort.isNotEmpty;
+      !sort.isDefault;
 
   /// Số điều kiện "nâng cao" (danh mục/trạng thái) — hiện trên nút Bộ lọc.
   int get advancedCount =>
@@ -251,28 +258,25 @@ ExplorerResult exploreTransactions(
   return ExplorerResult(rows: rows, inflow: inflow, outflow: outflow);
 }
 
-/// Sắp xếp theo Ngày / Số tiền (chiều tăng hoặc giảm). Sau các tiêu chí của
-/// người dùng luôn tie-break theo ngày ↓ rồi giờ tạo ↓ rồi id để kết quả ổn
-/// định (deterministic).
-void _sortRows(List<Transaction> rows, List<SortRule> rules) {
-  final effective = rules.isEmpty ? const [SortRule(SortKey.date)] : rules;
-
-  int compareKey(SortRule r, Transaction a, Transaction b) {
-    final c = switch (r.key) {
-      SortKey.date => a.transactionDate.compareTo(b.transactionDate),
-      SortKey.amount => a.amountMinor.compareTo(b.amountMinor),
-    };
-    return r.ascending ? c : -c;
-  }
+/// Sắp xếp 2 tầng: (1) NGÀY LỊCH theo chiều Ngày; (2) trong CÙNG ngày, Số tiền theo
+/// chiều Số tiền. Số tiền không bao giờ trộn lẫn các ngày. Khi Ngày và Số tiền
+/// đều bằng nhau dùng tie-break CỐ ĐỊNH (giờ trong ngày ↑, giờ tạo ↑, id) — không
+/// phụ thuộc chiều Ngày — nên cùng dữ liệu + cùng cấu hình luôn cho cùng thứ tự.
+void _sortRows(List<Transaction> rows, ExplorerSort sort) {
+  DateTime dayOf(Transaction t) => DateTime(
+    t.transactionDate.year,
+    t.transactionDate.month,
+    t.transactionDate.day,
+  );
 
   rows.sort((a, b) {
-    for (final r in effective) {
-      final c = compareKey(r, a, b);
-      if (c != 0) return c;
-    }
-    final byDate = b.transactionDate.compareTo(a.transactionDate);
-    if (byDate != 0) return byDate;
-    final byCreated = b.createdAt.compareTo(a.createdAt);
+    final byDay = dayOf(a).compareTo(dayOf(b));
+    if (byDay != 0) return sort.dateAscending ? byDay : -byDay;
+    final byAmount = a.amountMinor.compareTo(b.amountMinor);
+    if (byAmount != 0) return sort.amountAscending ? byAmount : -byAmount;
+    final byTime = a.transactionDate.compareTo(b.transactionDate);
+    if (byTime != 0) return byTime;
+    final byCreated = a.createdAt.compareTo(b.createdAt);
     return byCreated != 0 ? byCreated : a.id.compareTo(b.id);
   });
 }

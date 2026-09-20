@@ -460,56 +460,97 @@ void main() {
       expect(f.hasStatusFilter, isTrue);
     });
 
-    test('Sắp xếp: mặc định Ngày mới→cũ; Ngày ↑; Số tiền ↓/↑', () {
-      final dated = [
-        _out('sinh_hoat', 5000, id: 'a', date: DateTime(2026, 9, 1)),
-        _out('sinh_hoat', 9000, id: 'b', date: DateTime(2026, 9, 3)),
-        _out('sinh_hoat', 1000, id: 'c', date: DateTime(2026, 9, 2)),
-      ];
-      List<String> order(TransactionFilter f) => [for (final t in _run(dated, f).rows) t.id];
-      expect(order(const TransactionFilter()), ['b', 'c', 'a']);
-      expect(order(const TransactionFilter(sort: [SortRule(SortKey.date, ascending: true)])), ['a', 'c', 'b']);
-      expect(order(const TransactionFilter(sort: [SortRule(SortKey.amount)])), ['b', 'a', 'c']);
-      expect(order(const TransactionFilter(sort: [SortRule(SortKey.amount, ascending: true)])), ['c', 'a', 'b']);
+    // Bộ dữ liệu điều khiển: 19/09 {50.000, 800.000} và 20/09 {20.000, 100.000, 600.000}.
+    List<Transaction> twoDays() => [
+      _out('sinh_hoat', 50000, id: 'd19-50', date: DateTime(2026, 9, 19, 9)),
+      _out('sinh_hoat', 800000, id: 'd19-800', date: DateTime(2026, 9, 19, 15)),
+      _out('sinh_hoat', 20000, id: 'd20-20', date: DateTime(2026, 9, 20, 8)),
+      _out('sinh_hoat', 100000, id: 'd20-100', date: DateTime(2026, 9, 20, 12)),
+      _out('sinh_hoat', 600000, id: 'd20-600', date: DateTime(2026, 9, 20, 18)),
+    ];
+    List<String> order(List<Transaction> t, ExplorerSort s) => [
+      for (final r in _run(t, TransactionFilter(sort: s)).rows) r.id,
+    ];
+
+    test('Mặc định = Ngày ↓ · Số tiền ↓', () {
+      expect(const ExplorerSort().isDefault, isTrue);
+      expect(order(twoDays(), const ExplorerSort()), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
+      expect(_run(twoDays()).rows.map((t) => t.id).toList(), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
     });
 
-    test('Sắp xếp chỉ có 2 khóa: Ngày và Số tiền', () {
-      expect(SortKey.values, [SortKey.date, SortKey.amount]);
+    test('A — Ngày ↓ · Số tiền ↓', () {
+      expect(order(twoDays(), const ExplorerSort()), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
     });
 
-    test('Cùng Số tiền: tie-break ổn định (Ngày ↓ rồi giờ tạo ↓ rồi id) — kết quả xác định qua nhiều lần chạy', () {
-      final txs = [
-        _out('sinh_hoat', 100, id: 'a', date: DateTime(2026, 9, 1)),
-        _out('sinh_hoat', 100, id: 'b', date: DateTime(2026, 9, 5)),
-        _out('sinh_hoat', 100, id: 'c', date: DateTime(2026, 9, 3)),
-      ];
-      List<String> order(bool asc) => [
-        for (final t in _run(txs, TransactionFilter(sort: [SortRule(SortKey.amount, ascending: asc)])).rows) t.id,
-      ];
-      expect(order(false), ['b', 'c', 'a']);
-      expect(order(true), ['b', 'c', 'a'], reason: 'tie-break luôn Ngày ↓, không đảo theo chiều');
-      expect(order(false), order(false));
+    test('B — Ngày ↓ · Số tiền ↑', () {
+      expect(order(twoDays(), const ExplorerSort(amountAscending: true)), ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800']);
     });
 
-    test('Danh sách nhiều tiêu chí (domain) vẫn xếp đúng ưu tiên: Ngày ↓ rồi Số tiền ↓', () {
-      final txs = [
-        _out('sinh_hoat', 100, id: 's1', date: DateTime(2026, 9, 1)),
-        _out('sinh_hoat', 900, id: 's2', date: DateTime(2026, 9, 1)),
-        _out('sinh_hoat', 500, id: 's3', date: DateTime(2026, 9, 5)),
-        _out('sinh_hoat', 700, id: 's4', date: DateTime(2026, 9, 5)),
-      ];
-      final r = _run(txs, const TransactionFilter(sort: [SortRule(SortKey.date), SortRule(SortKey.amount)]));
-      expect([for (final t in r.rows) t.id], ['s4', 's3', 's2', 's1']);
+    test('C — Ngày ↑ · Số tiền ↓', () {
+      expect(order(twoDays(), const ExplorerSort(dateAscending: true)), ['d19-800', 'd19-50', 'd20-600', 'd20-100', 'd20-20']);
     });
 
-    test('Lọc rồi sắp xếp == sắp xếp rồi lọc (kết quả xác định)', () {
-      final f = const TransactionFilter().withCategories({'sinh_hoat', 'cho_di'});
-      final sorted = f.withSort(const [SortRule(SortKey.amount)]);
-      final a = [for (final t in _run(ledger, sorted).rows) t.id];
-      final b = [
-        for (final t in (_run(ledger, f).rows.toList()..sort((x, y) => y.amountMinor.compareTo(x.amountMinor)))) t.id,
+    test('D — Ngày ↑ · Số tiền ↑', () {
+      expect(order(twoDays(), const ExplorerSort(dateAscending: true, amountAscending: true)), ['d19-50', 'd19-800', 'd20-20', 'd20-100', 'd20-600']);
+    });
+
+    test('Cùng ngày: chiều Số tiền đổi thứ tự thấy được; chiều Ngày không đổi thứ tự BÊN TRONG ngày (chỉ qua Số tiền)', () {
+      final day20 = twoDays().where((t) => t.transactionDate.day == 20).toList();
+      final desc = order(day20, const ExplorerSort());
+      final asc = order(day20, const ExplorerSort(amountAscending: true));
+      expect(desc, isNot(asc));
+      expect(desc.reversed.toList(), asc);
+      expect(order(day20, const ExplorerSort(dateAscending: true)), desc);
+      expect(order(day20, const ExplorerSort(dateAscending: true, amountAscending: true)), asc);
+    });
+
+    test('Khác ngày: số tiền lớn ở ngày cũ KHÔNG nhảy lên trên số tiền nhỏ ở ngày mới (Ngày ưu tiên hơn Số tiền)', () {
+      final t = [
+        _out('sinh_hoat', 8000000, id: 'old-big', date: DateTime(2026, 9, 19, 10)),
+        _out('sinh_hoat', 20000, id: 'new-small', date: DateTime(2026, 9, 20, 10)),
       ];
-      expect(a, b);
+      expect(order(t, const ExplorerSort()), ['new-small', 'old-big']);
+      expect(order(t, const ExplorerSort(amountAscending: true)), ['new-small', 'old-big']);
+      expect(order(t, const ExplorerSort(dateAscending: true)), ['old-big', 'new-small']);
+    });
+
+    test('So sánh theo NGÀY LỊCH: giờ trong ngày không được lấn Số tiền', () {
+      final t = [
+        _out('sinh_hoat', 100, id: 'late-small', date: DateTime(2026, 9, 20, 23, 59)),
+        _out('sinh_hoat', 900, id: 'early-big', date: DateTime(2026, 9, 20, 0, 1)),
+      ];
+      expect(order(t, const ExplorerSort()), ['early-big', 'late-small']);
+    });
+
+    test('Cùng Ngày và Số tiền: tie-break CỐ ĐỊNH (giờ ↑, giờ tạo ↑, id), không đổi theo chiều Ngày; kết quả xác định', () {
+      final t = [
+        _out('sinh_hoat', 100, id: 'c', date: DateTime(2026, 9, 20, 10)),
+        _out('sinh_hoat', 100, id: 'a', date: DateTime(2026, 9, 20, 8)),
+        _out('sinh_hoat', 100, id: 'b', date: DateTime(2026, 9, 20, 9)),
+      ];
+      for (final s in const [ExplorerSort(), ExplorerSort(dateAscending: true), ExplorerSort(amountAscending: true)]) {
+        expect(order(t, s), ['a', 'b', 'c']);
+        expect(order(t, s), order(t.reversed.toList(), s), reason: 'không phụ thuộc thứ tự đầu vào');
+      }
+    });
+
+    test('Sắp xếp KHÔNG đổi bộ lọc/số dòng/tổng Thu-Chi — chỉ đổi thứ tự', () {
+      final t = twoDays();
+      final def = _run(t, const TransactionFilter());
+      for (final s in const [ExplorerSort(amountAscending: true), ExplorerSort(dateAscending: true), ExplorerSort(dateAscending: true, amountAscending: true)]) {
+        final r = _run(t, TransactionFilter(sort: s));
+        expect((r.count, r.inflow, r.outflow), (def.count, def.inflow, def.outflow));
+        expect({for (final x in r.rows) x.id}, {for (final x in def.rows) x.id});
+      }
+    });
+
+    test('Lọc rồi sắp xếp: 2 tầng áp lên tập đã lọc', () {
+      final t = [
+        ...twoDays(),
+        _out('cho_di', 999999, id: 'other-cat', date: DateTime(2026, 9, 20, 11)),
+      ];
+      final f = const TransactionFilter().withCategories({'sinh_hoat'}).withSort(const ExplorerSort(amountAscending: true));
+      expect([for (final r in _run(t, f).rows) r.id], ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800']);
     });
 
     test('Tổng của tập đã lọc: Thu/Chi tách riêng; Chuyển chỉ đếm dòng', () {
@@ -546,7 +587,8 @@ void main() {
       expect(const TransactionFilter().hasNonDateFilter, isFalse);
       expect(const TransactionFilter(query: ' ').hasNonDateFilter, isFalse);
       expect(const TransactionFilter(member: FamilyMember.vo).hasNonDateFilter, isTrue);
-      expect(const TransactionFilter(sort: [SortRule(SortKey.amount)]).hasNonDateFilter, isTrue);
+      expect(const TransactionFilter(sort: ExplorerSort(amountAscending: true)).hasNonDateFilter, isTrue);
+      expect(const TransactionFilter(sort: ExplorerSort()).hasNonDateFilter, isFalse);
       final f = const TransactionFilter(categoryIds: {'sinh_hoat'}, includeNoStatus: true);
       expect(f.advancedCount, 2);
     });
@@ -673,7 +715,7 @@ void main() {
           .withCategories({'c1', 'c2', 'c3', 'c4', 'c5'})
           .withStatuses({'p1', 'p2', 'p3', 'p4', 'p5'}, includeNone: true)
           .withQuery('luong')
-          .withSort(const [SortRule(SortKey.date), SortRule(SortKey.amount)]);
+          .withSort(const ExplorerSort());
       final sw = Stopwatch()..start();
       late ExplorerResult r;
       for (var i = 0; i < 5; i++) {
@@ -712,7 +754,7 @@ void main() {
             .withMember(FamilyMember.vo)
             .withCategories({'sinh_hoat', 'luong_gv'})
             .withQuery('chợ')
-            .withSort(const [SortRule(SortKey.date), SortRule(SortKey.amount)]),
+            .withSort(const ExplorerSort()),
       );
       final search = _run(ledger, const TransactionFilter(query: 'chi 1'));
       sw.stop();

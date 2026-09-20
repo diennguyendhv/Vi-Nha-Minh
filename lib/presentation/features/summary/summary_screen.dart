@@ -236,13 +236,23 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                           : 'Bộ lọc (${_filter.advancedCount})',
                     ),
                   ),
-                  TextButton.icon(
-                    key: const Key('summary_sort_button'),
-                    onPressed: () => _openSortSheet(context),
-                    icon: const Icon(Icons.swap_vert_rounded, size: 18),
-                    label: Text(_sortLabel(_filter.sort)),
+                  // Nhãn dài ("Ngày ↑ · Số tiền ↓") chiếm hết chỗ còn lại và chỉ bị cắt
+                  // (…) khi "Xóa bộ lọc" cũng đang hiện trên màn hẹp — không làm tràn hàng.
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        key: const Key('summary_sort_button'),
+                        onPressed: () => _openSortSheet(context),
+                        icon: const Icon(Icons.swap_vert_rounded, size: 18),
+                        label: Text(
+                          _sortLabel(_filter.sort),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
                   ),
-                  const Spacer(),
                   if (!_isDefaultView)
                     TextButton(
                       key: const Key('summary_clear_filters'),
@@ -318,24 +328,22 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     );
   }
 
-  static String _sortLabel(List<SortRule> rules) {
-    final r = rules.isEmpty ? const SortRule(SortKey.date) : rules.first;
-    final key = r.key == SortKey.date ? 'Ngày' : 'Số tiền';
-    return 'Sắp xếp: $key ${r.ascending ? '↑' : '↓'}';
-  }
+  static String _sortLabel(ExplorerSort sort) =>
+      'Ngày ${sort.dateAscending ? '↑' : '↓'} · '
+      'Số tiền ${sort.amountAscending ? '↑' : '↓'}';
 
-  Future<void> _openSortSheet(BuildContext context) {
-    return showModalBottomSheet<void>(
+  /// Mở bảng Sắp xếp. Chỉ khi bấm OK (trả về cấu hình mới) mới áp dụng; Hủy / Back /
+  /// vuốt đóng đều bỏ thay đổi đang chờ và giữ cấu hình đã áp dụng.
+  Future<void> _openSortSheet(BuildContext context) async {
+    final result = await showModalBottomSheet<ExplorerSort>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (sheetContext) => _SortSheet(
-        current: _filter.sort.isEmpty
-            ? const SortRule(SortKey.date)
-            : _filter.sort.first,
-        onChanged: (rule) => setState(() => _filter = _filter.withSort([rule])),
-      ),
+      builder: (sheetContext) => _SortSheet(applied: _filter.sort),
     );
+    if (result != null && mounted) {
+      setState(() => _filter = _filter.withSort(result));
+    }
   }
 }
 
@@ -892,52 +900,51 @@ class _MultiSelectSheetState extends State<_MultiSelectSheet> {
   }
 }
 
-/// Sắp xếp: 2 dòng — "Ngày" và "Số tiền" — mỗi dòng có nút mũi tên ↑ (tăng dần)
-/// và ↓ (giảm dần). Chỉ 1 lựa chọn đang hoạt động tại 1 thời điểm (chạm mũi tên
-/// nào thì lựa chọn đó thay thế lựa chọn cũ) — không nhiều tầng, tránh rối.
-class _SortSheet extends StatelessWidget {
-  const _SortSheet({required this.current, required this.onChanged});
+/// Sắp xếp 2 tầng cố định: **Ngày** (ưu tiên 1) rồi **Số tiền** (ưu tiên 2, chỉ xếp
+/// trong cùng ngày). Mỗi dòng có ĐÚNG 1 mũi tên (↑ hoặc ↓); chạm dòng là đảo chiều
+/// ngay trong bảng nhưng danh sách chỉ đổi khi bấm OK.
+class _SortSheet extends StatefulWidget {
+  const _SortSheet({required this.applied});
 
-  final SortRule current;
-  final ValueChanged<SortRule> onChanged;
+  /// Cấu hình đang ÁP DỤNG — bảng luôn mở với giá trị này.
+  final ExplorerSort applied;
 
-  Widget _row(BuildContext context, String label, SortKey key) {
-    Widget arrow(bool ascending) {
-      final selected = current.key == key && current.ascending == ascending;
-      final name = '${key == SortKey.date ? 'date' : 'amount'}_'
-          '${ascending ? 'asc' : 'desc'}';
-      return IconButton.filledTonal(
-        key: Key('sort_$name'),
-        isSelected: selected,
-        tooltip: ascending ? 'Tăng dần' : 'Giảm dần',
-        style: IconButton.styleFrom(
-          backgroundColor: selected ? AppColors.accent : AppColors.chipBackground,
-          foregroundColor: selected ? Colors.white : AppColors.textPrimary,
-        ),
-        icon: Icon(
-          ascending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-        ),
-        onPressed: () {
-          onChanged(SortRule(key, ascending: ascending));
-          Navigator.of(context).pop();
-        },
-      );
-    }
+  @override
+  State<_SortSheet> createState() => _SortSheetState();
+}
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+class _SortSheetState extends State<_SortSheet> {
+  late ExplorerSort _pending = widget.applied;
+
+  Widget _row({
+    required String label,
+    required Key key,
+    required Key arrowKey,
+    required bool ascending,
+    required VoidCallback onToggle,
+  }) {
+    return InkWell(
+      key: key,
+      onTap: onToggle,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
             ),
-          ),
-          arrow(true),
-          const SizedBox(width: 8),
-          arrow(false),
-        ],
+            Icon(
+              ascending
+                  ? Icons.arrow_upward_rounded
+                  : Icons.arrow_downward_rounded,
+              key: arrowKey,
+              color: AppColors.accent,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -956,8 +963,51 @@ class _SortSheet extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
           ),
-          _row(context, 'Ngày', SortKey.date),
-          _row(context, 'Số tiền', SortKey.amount),
+          _row(
+            label: 'Ngày',
+            key: const Key('sort_date_row'),
+            arrowKey: Key(
+              _pending.dateAscending ? 'sort_date_up' : 'sort_date_down',
+            ),
+            ascending: _pending.dateAscending,
+            onToggle: () => setState(
+              () => _pending = _pending.copyWith(
+                dateAscending: !_pending.dateAscending,
+              ),
+            ),
+          ),
+          _row(
+            label: 'Số tiền',
+            key: const Key('sort_amount_row'),
+            arrowKey: Key(
+              _pending.amountAscending ? 'sort_amount_up' : 'sort_amount_down',
+            ),
+            ascending: _pending.amountAscending,
+            onToggle: () => setState(
+              () => _pending = _pending.copyWith(
+                amountAscending: !_pending.amountAscending,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  key: const Key('sort_cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Hủy'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  key: const Key('sort_ok'),
+                  onPressed: () => Navigator.of(context).pop(_pending),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
