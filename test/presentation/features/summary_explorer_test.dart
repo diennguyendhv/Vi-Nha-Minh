@@ -368,6 +368,22 @@ void main() {
     expect(find.byKey(const Key('multi_cu_khong_gd')), findsNothing);
   });
 
+  testWidgets('Bố cục: tiêu đề "Giao dịch" → khối tổng kết (N giao dịch · kỳ, Thu/Chi) → dòng kỳ ‹ Tháng › → hàng chip Ngày/Tháng/Năm/Tất cả → Vợ/Chồng', (tester) async {
+    await _pump(tester, base);
+    double top(String key) => tester.getTopLeft(find.byKey(Key(key))).dy;
+    final title = tester.getTopLeft(find.text('Giao dịch').first).dy;
+    expect(top('summary_result_header') > title, isTrue, reason: 'tổng kết nằm ngay dưới tiêu đề');
+    expect(top('summary_time_label') > top('summary_result_header'), isTrue);
+    expect(top('summary_time_prev') < top('summary_time_day'), isTrue, reason: 'dòng ‹ kỳ › nằm TRÊN hàng chip thời gian');
+    expect(top('summary_time_label') < top('summary_time_month'), isTrue);
+    expect(top('summary_time_day') < top('summary_member_all'), isTrue);
+    // Khối tổng kết: số giao dịch + kỳ + Thu / Chi tách riêng.
+    final header = find.byKey(const Key('summary_result_header'));
+    expect(find.descendant(of: header, matching: find.text('9 giao dịch')), findsOneWidget);
+    expect(find.byKey(const Key('summary_result_inflow')), findsOneWidget);
+    expect(find.byKey(const Key('summary_result_outflow')), findsOneWidget);
+  });
+
   testWidgets('Không còn lọc theo số tiền (chỉ còn SẮP XẾP theo số tiền)', (tester) async {
     await _pump(tester, base);
     await _openFilters(tester);
@@ -692,6 +708,9 @@ void main() {
     await tester.drag(_scrollView(), const Offset(0, 4000));
     await tester.pumpAndSettle();
     await _tapKey(tester, 'summary_clear_filters');
+    // Khối tổng kết nằm phía trên (ngay dưới tiêu đề "Giao dịch") — cuộn về đầu để nó được dựng.
+    await tester.drag(_scrollView(), const Offset(0, 4000));
+    await tester.pumpAndSettle();
     expect(_header(tester), contains('1800 giao dịch'));
     sw.stop();
     expect(tester.takeException(), isNull);

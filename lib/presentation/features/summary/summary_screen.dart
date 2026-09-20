@@ -180,6 +180,12 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               const SizedBox(height: 20),
               const _SectionTitle('Giao dịch'),
               const SizedBox(height: 10),
+              _ResultHeader(
+                key: const Key('summary_result_header'),
+                result: result,
+                selection: _time,
+              ),
+              const SizedBox(height: 10),
               _TimeBar(selection: _time, onChanged: _setTime),
               const SizedBox(height: 8),
               _MemberChips(
@@ -263,12 +269,6 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                     () => _filter = _filter.withStatuses(ids, includeNone: none),
                   ),
                 ),
-              const SizedBox(height: 6),
-              _ResultHeader(
-                key: const Key('summary_result_header'),
-                result: result,
-                selection: _time,
-              ),
               const SizedBox(height: 4),
             ]),
           ),
@@ -533,18 +533,7 @@ class _TimeBar extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Xuống dòng thay vì cuộn ngang: mọi kiểu thời gian (kể cả "Tất cả")
-        // luôn nhìn thấy, không phải đoán là có thể vuốt.
-        Wrap(
-          runSpacing: 6,
-          children: [
-            chip('day', 'Ngày', TimeKind.day),
-            chip('month', 'Tháng', TimeKind.month),
-            chip('year', 'Năm', TimeKind.year),
-            chip('all', 'Tất cả', TimeKind.all),
-          ],
-        ),
-        const SizedBox(height: 4),
+        // Kỳ đang xem (‹ Tháng 9/2026 ›) nằm TRÊN hàng chọn kiểu thời gian.
         Row(
           children: [
             if (navigable)
@@ -574,13 +563,23 @@ class _TimeBar extends StatelessWidget {
               ),
           ],
         ),
+        const SizedBox(height: 2),
+        // Xuống dòng thay vì cuộn ngang: mọi kiểu thời gian (kể cả "Tất cả")
+        // luôn nhìn thấy, không phải đoán là có thể vuốt.
+        Wrap(
+          runSpacing: 6,
+          children: [
+            chip('day', 'Ngày', TimeKind.day),
+            chip('month', 'Tháng', TimeKind.month),
+            chip('year', 'Năm', TimeKind.year),
+            chip('all', 'Tất cả', TimeKind.all),
+          ],
+        ),
       ],
     );
   }
 }
 
-/// Các bộ lọc đang bật, mỗi cái có nút [x] để bỏ RIÊNG nó — hiện cả khi kết quả
-/// rỗng để người dùng thấy lựa chọn của mình, không bị "tự nới" bộ lọc.
 class _ActiveChips extends StatelessWidget {
   const _ActiveChips({
     required this.filter,
@@ -965,6 +964,9 @@ class _SortSheet extends StatelessWidget {
   }
 }
 
+/// Khối tổng kết của tập đang xem, ngay dưới tiêu đề "Giao dịch": "76 giao dịch"
+/// + kỳ đang xem, và Thu / Chi của CHÍNH tập đã lọc (2 ô riêng, không gộp thành
+/// 1 con số Net mơ hồ; Chuyển không tính vào Thu/Chi).
 class _ResultHeader extends StatelessWidget {
   const _ResultHeader({super.key, required this.result, required this.selection});
 
@@ -973,23 +975,94 @@ class _ResultHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parts = <String>[
-      if (result.inflow > 0) 'Thu ${Formatters.amount(result.inflow)}',
-      if (result.outflow > 0) 'Chi ${Formatters.amount(result.outflow)}',
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '${result.count} giao dịch · ${timeSelectionLabel(selection)}',
-          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+    Widget pill({
+      required Key key,
+      required String text,
+      required IconData icon,
+      required Color color,
+    }) {
+      return Container(
+        key: key,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(12),
         ),
-        if (parts.isNotEmpty)
-          Text(
-            parts.join('   ·   '),
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                text,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final pills = <Widget>[
+      if (result.inflow > 0)
+        pill(
+          key: const Key('summary_result_inflow'),
+          text: 'Thu ${Formatters.amount(result.inflow)}',
+          icon: Icons.south_west_rounded,
+          color: AppColors.accent,
+        ),
+      if (result.outflow > 0)
+        pill(
+          key: const Key('summary_result_outflow'),
+          text: 'Chi ${Formatters.amount(result.outflow)}',
+          icon: Icons.north_east_rounded,
+          color: AppColors.expenseAmount,
+        ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '${result.count} giao dịch',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '· ${timeSelectionLabel(selection)}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
           ),
-      ],
+          if (pills.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 6, children: pills),
+          ],
+        ],
+      ),
     );
   }
 }
