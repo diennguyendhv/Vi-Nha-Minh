@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../providers/app_state_providers.dart';
 import '../fund/fund_list_screen.dart';
 import '../savings/savings_screen.dart';
+import 'debug_import_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -151,6 +153,19 @@ class SettingsScreen extends ConsumerWidget {
                   onChanged: (value) =>
                       ref.read(biometricLockProvider.notifier).state = value,
                 ),
+                // Công cụ dev tạm thời (V2-2C): CHỈ có trong bản debug, không
+                // bao giờ xuất hiện ở release.
+                if (kDebugMode) ...[
+                  const Divider(height: 1, color: AppColors.divider),
+                  _SettingsRow(
+                    label: 'Nhập dữ liệu 2026 (debug)',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const DebugImportScreen(),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
