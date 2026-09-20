@@ -26,8 +26,10 @@ import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/explore_transactions.dart';
 import 'package:vi_nha_minh/presentation/features/add_transaction/add_transaction_sheet.dart';
 import 'package:vi_nha_minh/presentation/features/fund/fund_detail_screen.dart';
+import 'package:vi_nha_minh/presentation/features/fund/fund_list_screen.dart';
 import 'package:vi_nha_minh/presentation/features/home/home_screen.dart';
 import 'package:vi_nha_minh/presentation/features/savings/savings_screen.dart';
+import 'package:vi_nha_minh/presentation/providers/primary_fund_provider.dart';
 import 'package:vi_nha_minh/presentation/providers/app_state_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
@@ -286,6 +288,7 @@ Future<void> _pumpHome(
   List<Category>? categories,
   List<Fund>? funds,
   bool advancedFeatures = false,
+  PrimaryFundController? primary,
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -295,6 +298,7 @@ Future<void> _pumpHome(
     ProviderScope(
       overrides: [
         advancedFeaturesEnabledProvider.overrideWithValue(advancedFeatures),
+        if (primary != null) primaryFundIdProvider.overrideWith((ref) => primary),
         transactionRepositoryProvider.overrideWithValue(fakeRepo),
         categoryRepositoryProvider.overrideWithValue(
           _StaticCategoryRepository(categories ?? DefaultCategories.all),
@@ -327,8 +331,8 @@ void main() {
   });
 
   Future<void> pumpWith(WidgetTester tester, List<Transaction> ledger,
-      {List<Fund>? funds, bool advanced = false}) async {
-    await _pumpHome(tester, fakeRepo: fakeRepo, funds: funds, advancedFeatures: advanced);
+      {List<Fund>? funds, bool advanced = false, PrimaryFundController? primary}) async {
+    await _pumpHome(tester, fakeRepo: fakeRepo, funds: funds, advancedFeatures: advanced, primary: primary);
     fakeRepo.emit(ledger);
     await tester.pumpAndSettle();
   }
@@ -357,7 +361,7 @@ void main() {
       expect(_text(tester, 'home_savings_$m'), '0 đ');
     }
     expect(_text(tester, 'home_spending_amount'), '0 đ');
-    expect(_text(tester, 'home_food_fund_amount'), 'Đã hết');
+    expect(_text(tester, 'home_primary_fund_amount'), 'Đã hết');
     expect(find.text('Nạp quỹ'), findsOneWidget);
   });
 
@@ -385,7 +389,7 @@ void main() {
     expect(_text(tester, 'home_spending_amount'),
         Formatters.amount(computeGroupedTotals(ledger, categories, month: month).spending));
 
-    expect(_text(tester, 'home_food_fund_amount'), '500.000 đ');
+    expect(_text(tester, 'home_primary_fund_amount'), '500.000 đ');
     expect(find.text('Còn lại'), findsOneWidget);
   });
 
@@ -423,18 +427,18 @@ void main() {
   });
 
   group('Quỹ tiền ăn — nhận diện bằng id ổn định, không bằng tên', () {
-    testWidgets('Không có quỹ (đã xóa hẳn) → KHÔNG crash, hiện trạng thái rỗng "Chưa có Quỹ tiền ăn" + [Tạo quỹ], không tự tạo lại', (tester) async {
+    testWidgets('Không có quỹ (đã xóa hẳn) → KHÔNG crash, hiện trạng thái rỗng "Chưa chọn quỹ chính" + [Tạo quỹ], không tự tạo lại', (tester) async {
       await pumpWith(tester, const [], funds: const []);
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_primary_fund')), findsNothing);
       expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
-      expect(find.text('Chưa có Quỹ tiền ăn'), findsOneWidget);
+      expect(find.text('Chưa chọn quỹ chính'), findsOneWidget);
       expect(find.byKey(const Key('home_no_fund_create')), findsOneWidget);
     });
 
     testWidgets('Quỹ đã ngừng (isActive=false) → không hiện', (tester) async {
       await pumpWith(tester, const [], funds: [DefaultFunds.anUong.copyWith(isActive: false)]);
-      expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_primary_fund')), findsNothing);
       expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
     });
 
@@ -442,15 +446,69 @@ void main() {
       await pumpWith(tester, const [], funds: [
         Fund(id: 'quy_khac', name: 'Quỹ tiền ăn', color: Colors.red),
       ]);
-      expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_primary_fund')), findsNothing);
       expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
     });
 
     testWidgets('Đổi tên quỹ (cùng id) → vẫn hiện, theo tên mới', (tester) async {
       await pumpWith(tester, const [], funds: [DefaultFunds.anUong.copyWith(name: 'Bữa cơm')]);
-      expect(find.byKey(const Key('home_food_fund')), findsOneWidget);
+      expect(find.byKey(const Key('home_primary_fund')), findsOneWidget);
       expect(find.byKey(const Key('home_no_fund')), findsNothing);
       expect(find.text('BỮA CƠM'), findsOneWidget);
+    });
+  });
+
+  group('Quỹ chính của Trang chủ (do người dùng chọn, không gắn cứng Quỹ tiền ăn)', () {
+    final fundB = Fund(id: 'du_lich', name: 'Quỹ du lịch', color: Colors.blue);
+
+    testWidgets('B — cài mới: quỹ chính mặc định = Quỹ tiền ăn (theo tên thật)', (tester) async {
+      await pumpWith(tester, const [], funds: [DefaultFunds.anUong, fundB]);
+      expect(find.text('QUỸ TIỀN ĂN'), findsOneWidget);
+      expect(find.text('QUỸ DU LỊCH'), findsNothing);
+    });
+
+    testWidgets('C — chọn quỹ B làm quỹ chính → Trang chủ hiện B (tên + số dư của B)', (tester) async {
+      await pumpWith(tester, const [], funds: [DefaultFunds.anUong, fundB], primary: PrimaryFundController(initialId: 'du_lich'));
+      expect(find.text('QUỸ DU LỊCH'), findsOneWidget);
+      expect(find.text('QUỸ TIỀN ĂN'), findsNothing);
+      expect(find.byKey(const Key('home_no_fund')), findsNothing);
+    });
+
+    testWidgets('D — quỹ KHÔNG phải quỹ chính bị xóa: Trang chủ không đổi', (tester) async {
+      await pumpWith(tester, const [], funds: [DefaultFunds.anUong]); // B đã xóa
+      expect(find.text('QUỸ TIỀN ĂN'), findsOneWidget);
+    });
+
+    testWidgets('E/F — quỹ chính đã xóa: "Chưa chọn quỹ chính" + [Chọn quỹ], KHÔNG crash, KHÔNG tự chọn quỹ khác', (tester) async {
+      await pumpWith(tester, const [], funds: [fundB]); // an_uong (quỹ chính mặc định) đã bị xóa
+      expect(tester.takeException(), isNull);
+      expect(find.text('Chưa chọn quỹ chính'), findsOneWidget);
+      expect(find.byKey(const Key('home_no_fund_create')), findsOneWidget);
+      expect(find.text('Chọn quỹ'), findsOneWidget);
+      expect(find.text('QUỸ DU LỊCH'), findsNothing, reason: 'không tự chọn quỹ còn lại');
+    });
+
+    testWidgets('Bỏ chọn quỹ chính (null) → cũng là trạng thái rỗng, không crash', (tester) async {
+      await pumpWith(tester, const [], funds: [DefaultFunds.anUong, fundB], primary: PrimaryFundController(initialId: null));
+      expect(find.text('Chưa chọn quỹ chính'), findsOneWidget);
+    });
+
+    testWidgets('G/H — từ trạng thái rỗng, chọn 1 quỹ (có sẵn hoặc vừa tạo) → Trang chủ cập nhật NGAY', (tester) async {
+      final primary = PrimaryFundController(initialId: null);
+      await pumpWith(tester, const [], funds: [DefaultFunds.anUong, fundB], primary: primary);
+      expect(find.text('Chưa chọn quỹ chính'), findsOneWidget);
+
+      await primary.select('du_lich');
+      await tester.pumpAndSettle();
+      expect(find.text('QUỸ DU LỊCH'), findsOneWidget);
+      expect(find.byKey(const Key('home_no_fund')), findsNothing);
+    });
+
+    testWidgets('[Chọn quỹ] mở màn Quỹ để chọn/tạo', (tester) async {
+      await pumpWith(tester, const [], funds: const []);
+      await tester.tap(find.byKey(const Key('home_no_fund_create')));
+      await tester.pumpAndSettle();
+      expect(find.byType(FundListScreen), findsOneWidget);
     });
   });
 
@@ -527,7 +585,7 @@ void main() {
       await pumpWith(tester, _sampleLedger());
       // Bấm liên tiếp trong CÙNG khung hình (nhanh hơn mọi thao tác thật).
       final onTap = tester
-          .widget<InkWell>(find.descendant(of: find.byKey(const Key('home_food_fund')), matching: find.byType(InkWell)).first)
+          .widget<InkWell>(find.descendant(of: find.byKey(const Key('home_primary_fund')), matching: find.byType(InkWell)).first)
           .onTap!;
       onTap();
       onTap();
@@ -540,12 +598,12 @@ void main() {
       navigator.pop();
       await tester.pumpAndSettle();
       expect(find.byType(FundDetailScreen), findsNothing);
-      expect(find.byKey(const Key('home_food_fund')), findsOneWidget);
+      expect(find.byKey(const Key('home_primary_fund')), findsOneWidget);
     });
 
     testWidgets('Nạp quỹ → mở đúng 1 sheet Thêm giao dịch (điền sẵn quỹ); bấm nhanh không mở trùng', (tester) async {
       await pumpWith(tester, _sampleLedger());
-      final onPressed = tester.widget<OutlinedButton>(find.byKey(const Key('home_food_fund_topup'))).onPressed!;
+      final onPressed = tester.widget<OutlinedButton>(find.byKey(const Key('home_primary_fund_topup'))).onPressed!;
       onPressed();
       onPressed();
       onPressed();
@@ -560,7 +618,7 @@ void main() {
 
     testWidgets('Nạp quỹ KHÔNG kích hoạt luôn thao tác mở màn chi tiết quỹ (nút riêng, không nổi bọt lên thẻ)', (tester) async {
       await pumpWith(tester, _sampleLedger());
-      await tester.tap(find.byKey(const Key('home_food_fund_topup')));
+      await tester.tap(find.byKey(const Key('home_primary_fund_topup')));
       await tester.pumpAndSettle();
       expect(find.byType(FundDetailScreen), findsNothing);
     });

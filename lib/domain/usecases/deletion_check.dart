@@ -6,6 +6,7 @@ import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
 import 'compute_pool_balance.dart';
+import 'transaction_member_label.dart';
 
 /// Vì sao 1 danh mục / trạng thái chưa xóa hẳn được.
 enum DeletionBlockerKind {
@@ -33,6 +34,7 @@ class DeletionBlocker {
     this.amountMinor,
     this.categoryName,
     this.statusName,
+    this.memberLabel,
     this.count = 1,
   });
 
@@ -42,6 +44,10 @@ class DeletionBlocker {
   final int? amountMinor;
   final String? categoryName;
   final String? statusName;
+
+  /// "Vợ" / "Chồng" (hoặc "Vợ → Chồng") — của giao dịch đang cản; `null` nếu
+  /// giao dịch không thuộc thành viên nào.
+  final String? memberLabel;
 
   /// Số dòng (chỉ có nghĩa với [DeletionBlockerKind.hiddenHistory]).
   final int count;
@@ -107,6 +113,7 @@ Iterable<DeletionBlocker> _blockersFor(
       amountMinor: t.amountMinor,
       categoryName: categoryById[t.categoryId]?.name,
       statusName: t.statusId == null ? null : statusNameById[t.statusId!],
+      memberLabel: transactionMemberLabel(t),
     );
   }
   if (hidden > 0) {

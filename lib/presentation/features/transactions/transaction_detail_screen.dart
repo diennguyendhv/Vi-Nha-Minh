@@ -63,10 +63,12 @@ class _TransactionDetailScreenState
     return choices;
   }
 
+  /// Giá trị đang chọn của ô Trạng thái: bước hiện tại nếu còn hợp lệ, ngược lại
+  /// `null` = "Không có trạng thái". KHÔNG tự chọn bước đầu tiên (trạng thái luôn
+  /// tùy chọn, và ô hiển thị phải khớp đúng giá trị sẽ được lưu).
   String? _statusValue(Category category) {
     final choices = _statusChoices(category);
-    if (choices.any((s) => s.id == _statusId)) return _statusId;
-    return choices.isEmpty ? null : choices.first.id;
+    return choices.any((s) => s.id == _statusId) ? _statusId : null;
   }
 
   FamilyMember? _member;
@@ -490,22 +492,26 @@ class _TransactionDetailScreenState
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
+              key: const Key('detail_status_field'),
               value: _statusValue(selectedCategory),
               isExpanded: true,
               decoration: const InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
-              items: _statusChoices(selectedCategory)
-                  .map(
-                    (s) => DropdownMenuItem(
-                      value: s.id,
-                      child: Text(
-                        s.isActive ? s.name : '${s.name} (ngừng sử dụng)',
-                      ),
+              // Chưa có trạng thái → hiện "Không có trạng thái" (KHÔNG tự chọn bước
+              // đầu). Đã có trạng thái thì chỉ đổi sang bước khác (Sửa không xóa
+              // trạng thái về trống — ngữ nghĩa Sửa giữ nguyên).
+              hint: const Text('Không có trạng thái'),
+              items: [
+                for (final s in _statusChoices(selectedCategory))
+                  DropdownMenuItem<String>(
+                    value: s.id,
+                    child: Text(
+                      s.isActive ? s.name : '${s.name} (ngừng sử dụng)',
                     ),
-                  )
-                  .toList(),
+                  ),
+              ],
               onChanged: (id) {
                 if (id != null) setState(() => _statusId = id);
               },

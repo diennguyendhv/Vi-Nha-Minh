@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'presentation/providers/primary_fund_provider.dart';
 import 'presentation/widgets/tap_guard.dart';
 
 import 'package:google_fonts/google_fonts.dart';
@@ -13,7 +15,8 @@ import 'core/theme/app_theme.dart';
 // Giai đoạn B. Hiện tại (Giai đoạn A) app chạy hoàn toàn local-first qua
 // LocalTransactionRepository/LocalFundRepository (SQLite), không cần mạng.
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   // App local-first không được phụ thuộc mạng để hiển thị đúng — tắt việc
   // google_fonts tự tải font qua mạng lúc chạy (mặc định của package), nếu
   // không sẽ ném Unhandled Exception khi máy không có internet (đã bắt được
@@ -21,7 +24,19 @@ void main() {
   // font hệ thống thay Manrope cho tới khi bundle file font tĩnh vào app.
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  runApp(const ProviderScope(child: ViNhaMinhApp()));
+  // Quỹ chính của Trang chủ lưu bền vững (thiết lập hiển thị, không phải sổ cái).
+  final prefs = await SharedPreferences.getInstance();
+
+  runApp(
+    ProviderScope(
+      overrides: [
+        primaryFundIdProvider.overrideWith(
+          (ref) => createPersistentPrimaryFundController(prefs),
+        ),
+      ],
+      child: const ViNhaMinhApp(),
+    ),
+  );
 }
 
 class ViNhaMinhApp extends StatelessWidget {

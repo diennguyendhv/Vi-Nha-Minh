@@ -5,6 +5,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/usecases/deletion_check.dart';
+import '../../../domain/usecases/transaction_member_label.dart';
 import 'transaction_detail_screen.dart';
 
 /// Chuyển danh sách id giao dịch "đang cản" (từ lỗi xóa/sửa làm pool âm) thành
@@ -32,6 +33,7 @@ List<DeletionBlocker> blockersFromTransactionIds(
           statusName: byId[id]!.statusId == null
               ? null
               : statusName[byId[id]!.statusId!],
+          memberLabel: transactionMemberLabel(byId[id]!),
         ),
   ];
 }
@@ -66,17 +68,32 @@ Future<void> showBlockingTransactions(
                 key: Key('blocker_${b.transactionId}'),
                 contentPadding: EdgeInsets.zero,
                 dense: true,
+                // "20/09/2026 · Chồng" / "300.000 đ" / "Sinh hoạt · Chưa trả".
                 title: Text(
-                  '${Formatters.dayMonthYear(b.date!)} · '
-                  '${Formatters.amount(b.amountMinor!)}',
+                  [
+                    Formatters.dayMonthYear(b.date!),
+                    if (b.memberLabel != null) b.memberLabel!,
+                  ].join(' · '),
+                  key: Key('blocker_header_${b.transactionId}'),
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
-                subtitle: Text(
-                  [
-                    if (b.categoryName != null) b.categoryName!,
-                    if (b.statusName != null) b.statusName!,
-                  ].join(' · '),
-                  style: const TextStyle(color: AppColors.textMuted),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      Formatters.amount(b.amountMinor!),
+                      key: Key('blocker_amount_${b.transactionId}'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    if (b.categoryName != null || b.statusName != null)
+                      Text(
+                        [
+                          if (b.categoryName != null) b.categoryName!,
+                          if (b.statusName != null) b.statusName!,
+                        ].join(' · '),
+                        style: const TextStyle(color: AppColors.textMuted),
+                      ),
+                  ],
                 ),
                 trailing: TextButton(
                   key: Key('open_blocker_${b.transactionId}'),

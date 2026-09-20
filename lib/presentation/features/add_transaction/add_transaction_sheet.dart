@@ -242,7 +242,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   void _pickCategory(Category category) {
     setState(() {
       _categoryId = category.id;
-      _statusId = category.hasStatus ? category.activeStatuses.first.id : null;
+      // Trạng thái LUÔN tùy chọn: đổi danh mục → về "Không có trạng thái", không
+      // tự chọn bước đầu tiên.
+      _statusId = null;
     });
   }
 
@@ -1447,7 +1449,7 @@ class _StatusChips extends StatelessWidget {
 
   final Category category;
   final String? selectedId;
-  final ValueChanged<String> onTap;
+  final ValueChanged<String?> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1455,7 +1457,8 @@ class _StatusChips extends StatelessWidget {
         category.activeStatuses.any((s) => s.id == selectedId)
         ? selectedId
         : null;
-    return DropdownButtonFormField<String>(
+    return DropdownButtonFormField<String?>(
+      key: const Key('add_status_field'),
       value: validSelectedId,
       isExpanded: true,
       decoration: const InputDecoration(
@@ -1463,13 +1466,15 @@ class _StatusChips extends StatelessWidget {
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(),
       ),
-      hint: const Text('Chọn trạng thái'),
-      items: category.activeStatuses
-          .map((s) => DropdownMenuItem(value: s.id, child: Text(s.name)))
-          .toList(),
-      onChanged: (id) {
-        if (id != null) onTap(id);
-      },
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('Không có trạng thái'),
+        ),
+        for (final s in category.activeStatuses)
+          DropdownMenuItem<String?>(value: s.id, child: Text(s.name)),
+      ],
+      onChanged: onTap,
     );
   }
 }

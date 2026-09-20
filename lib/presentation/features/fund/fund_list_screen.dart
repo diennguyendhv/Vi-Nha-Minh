@@ -11,6 +11,7 @@ import '../../../domain/usecases/deletion_check.dart';
 import '../../providers/category_providers.dart';
 import '../../widgets/stopped_item_tile.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/primary_fund_provider.dart';
 import '../../providers/transaction_providers.dart';
 import 'fund_detail_screen.dart';
 
@@ -34,6 +35,7 @@ class FundListScreen extends ConsumerWidget {
     final categories =
         ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
     final deletable = ref.watch(deletableFundIdsProvider);
+    final primaryFundId = ref.watch(primaryFundIdProvider);
     final active = funds.where((f) => f.isActive).toList();
     final stopped = funds.where((f) => !f.isActive).toList();
 
@@ -52,7 +54,13 @@ class FundListScreen extends ConsumerWidget {
               ),
             ),
           for (final f in active)
-            _FundTile(fund: f, balance: computeFundBalance(f.id, transactions)),
+            _FundTile(
+              fund: f,
+              balance: computeFundBalance(f.id, transactions),
+              isPrimary: f.id == primaryFundId,
+              onSetPrimary: () =>
+                  ref.read(primaryFundIdProvider.notifier).select(f.id),
+            ),
           const SizedBox(height: 12),
           OutlinedButton(
             key: const Key('fund_create'),
@@ -122,6 +130,9 @@ class FundListScreen extends ConsumerWidget {
     if (ok != true) return;
     try {
       await ref.read(fundRepositoryProvider).deleteFundPermanently(fund.id);
+      // Xóa đúng quỹ chính → bỏ chọn (Trang chủ hiện "Chưa chọn quỹ chính"), không
+      // tự chọn quỹ khác.
+      await ref.read(primaryFundIdProvider.notifier).clearIfPrimary(fund.id);
     } on FundNotDeletableException {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -165,10 +176,17 @@ class FundListScreen extends ConsumerWidget {
 }
 
 class _FundTile extends StatelessWidget {
-  const _FundTile({required this.fund, required this.balance});
+  const _FundTile({
+    required this.fund,
+    required this.balance,
+    required this.isPrimary,
+    required this.onSetPrimary,
+  });
 
   final Fund fund;
   final int balance;
+  final bool isPrimary;
+  final VoidCallback onSetPrimary;
 
   @override
   Widget build(BuildContext context) {
@@ -177,7 +195,24 @@ class _FundTile extends StatelessWidget {
       leading: CircleAvatar(backgroundColor: fund.color),
       title: Text(fund.name),
       subtitle: Text('Số dư ${Formatters.amount(balance)}'),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isPrimary)
+            Chip(
+              key: Key('fund_primary_badge_${fund.id}'),
+              label: const Text('Quỹ chính'),
+              visualDensity: VisualDensity.compact,
+            )
+          else
+            TextButton(
+              key: Key('fund_set_primary_${fund.id}'),
+              onPressed: onSetPrimary,
+              child: const Text('Đặt làm quỹ chính'),
+            ),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => FundDetailScreen(fundId: fund.id),

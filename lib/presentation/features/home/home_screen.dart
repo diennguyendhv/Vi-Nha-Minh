@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/constants/default_funds.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
@@ -12,10 +11,12 @@ import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
 import '../../../domain/usecases/explore_transactions.dart';
+import '../../../domain/usecases/resolve_primary_fund.dart';
 import '../../providers/app_state_providers.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/primary_fund_provider.dart';
 import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
 import '../fund/fund_detail_screen.dart';
@@ -126,10 +127,12 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
       month: month,
     ).spending;
 
-    Fund? foodFund;
-    for (final f in widget.funds) {
-      if (f.id == DefaultFunds.anUongId && f.isActive) foodFund = f;
-    }
+    // Quỹ chính do người dùng chọn (mặc định cài mới = Quỹ tiền ăn); hiện theo
+    // TÊN THẬT của quỹ. Bị xóa/chưa chọn → trạng thái rỗng, KHÔNG tự chọn quỹ khác.
+    final primaryFund = resolvePrimaryFund(
+      widget.funds,
+      ref.watch(primaryFundIdProvider),
+    );
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
@@ -158,10 +161,10 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
           onDetail: () =>
               ref.read(currentTabProvider.notifier).state = AppTab.summary,
         ),
-        if (foodFund == null) ...[
+        if (primaryFund == null) ...[
           const SizedBox(height: 14),
-          // Quỹ do gia đình tạo/xóa được — thiếu Quỹ tiền ăn thì hiện trạng thái
-          // rỗng (KHÔNG tự tạo lại, không crash).
+          // Quỹ do gia đình tạo/xóa được — chưa chọn / đã xóa quỹ chính thì hiện
+          // trạng thái rỗng (KHÔNG tự tạo lại, KHÔNG tự chọn quỹ khác, không crash).
           _NoFundCard(
             onCreate: () => _once(
               () => Navigator.of(context).push(
@@ -170,15 +173,15 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             ),
           ),
         ],
-        if (foodFund != null) ...[
+        if (primaryFund != null) ...[
           const SizedBox(height: 14),
-          _FoodFundCard(
-            fund: foodFund,
-            balance: computeFundBalance(foodFund.id, transactions),
+          _PrimaryFundCard(
+            fund: primaryFund,
+            balance: computeFundBalance(primaryFund.id, transactions),
             onOpen: () => _once(
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => FundDetailScreen(fundId: foodFund!.id),
+                  builder: (_) => FundDetailScreen(fundId: primaryFund.id),
                 ),
               ),
             ),
@@ -187,7 +190,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
                 context,
                 initialType: EntryType.chuyen,
                 initialTransferSubKind: TransferSubKind.fund,
-                initialFundId: foodFund!.id,
+                initialFundId: primaryFund.id,
               ),
             ),
           ),
@@ -494,8 +497,8 @@ class _SpendingCard extends StatelessWidget {
   }
 }
 
-class _FoodFundCard extends StatelessWidget {
-  const _FoodFundCard({
+class _PrimaryFundCard extends StatelessWidget {
+  const _PrimaryFundCard({
     required this.fund,
     required this.balance,
     required this.onOpen,
@@ -510,7 +513,7 @@ class _FoodFundCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Card(
-      key: const Key('home_food_fund'),
+      key: const Key('home_primary_fund'),
       onTap: onOpen,
       child: Row(
         children: [
@@ -522,7 +525,7 @@ class _FoodFundCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   balance > 0 ? Formatters.amount(balance) : 'Đã hết',
-                  key: const Key('home_food_fund_amount'),
+                  key: const Key('home_primary_fund_amount'),
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -537,7 +540,7 @@ class _FoodFundCard extends StatelessWidget {
             ),
           ),
           OutlinedButton(
-            key: const Key('home_food_fund_topup'),
+            key: const Key('home_primary_fund_topup'),
             onPressed: onTopUp,
             child: const Text('Nạp quỹ'),
           ),
@@ -561,14 +564,14 @@ class _NoFundCard extends StatelessWidget {
         children: [
           const Expanded(
             child: Text(
-              'Chưa có Quỹ tiền ăn',
+              'Chưa chọn quỹ chính',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
             ),
           ),
           OutlinedButton(
             key: const Key('home_no_fund_create'),
             onPressed: onCreate,
-            child: const Text('Tạo quỹ'),
+            child: const Text('Chọn quỹ'),
           ),
         ],
       ),

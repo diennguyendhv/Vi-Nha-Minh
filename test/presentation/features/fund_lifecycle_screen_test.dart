@@ -14,6 +14,7 @@ import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
 import 'package:vi_nha_minh/presentation/features/fund/fund_list_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/primary_fund_provider.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 /// Quỹ dùng CÙNG triết lý với Danh mục/Trạng thái: xóa hẳn khi sạch; không thì chỉ
@@ -72,6 +73,7 @@ Future<_FundRepo> _pump(
   WidgetTester tester, {
   required List<Fund> funds,
   required Stream<List<Transaction>> ledger,
+  PrimaryFundController? primary,
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -81,6 +83,7 @@ Future<_FundRepo> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (primary != null) primaryFundIdProvider.overrideWith((ref) => primary),
         fundRepositoryProvider.overrideWithValue(repo),
         fundsStreamProvider.overrideWith((ref) => Stream.value(funds)),
         transactionsStreamProvider.overrideWith((ref) => ledger),
@@ -178,5 +181,54 @@ void main() {
     await _pump(tester, funds: const [], ledger: Stream.value(const []));
     expect(find.byKey(const Key('fund_list_empty')), findsOneWidget);
     expect(find.byKey(const Key('fund_create')), findsOneWidget);
+  });
+
+  group('Quỹ chính (Trang chủ)', () {
+    const other = Fund(id: 'q3', name: 'Quỹ du lịch', color: Colors.purple);
+
+    testWidgets('Quỹ chính có nhãn "Quỹ chính"; quỹ khác có nút [Đặt làm quỹ chính] → chọn xong nhãn chuyển sang quỹ đó', (tester) async {
+      final primary = PrimaryFundController(); // mặc định an_uong
+      await _pump(tester, funds: const [active, other], ledger: Stream.value(const []), primary: primary);
+
+      expect(find.byKey(const Key('fund_primary_badge_an_uong')), findsOneWidget);
+      expect(find.byKey(const Key('fund_set_primary_an_uong')), findsNothing);
+      expect(find.byKey(const Key('fund_set_primary_q3')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('fund_set_primary_q3')));
+      await tester.pumpAndSettle();
+
+      expect(primary.state, 'q3');
+      expect(find.byKey(const Key('fund_primary_badge_q3')), findsOneWidget);
+      expect(find.byKey(const Key('fund_set_primary_an_uong')), findsOneWidget);
+    });
+
+    testWidgets('Xóa hẳn ĐÚNG quỹ chính → bỏ chọn (không tự chọn quỹ khác)', (tester) async {
+      const stoppedDefault = Fund(id: 'an_uong', name: 'Quỹ tiền ăn', color: Colors.orange, isActive: false);
+      final primary = PrimaryFundController();
+      final repo = await _pump(tester, funds: const [other, stoppedDefault], ledger: Stream.value(const []), primary: primary);
+      await openStopped(tester);
+
+      await tester.tap(find.byKey(const Key('delete_fund_an_uong')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm_delete_fund')));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, contains('delete:an_uong'));
+      expect(primary.state, isNull);
+    });
+
+    testWidgets('Xóa hẳn quỹ KHÔNG phải quỹ chính → quỹ chính giữ nguyên', (tester) async {
+      final primary = PrimaryFundController(initialId: 'q3');
+      final repo = await _pump(tester, funds: const [other, stoppedClean], ledger: Stream.value(const []), primary: primary);
+      await openStopped(tester);
+
+      await tester.tap(find.byKey(const Key('delete_fund_q2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm_delete_fund')));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, contains('delete:q2'));
+      expect(primary.state, 'q3');
+    });
   });
 }

@@ -317,6 +317,15 @@ Future<void> _tapSave(WidgetTester tester) async {
   await tester.tap(button, warnIfMissed: false);
 }
 
+/// Mở bộ chọn Trạng thái của sheet (dropdown có key `add_status_field`).
+Future<void> _openStatusPicker(WidgetTester tester) async {
+  final field = find.byKey(const Key('add_status_field'));
+  await tester.ensureVisible(field);
+  await tester.pumpAndSettle();
+  await tester.tap(field, warnIfMissed: false);
+  await tester.pumpAndSettle();
+}
+
 Future<void> _tapSegment(WidgetTester tester, String label) async {
   final segment = find.text(label).first;
   await tester.ensureVisible(segment);
@@ -564,12 +573,87 @@ void main() {
       );
 
       await _selectDropdown(tester, 'Chọn danh mục', 'CĐ');
-      // Trạng thái mặc định = bước đang dùng đầu tiên (CCB).
-      await tester.tap(find.text('CCB').first, warnIfMissed: false);
-      await tester.pumpAndSettle();
+      // Trạng thái mặc định = "Không có trạng thái"; mở bộ chọn để xem các bước.
+      await _openStatusPicker(tester);
 
       expect(find.text('ĐCB'), findsNothing, reason: 'bước đã ẩn không được chọn cho giao dịch mới');
+      expect(find.text('CCB'), findsWidgets);
       expect(find.text('ĐG'), findsWidgets);
+    });
+  });
+
+  group('Trạng thái LUÔN tùy chọn (không tự chọn bước đầu tiên)', () {
+    Future<void> openCd(WidgetTester tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chi);
+      await _selectDropdown(tester, 'Chọn danh mục', 'CĐ');
+    }
+
+    String statusFieldText(WidgetTester tester) {
+      final field = find.byKey(const Key('add_status_field'));
+      return tester
+          .widgetList<Text>(find.descendant(of: field, matching: find.byType(Text)))
+          .map((t) => t.data)
+          .whereType<String>()
+          .join('|');
+    }
+
+    testWidgets('A — danh mục KHÔNG có trạng thái: không có ô Trạng thái, statusId = null', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chi);
+      await _selectDropdown(tester, 'Chọn danh mục', 'Sinh hoạt');
+      expect(find.byKey(const Key('add_status_field')), findsNothing);
+      await _typeDigits(tester, '50000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.lastAdded!.statusId, isNull);
+    });
+
+    testWidgets('B — danh mục có trạng thái: mặc định "Không có trạng thái" (không chọn sẵn bước đầu)', (tester) async {
+      await openCd(tester);
+
+      expect(find.byKey(const Key('add_status_field')), findsOneWidget);
+      expect(statusFieldText(tester), contains('Không có trạng thái'));
+      expect(statusFieldText(tester), isNot(contains('CCB')));
+    });
+
+    testWidgets('C — lưu mà không chọn trạng thái → statusId = null', (tester) async {
+      await openCd(tester);
+      await _typeDigits(tester, '70000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.lastAdded!.categoryId, 'cho_di');
+      expect(fakeRepo.lastAdded!.statusId, isNull);
+    });
+
+    testWidgets('D — chọn bước X → lưu đúng X', (tester) async {
+      await openCd(tester);
+      await _openStatusPicker(tester);
+      await tester.tap(find.text('ĐG').last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      await _typeDigits(tester, '70000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.lastAdded!.statusId, 'cho_di_da_gui');
+    });
+
+    testWidgets('G — đổi sang danh mục khác cũng có trạng thái → về null, không tự chọn bước', (tester) async {
+      await openCd(tester);
+      await _openStatusPicker(tester);
+      await tester.tap(find.text('ĐG').last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(statusFieldText(tester), contains('ĐG'));
+
+      // Sang DH (cũng có trạng thái) — bộ chọn danh mục hiện tên đang chọn "CĐ".
+      await _selectDropdown(tester, 'CĐ', 'DH');
+      expect(statusFieldText(tester), contains('Không có trạng thái'));
+      await _typeDigits(tester, '70000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.lastAdded!.categoryId, 'dang_hien');
+      expect(fakeRepo.lastAdded!.statusId, isNull);
     });
   });
 

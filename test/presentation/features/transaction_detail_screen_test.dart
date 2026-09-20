@@ -266,13 +266,14 @@ Transaction _expenseTx({
   String note = 'ghi chú cũ',
   String? statusId,
   String? reversedByTxId,
+  String sourceRefId = 'vo',
 }) {
   return Transaction(
     id: id,
     type: TransactionType.expense,
     categoryId: categoryId,
     sourceKind: PoolKind.memberAvailable,
-    sourceRefId: 'vo',
+    sourceRefId: sourceRefId,
     destinationKind: PoolKind.external,
     amountMinor: amountMinor,
     note: note,
@@ -788,6 +789,33 @@ void main() {
       expect(screens.last.transactionId, 'later');
     });
 
+    testWidgets('Dòng giao dịch cản hiện đúng thành viên (Vợ / Chồng) và [Mở giao dịch] mở đúng giao dịch', (tester) async {
+      final wife = _expenseTx(id: 'wife-tx', amountMinor: 300000);
+      final husband = _expenseTx(id: 'husband-tx', amountMinor: 450000, sourceRefId: 'chong');
+      fakeRepo.seed([_expenseTx(), wife, husband]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      fakeRepo.nextDeleteError = const DeleteWouldOverdrawException(
+        PoolKind.memberAvailable,
+        'vo',
+        blockingTransactionIds: ['wife-tx', 'husband-tx'],
+      );
+
+      await tester.tap(find.text('Xóa giao dịch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xóa').last);
+      await tester.pumpAndSettle();
+
+      Text header(String id) => tester.widget<Text>(find.byKey(Key('blocker_header_$id')));
+      expect(header('wife-tx').data, '01/09/2026 · Vợ');
+      expect(header('husband-tx').data, '01/09/2026 · Chồng');
+      expect(tester.widget<Text>(find.byKey(const Key('blocker_amount_husband-tx'))).data, '450.000 đ');
+
+      await tester.tap(find.byKey(const Key('open_blocker_husband-tx')));
+      await tester.pumpAndSettle();
+      final screens = tester.widgetList<TransactionDetailScreen>(find.byType(TransactionDetailScreen)).toList();
+      expect(screens.last.transactionId, 'husband-tx');
+    });
+
     testWidgets('Sửa bị chặn (ChangeWouldOverdraw): thông báo dễ hiểu + mở giao dịch cản; không lộ thuật ngữ kỹ thuật', (tester) async {
       fakeRepo.seed([_expenseTx(), _expenseTx(id: 'later', amountMinor: 600000)]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
@@ -806,6 +834,47 @@ void main() {
       for (final leak in ['pool', 'ledger', 'invariant', 'memberAvailable']) {
         expect(find.textContaining(leak), findsNothing, reason: leak);
       }
+    });
+
+    testWidgets('E — cùng danh mục: giữ nguyên trạng thái hiện có khi lưu', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.enterText(find.byKey(const Key('detail_amount_field')), '120000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.updateCalls.single.statusId, 'cho_di_da_gui');
+    });
+
+    testWidgets('Giao dịch chưa có trạng thái ở danh mục có trạng thái: hiện "Không có trạng thái" (không tự chọn bước đầu) và lưu vẫn null', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      final field = find.byKey(const Key('detail_status_field'));
+      expect(find.descendant(of: field, matching: find.text('Không có trạng thái')), findsOneWidget);
+      expect(find.descendant(of: field, matching: find.text('CCB')), findsNothing);
+
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      expect(fakeRepo.updateCalls.single.statusId, isNull);
+    });
+
+    testWidgets('G — đổi sang danh mục khác CÓ trạng thái: về "Không có trạng thái", không tự chọn bước của danh mục mới', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DH').last);
+      await tester.pumpAndSettle();
+
+      final field = find.byKey(const Key('detail_status_field'));
+      expect(find.descendant(of: field, matching: find.text('Không có trạng thái')), findsOneWidget);
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      expect(fakeRepo.updateCalls.single.categoryId, 'dang_hien');
+      expect(fakeRepo.updateCalls.single.statusId, isNull);
     });
 
     testWidgets('Đổi danh mục: trạng thái cũ bị xóa ngay và lưu KHÔNG mang trạng thái cũ', (tester) async {

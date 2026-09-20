@@ -87,6 +87,40 @@ Transaction _savingsIn(String asset, FamilyMember m, int amount) => _tx(
 );
 
 void main() {
+  group('Blocker giao dịch hiện đúng thành viên (dùng chung cho Danh mục / Trạng thái / Quỹ / Loại tiết kiệm)', () {
+    test('Quỹ: nạp bởi Vợ → "Vợ"; giao dịch chi từ quỹ (không thuộc thành viên) → null', () {
+      final r = checkFundDeletion('q1', _cats, [_fundTopup('q1', 100000), _fundSpend('q1', 30000)]);
+      expect(r.transactionBlockers.map((b) => b.memberLabel), containsAll(<String?>['Vợ', null]));
+    });
+
+    test('Loại tiết kiệm: Vợ và Chồng đều hiện đúng tên', () {
+      final ledger = [
+        _savingsIn('vang', FamilyMember.vo, 100000),
+        _savingsIn('vang', FamilyMember.chong, 200000),
+      ];
+      final r = checkSavingsAssetDeletion('vang', _cats, ledger);
+      final byAmount = {for (final b in r.transactionBlockers) b.amountMinor: b.memberLabel};
+      expect(byAmount[100000], 'Vợ');
+      expect(byAmount[200000], 'Chồng');
+    });
+
+    test('Danh mục: chi của Chồng → "Chồng"; của Vợ → "Vợ"', () {
+      final wife = _tx(
+        type: TransactionType.expense, category: 'sinh_hoat',
+        from: PoolKind.memberAvailable, fromRef: 'vo', to: PoolKind.external, amount: 1000,
+      );
+      final husband = _tx(
+        type: TransactionType.expense, category: 'sinh_hoat',
+        from: PoolKind.memberAvailable, fromRef: 'chong', to: PoolKind.external, amount: 2000,
+      );
+      final cat = _cats.firstWhere((c) => c.id == 'sinh_hoat');
+      final r = checkCategoryDeletion(cat, _cats, [wife, husband]);
+      final byAmount = {for (final b in r.transactionBlockers) b.amountMinor: b.memberLabel};
+      expect(byAmount[1000], 'Vợ');
+      expect(byAmount[2000], 'Chồng');
+    });
+  });
+
   group('Quỹ', () {
     test('Không giao dịch nào chạm quỹ → xóa hẳn được (KHÔNG có quỹ "hệ thống", kể cả Quỹ tiền ăn mặc định)', () {
       expect(checkFundDeletion('an_uong', _cats, const []).canDelete, isTrue);

@@ -1,11 +1,15 @@
 import '../../core/constants/advanced_system_categories.dart';
 import '../../domain/entities/category.dart';
-import '../../domain/entities/family_member.dart';
 import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/savings_asset_type.dart';
 import '../../domain/entities/transaction.dart';
 import '../../domain/entities/transaction_type.dart';
 import '../../domain/entities/transfer_kind.dart';
+
+// `transactionMemberLabel` nay nằm ở domain (dùng chung cả hộp thoại chặn xóa);
+// re-export để các màn hiện có giữ nguyên import.
+export '../../domain/usecases/transaction_member_label.dart'
+    show transactionMemberLabel;
 
 /// Nhóm chính (ngôn ngữ người dùng) của 1 danh mục Thu/Chi; `null` cho Chuyển
 /// và các danh mục hệ thống của tính năng nâng cao (Vay, Hoàn tiền…) — lịch sử
@@ -30,28 +34,6 @@ String categoryDisplayLabel(Category? category) {
   final group = categoryGroupLabel(category);
   if (group == null || group == category.name) return category.name;
   return '$group · ${category.name}';
-}
-
-/// Nhãn thành viên của 1 giao dịch: "Vợ" / "Chồng"; Chuyển giữa 2 thành viên
-/// hiện "Vợ → Chồng". `null` khi giao dịch không thuộc thành viên nào (vd chỉ
-/// liên quan Quỹ).
-String? transactionMemberLabel(Transaction t) {
-  String? labelOf(String? refId) {
-    if (refId == null) return null;
-    for (final m in FamilyMember.values) {
-      if (m.name == refId) return m.label;
-    }
-    // Pool tiết kiệm `loạiTàiSản|thànhViên` → tên thành viên.
-    return parseSavingsAssetRefId(refId)?.member.label;
-  }
-
-  final from = labelOf(t.sourceRefId);
-  final to = labelOf(t.destinationRefId);
-  if (from != null && to != null) {
-    // Nạp / rút / phân bổ tiết kiệm luôn cùng 1 người → chỉ hiện 1 tên.
-    return from == to ? from : '$from → $to';
-  }
-  return from ?? to;
 }
 
 /// Mô tả đời thường của giao dịch tiết kiệm (không lộ enum/pool/id):
