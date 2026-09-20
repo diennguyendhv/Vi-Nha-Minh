@@ -1,4 +1,5 @@
 import '../entities/pool_kind.dart';
+import '../entities/transfer_kind.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
 import '../errors/domain_exceptions.dart';
@@ -79,6 +80,65 @@ void validateNewTransaction(Transaction tx) {
   if (tx.sourceKind == tx.destinationKind && tx.sourceRefId == tx.destinationRefId) {
     throw SameSourceDestinationException(tx.sourceKind, tx.sourceRefId);
   }
+  validateSavingsMembers(tx);
+}
+
+/// Bất biến thành viên của Tiết kiệm (Savings 2 tầng): nạp = Khả dụng(X) →
+/// Tiết kiệm(X); rút = Tiết kiệm(X) → Khả dụng(X); chuyển đổi/phân bổ =
+/// Tiết kiệm(X) → Tiết kiệm(X). Sai hình dạng hoặc lệch thành viên →
+/// [SavingsMemberMismatchException]. CHỈ áp cho `transferKind` tiết kiệm —
+/// chuyển tiền giữa 2 thành viên (`memberToMember`) không bị ảnh hưởng. Bản
+/// hoàn tác (`reversalOfTxId != null`) đảo nguồn/đích nên bỏ qua hình dạng
+/// (nó luôn đối xứng với bản gốc đã hợp lệ).
+void validateSavingsMembers(Transaction tx) {
+  final kind = tx.transferKind;
+  if (kind != TransferKind.savingsTopup &&
+      kind != TransferKind.savingsWithdraw &&
+      kind != TransferKind.savingsConvert) {
+    return;
+  }
+  if (tx.reversalOfTxId != null) return;
+
+  String? savingsMember(PoolKind k, String? ref) {
+    if (k != PoolKind.memberSavingsAsset || ref == null) return null;
+    return parseSavingsAssetRefId(ref)?.member.name;
+  }
+
+  String? availableMember(PoolKind k, String? ref) =>
+      k == PoolKind.memberAvailable ? ref : null;
+
+  final String? from;
+  final String? to;
+  switch (kind) {
+    case TransferKind.savingsTopup:
+      from = availableMember(tx.sourceKind, tx.sourceRefId);
+      to = savingsMember(tx.destinationKind, tx.destinationRefId);
+    case TransferKind.savingsWithdraw:
+      from = savingsMember(tx.sourceKind, tx.sourceRefId);
+      to = availableMember(tx.destinationKind, tx.destinationRefId);
+    case TransferKind.savingsConvert:
+      from = savingsMember(tx.sourceKind, tx.sourceRefId);
+      to = savingsMember(tx.destinationKind, tx.destinationRefId);
+    default:
+      return;
+  }
+  if (from == null || to == null || from != to) {
+    throw SavingsMemberMismatchException(kind!.name);
+  }
+}
+
+/// Pool bị làm ÂM nếu áp dụng [reversal] lên [balances] hiện tại — hoặc null
+/// nếu an toàn. Chỉ pool NGUỒN của bản hoàn tác có thể giảm nên chỉ cần kiểm
+/// tra nó (pool `external` bỏ qua). KHÔNG sửa [balances]. Tổng quát cho mọi
+/// pool (Khả dụng, Tiết kiệm, Quỹ, Phải thu) — không hard-code riêng tiết kiệm.
+PoolRef? poolOverdrawnByReversal(
+  Transaction reversal,
+  Map<PoolRef, int> balances,
+) {
+  if (reversal.sourceKind == PoolKind.external) return null;
+  final key = (reversal.sourceKind, reversal.sourceRefId);
+  final after = (balances[key] ?? 0) - reversal.amountMinor;
+  return after < 0 ? key : null;
 }
 
 /// Kiểm tra Invariant 7 (Quỹ/Tiết kiệm/MEMBER_AVAILABLE không bao giờ âm)

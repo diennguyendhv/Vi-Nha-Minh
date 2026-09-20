@@ -214,6 +214,14 @@ class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
   Future<void> updateAssetType(SavingsAssetType assetType) async {}
   @override
   Future<void> softDeleteAssetType(String assetTypeId) async {}
+  @override
+  Future<void> renameAssetType(String assetTypeId, String newName) async {}
+  @override
+  Future<void> reactivateAssetType(String assetTypeId) async {}
+  @override
+  Stream<Set<String>> watchDeletableAssetTypeIds() => Stream.value(const {});
+  @override
+  Future<void> deleteAssetTypePermanently(String assetTypeId) async {}
 }
 
 class _TestCurrencyContext implements CurrencyContext {
@@ -701,6 +709,29 @@ void main() {
 
       expect(fakeRepo.updateCalls, hasLength(1));
       expect(fakeRepo.updateCalls.single.amountMinor, 7);
+    });
+  });
+
+  group('Hoàn tác bị chặn vì làm pool âm (Savings 2 tầng)', () {
+    testWidgets('ReversalWouldOverdrawException → thông báo dễ hiểu, giao dịch còn nguyên (không pop), không lộ chi tiết kỹ thuật', (tester) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      fakeRepo.nextReverseError = const ReversalWouldOverdrawException(PoolKind.memberSavingsAsset, 'x|vo');
+
+      await tester.tap(find.text('Xoá giao dịch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xoá').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Không thể hoàn tác vì một phần số tiền này đã được chuyển hoặc sử dụng'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Hãy xử lý giao dịch phát sinh sau trước'), findsOneWidget);
+      expect(find.byType(TransactionDetailScreen), findsOneWidget, reason: 'ở lại màn chi tiết');
+      for (final leak in ['memberSavingsAsset', 'x|vo', 'pool', 'ledger', 'foreign']) {
+        expect(find.textContaining(leak), findsNothing, reason: leak);
+      }
     });
   });
 

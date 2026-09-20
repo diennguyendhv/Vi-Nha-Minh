@@ -16,6 +16,7 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/entities/transfer_kind.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
+import '../../../domain/usecases/compute_savings_breakdown.dart';
 import '../../widgets/amount_input_formatter.dart';
 import '../../widgets/sheet_error_banner.dart';
 import '../../widgets/tap_guard.dart';
@@ -316,6 +317,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     if (error is InsufficientBalanceException) {
       return 'Số dư không đủ để ghi giao dịch này.';
     }
+    if (error is SavingsMemberMismatchException) {
+      return 'Giao dịch tiết kiệm phải cùng một người (Vợ hoặc Chồng) — vui lòng chọn lại.';
+    }
     if (error is ClientTxIdConflictException) {
       return 'Giao dịch bị xung đột, vui lòng thử lưu lại.';
     }
@@ -458,7 +462,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           case TransferSubKind.savings:
             final member = _member;
             final assetTypeId = _savingsAssetTypeId;
-            if (assetTypeId == null) return null;
+            // Thêm vào tiết kiệm KHÔNG cần chọn loại tài sản: tiền vào "Chưa
+            // phân bổ"; rút/phân bổ mới cần biết nguồn.
+            if (_savingsAction != SavingsAction.topup && assetTypeId == null) {
+              return null;
+            }
             switch (_savingsAction) {
               case SavingsAction.topup:
                 return (
@@ -468,7 +476,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceKind: PoolKind.memberAvailable,
                   sourceRefId: member.name,
                   destinationKind: PoolKind.memberSavingsAsset,
-                  destinationRefId: savingsAssetRefId(assetTypeId, member),
+                  destinationRefId: savingsAssetRefId(
+                    SystemSavingsAssets.unallocatedId,
+                    member,
+                  ),
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
@@ -481,7 +492,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transferKind: TransferKind.savingsWithdraw,
                   categoryId: DefaultCategories.tietKiem.id,
                   sourceKind: PoolKind.memberSavingsAsset,
-                  sourceRefId: savingsAssetRefId(assetTypeId, member),
+                  sourceRefId: savingsAssetRefId(assetTypeId!, member),
                   destinationKind: PoolKind.memberAvailable,
                   destinationRefId: member.name,
                   amountMinor: _amount,
@@ -498,7 +509,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transferKind: TransferKind.savingsConvert,
                   categoryId: DefaultCategories.tietKiem.id,
                   sourceKind: PoolKind.memberSavingsAsset,
-                  sourceRefId: savingsAssetRefId(assetTypeId, member),
+                  sourceRefId: savingsAssetRefId(assetTypeId!, member),
                   destinationKind: PoolKind.memberSavingsAsset,
                   destinationRefId: savingsAssetRefId(targetId, member),
                   amountMinor: _amount,
@@ -937,45 +948,90 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           ),
         ];
       case TransferSubKind.savings:
+        final breakdown = computeMemberSavingsBreakdown(
+          _member,
+          transactions,
+          assetTypes,
+        );
+        // Nguồn (rút / phân bổ): mọi dòng còn tiền — kể cả "Chưa phân bổ" và
+        // loại đã ngừng còn số dư. Đích (phân bổ): "Chưa phân bổ" + loại đang
+        // dùng, KHÔNG gồm loại đã ngừng, không trùng nguồn.
+        final sources = [
+          for (final r in breakdown.rows)
+            if (r.balance > 0) r,
+        ];
+        final targets = [
+          for (final r in breakdown.rows)
+            if (!r.isInactive && r.assetTypeId != _savingsAssetTypeId) r,
+        ];
+        SavingsAssetType labelled(SavingsAllocationRow r) {
+          final base = r.asset ??
+              SavingsAssetType(
+                id: r.assetTypeId,
+                name: 'Loại tài sản khác',
+                color: AppColors.textMuted,
+              );
+          final suffix = r.isInactive ? ' · Ngừng sử dụng' : '';
+          return base.copyWith(
+            name: '${base.name} · ${Formatters.amount(r.balance)}$suffix',
+          );
+        }
+
         return [
           const _SectionLabel('Của ai'),
           const SizedBox(height: 8),
           _MemberToggle(
             member: _member,
-            onChanged: (m) => setState(() => _member = m),
+            onChanged: (m) => setState(() {
+              _member = m;
+              _savingsAssetTypeId = null;
+              _savingsTargetAssetTypeId = null;
+            }),
           ),
           const SizedBox(height: 12),
           const _SectionLabel('Hành động'),
           const SizedBox(height: 8),
           _SavingsActionSegmented(
             value: _savingsAction,
-            onChanged: (v) => setState(() => _savingsAction = v),
-          ),
-          const SizedBox(height: 12),
-          _SectionLabel(
-            _savingsAction == SavingsAction.convert
-                ? 'Từ loại tài sản'
-                : 'Loại tài sản',
-          ),
-          const SizedBox(height: 8),
-          _AssetTypeChipGrid(
-            assetTypes: assetTypes,
-            selectedId: _savingsAssetTypeId,
-            onTap: (id) => setState(() {
-              _savingsAssetTypeId = id;
-              if (_savingsTargetAssetTypeId == id) {
-                _savingsTargetAssetTypeId = null;
-              }
+            onChanged: (v) => setState(() {
+              _savingsAction = v;
+              _savingsAssetTypeId = null;
+              _savingsTargetAssetTypeId = null;
             }),
           ),
-          if (_savingsAction == SavingsAction.convert) ...[
-            const SizedBox(height: 12),
-            const _SectionLabel('Sang loại tài sản'),
+          const SizedBox(height: 12),
+          if (_savingsAction == SavingsAction.topup)
+            const Text(
+              'Tiền được để dành ở "Chưa phân bổ" — phân bổ sang Vàng, Gửi ngân hàng… sau.',
+              key: Key('savings_topup_hint'),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            )
+          else ...[
+            _SectionLabel(
+              _savingsAction == SavingsAction.convert ? 'Từ' : 'Rút từ',
+            ),
             const SizedBox(height: 8),
             _AssetTypeChipGrid(
-              assetTypes: assetTypes
-                  .where((a) => a.id != _savingsAssetTypeId)
-                  .toList(),
+              hint: sources.isEmpty
+                  ? 'Chưa có khoản tiết kiệm nào'
+                  : 'Chọn nguồn',
+              assetTypes: [for (final r in sources) labelled(r)],
+              selectedId: _savingsAssetTypeId,
+              onTap: (id) => setState(() {
+                _savingsAssetTypeId = id;
+                if (_savingsTargetAssetTypeId == id) {
+                  _savingsTargetAssetTypeId = null;
+                }
+              }),
+            ),
+          ],
+          if (_savingsAction == SavingsAction.convert) ...[
+            const SizedBox(height: 12),
+            const _SectionLabel('Đến'),
+            const SizedBox(height: 8),
+            _AssetTypeChipGrid(
+              hint: 'Chọn nơi phân bổ',
+              assetTypes: [for (final r in targets) labelled(r)],
               selectedId: _savingsTargetAssetTypeId,
               onTap: (id) => setState(() => _savingsTargetAssetTypeId = id),
             ),
@@ -1127,9 +1183,9 @@ class _SavingsActionSegmented extends StatelessWidget {
   final ValueChanged<SavingsAction> onChanged;
 
   static const _labels = {
-    SavingsAction.topup: 'Nạp',
-    SavingsAction.withdraw: 'Rút về ví',
-    SavingsAction.convert: 'Chuyển đổi',
+    SavingsAction.topup: 'Thêm vào',
+    SavingsAction.withdraw: 'Rút về số dư',
+    SavingsAction.convert: 'Phân bổ',
   };
 
   @override
@@ -1283,8 +1339,10 @@ class _AssetTypeChipGrid extends StatelessWidget {
     required this.assetTypes,
     required this.selectedId,
     required this.onTap,
+    this.hint = 'Chọn loại tài sản',
   });
 
+  final String hint;
   final List<SavingsAssetType> assetTypes;
   final String? selectedId;
   final ValueChanged<String> onTap;
@@ -1292,9 +1350,9 @@ class _AssetTypeChipGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (assetTypes.isEmpty) {
-      return const Text(
-        'Chưa có loại tài sản nào — tạo ở màn Tiết kiệm trước.',
-        style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+      return Text(
+        hint,
+        style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
       );
     }
     final validSelectedId = assetTypes.any((a) => a.id == selectedId)
@@ -1308,7 +1366,7 @@ class _AssetTypeChipGrid extends StatelessWidget {
         contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         border: OutlineInputBorder(),
       ),
-      hint: const Text('Chọn loại tài sản'),
+      hint: Text(hint),
       items: assetTypes
           .map(
             (a) => DropdownMenuItem(

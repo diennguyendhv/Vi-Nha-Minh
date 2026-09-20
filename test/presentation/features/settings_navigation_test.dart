@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart' show Key;
+import 'package:flutter/widgets.dart' show Key, Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -114,6 +114,10 @@ void main() {
   });
 
   testWidgets('Settings → Tiết kiệm mở được; Back về Settings', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await pumpApp(tester);
     await openSettings(tester);
 
@@ -121,7 +125,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SavingsScreen), findsOneWidget);
     expect(tester.takeException(), isNull);
-    // Bộ loại tài sản mặc định mới (F11) hiển thị đúng trên UI thật.
+    // Savings 2 tầng: "Chưa phân bổ" luôn ở đầu, rồi bộ loại tài sản mặc định (F11).
+    expect(find.text('Chưa phân bổ'), findsOneWidget);
     expect(find.text('Gửi ngân hàng'), findsOneWidget);
     expect(find.text('Vàng'), findsOneWidget);
     expect(find.text('Chứng khoán'), findsOneWidget);

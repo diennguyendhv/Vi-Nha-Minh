@@ -27,6 +27,7 @@ import 'package:vi_nha_minh/domain/usecases/explore_transactions.dart';
 import 'package:vi_nha_minh/presentation/features/add_transaction/add_transaction_sheet.dart';
 import 'package:vi_nha_minh/presentation/features/fund/fund_detail_screen.dart';
 import 'package:vi_nha_minh/presentation/features/home/home_screen.dart';
+import 'package:vi_nha_minh/presentation/features/savings/savings_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/app_state_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
@@ -174,6 +175,14 @@ class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
   Future<void> updateAssetType(SavingsAssetType assetType) async {}
   @override
   Future<void> softDeleteAssetType(String assetTypeId) async {}
+  @override
+  Future<void> renameAssetType(String assetTypeId, String newName) async {}
+  @override
+  Future<void> reactivateAssetType(String assetTypeId) async {}
+  @override
+  Stream<Set<String>> watchDeletableAssetTypeIds() => Stream.value(const {});
+  @override
+  Future<void> deleteAssetTypePermanently(String assetTypeId) async {}
 }
 
 int _seq = 0;
@@ -432,6 +441,53 @@ void main() {
       expect(find.byType(FundDetailScreen), findsNothing);
       expect(find.byType(AddTransactionSheet), findsNothing);
       expect(find.byKey(const Key('home_member_vo')), findsOneWidget);
+    });
+
+    testWidgets('Chạm dòng "Tiết kiệm" của Vợ / Chồng → màn Tiết kiệm đúng thành viên; Back về Home; bấm nhanh không mở trùng', (tester) async {
+      await pumpWith(tester, _sampleLedger());
+
+      for (final m in ['vo', 'chong']) {
+        final onTap = tester
+            .widget<InkWell>(find.byKey(Key('home_savings_row_$m')))
+            .onTap!;
+        onTap();
+        onTap();
+        onTap();
+        await tester.pumpAndSettle();
+        expect(find.byType(SavingsScreen, skipOffstage: false), findsOneWidget, reason: 'không mở trùng ($m)');
+        final screen = tester.widget<SavingsScreen>(find.byType(SavingsScreen));
+        expect(screen.initialMember?.name, m);
+        expect(find.text('TIẾT KIỆM ${m == 'vo' ? 'VỢ' : 'CHỒNG'}'), findsOneWidget);
+        // Tổng trên màn Tiết kiệm = số Tiết kiệm trên Home của người đó.
+        expect(
+          _text(tester, 'savings_total'),
+          m == 'vo' ? '2.000.000 đ' : '0 đ',
+        );
+
+        tester.state<NavigatorState>(find.byType(Navigator)).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(SavingsScreen), findsNothing);
+        expect(find.byKey(const Key('home_member_vo')), findsOneWidget);
+      }
+    });
+
+    testWidgets('Số Tiết kiệm trên Home LUÔN = Savings Total (kể cả tiền ở "Chưa phân bổ")', (tester) async {
+      await pumpWith(tester, [
+        _income(3000000, memberRefId: 'chong'),
+        _tx(
+          type: TransactionType.transfer,
+          transferKind: TransferKind.savingsTopup,
+          categoryId: DefaultCategories.tietKiem.id,
+          from: PoolKind.memberAvailable,
+          fromRef: 'chong',
+          to: PoolKind.memberSavingsAsset,
+          toRef: savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong),
+          amount: 1000000,
+        ),
+      ]);
+      expect(_text(tester, 'home_savings_chong'), '1.000.000 đ');
+      expect(_text(tester, 'home_balance_chong'), '2.000.000 đ');
+      expect(_text(tester, 'home_savings_vo'), '0 đ');
     });
 
     testWidgets('"Xem chi tiết" → chuyển sang tab Tổng hợp', (tester) async {

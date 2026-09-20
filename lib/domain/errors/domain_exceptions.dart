@@ -87,6 +87,56 @@ class StatusNotDeletableException implements Exception {
       'StatusNotDeletableException: trạng thái $statusId không đủ điều kiện xoá hẳn';
 }
 
+/// Ném ra khi 1 giao dịch tiết kiệm (`savingsTopup`/`savingsWithdraw`/
+/// `savingsConvert`) không cùng 1 thành viên hoặc sai hình dạng nguồn/đích —
+/// vd Vợ khả dụng → Tiết kiệm Chồng. Chặn ở tầng ghi, không chỉ dựa vào UI.
+class SavingsMemberMismatchException implements Exception {
+  const SavingsMemberMismatchException(this.transactionKind);
+
+  final String transactionKind;
+
+  @override
+  String toString() =>
+      'SavingsMemberMismatchException: giao dịch $transactionKind không cùng thành viên / sai nguồn-đích';
+}
+
+/// Ném ra khi HOÀN TÁC 1 giao dịch sẽ làm 1 pool âm (vd hoàn tác lần nạp tiết
+/// kiệm sau khi 1 phần đã được phân bổ/rút). Không ghi gì, không cascade.
+class ReversalWouldOverdrawException implements Exception {
+  const ReversalWouldOverdrawException(this.poolKind, this.refId);
+
+  final PoolKind poolKind;
+  final String? refId;
+
+  @override
+  String toString() =>
+      'ReversalWouldOverdrawException: hoàn tác sẽ làm pool $poolKind($refId) âm';
+}
+
+/// Ném ra khi cố xoá hẳn 1 loại tài sản tiết kiệm không đủ điều kiện (còn
+/// đang dùng, còn số dư, đã từng có giao dịch, hoặc là tài sản hệ thống).
+class SavingsAssetTypeNotDeletableException implements Exception {
+  const SavingsAssetTypeNotDeletableException(this.assetTypeId);
+
+  final String assetTypeId;
+
+  @override
+  String toString() =>
+      'SavingsAssetTypeNotDeletableException: loại tài sản $assetTypeId không đủ điều kiện xoá hẳn';
+}
+
+/// Ném ra khi cố đưa tiền VÀO 1 loại tài sản đã ngừng sử dụng (nạp/chuyển
+/// đến). Loại đã ngừng chỉ cho rút hoặc chuyển ra.
+class SavingsAssetInactiveException implements Exception {
+  const SavingsAssetInactiveException(this.assetTypeId);
+
+  final String assetTypeId;
+
+  @override
+  String toString() =>
+      'SavingsAssetInactiveException: loại tài sản $assetTypeId đã ngừng, không nhận thêm tiền';
+}
+
 /// Ném ra khi `amountMinor` không hợp lệ — Invariant 12
 /// (`docs/financial-core-v2.md` mục 18): luôn phải dương, không chấp nhận 0
 /// hay số âm. Đây là validate THẬT ở tầng Financial Engine (không bị strip

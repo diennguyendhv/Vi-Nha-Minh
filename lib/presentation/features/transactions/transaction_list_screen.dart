@@ -5,9 +5,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/engine/financial_engine.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/category_label.dart';
 import 'transaction_detail_screen.dart';
@@ -36,6 +38,9 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final categoryById = {for (final c in categories) c.id: c};
+    final assetTypes =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ??
+        const <SavingsAssetType>[];
 
     final inMonth =
         transactions
@@ -141,6 +146,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               _TransactionTile(
                                 transaction: t,
                                 category: categoryById[t.categoryId],
+                                assetTypes: assetTypes,
                                 stt: sttById[t.id],
                               ),
                           ],
@@ -175,8 +181,12 @@ class _TransactionTile extends StatelessWidget {
   const _TransactionTile({
     required this.transaction,
     required this.category,
+    this.assetTypes = const [],
     this.stt,
   });
+
+  /// Để hiện tên loại tài sản trong dòng Tiết kiệm.
+  final List<SavingsAssetType> assetTypes;
 
   final Transaction transaction;
   final Category? category;
@@ -204,7 +214,7 @@ class _TransactionTile extends StatelessWidget {
         ),
       ),
       title: Text(
-        '${stt != null ? '$stt. ' : ''}${categoryDisplayLabel(category)}',
+        '${stt != null ? '$stt. ' : ''}${savingsTransferLabel(transaction, assetTypes) ?? categoryDisplayLabel(category)}',
       ),
       subtitle: _subtitle(transaction) == null
           ? null

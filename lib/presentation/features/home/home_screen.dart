@@ -20,6 +20,7 @@ import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
 import '../fund/fund_detail_screen.dart';
 import '../loans/loans_screen.dart';
+import '../savings/savings_screen.dart';
 import '../settings/settings_screen.dart';
 
 /// Trang chủ — KHÔNG phải báo cáo kế toán, chỉ trả lời nhanh 8 câu hỏi thật:
@@ -140,6 +141,13 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             income: m.income,
             balance: m.financials.balance,
             savings: m.financials.savingsTotal,
+            onSavings: () => _once(
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SavingsScreen(initialMember: m.member),
+                ),
+              ),
+            ),
           ),
           const SizedBox(height: 14),
         ],
@@ -320,12 +328,16 @@ class _MemberCard extends StatelessWidget {
     required this.income,
     required this.balance,
     required this.savings,
+    required this.onSavings,
   });
 
   final FamilyMember member;
   final int income;
   final int balance;
   final int savings;
+
+  /// Chạm dòng "Tiết kiệm" → màn Tiết kiệm của đúng thành viên.
+  final VoidCallback onSavings;
 
   @override
   Widget build(BuildContext context) {
@@ -354,6 +366,8 @@ class _MemberCard extends StatelessWidget {
             valueKey: Key('home_savings_$key'),
             label: 'Tiết kiệm',
             value: savings,
+            onTap: onSavings,
+            rowKey: Key('home_savings_row_$key'),
           ),
         ],
       ),
@@ -367,8 +381,12 @@ class _StatRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.negativeIsRed = false,
+    this.onTap,
+    this.rowKey,
   });
 
+  final VoidCallback? onTap;
+  final Key? rowKey;
   final Key valueKey;
   final String label;
   final int value;
@@ -376,12 +394,25 @@ class _StatRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+        Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            if (onTap != null)
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: AppColors.textMuted,
+              ),
+          ],
         ),
         Text(
           Formatters.amount(value),
@@ -395,6 +426,13 @@ class _StatRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+    if (onTap == null) return row;
+    return InkWell(
+      key: rowKey,
+      borderRadius: BorderRadius.circular(8),
+      onTap: onTap,
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: row),
     );
   }
 }

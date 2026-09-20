@@ -6,6 +6,7 @@ import '../../domain/engine/financial_engine.dart';
 import '../../domain/engine/obligation_settlement.dart';
 import '../../domain/entities/obligation_direction.dart';
 import '../../domain/entities/pool_kind.dart';
+import '../../domain/entities/savings_asset_type.dart' show SystemSavingsAssets;
 import '../../domain/entities/transaction.dart' as domain;
 import '../../domain/entities/transaction_type.dart';
 import '../../domain/entities/transfer_kind.dart';
@@ -181,6 +182,35 @@ class LocalTransactionRepository implements TransactionRepository {
     return PersistenceException('Lỗi lưu trữ không mong đợi', cause: e);
   }
 
+  /// Loại tài sản tiết kiệm ĐÃ NGỪNG không nhận thêm tiền (nạp / chuyển VÀO);
+  /// chỉ cho rút hoặc chuyển RA. Tài sản hệ thống ("Chưa phân bổ") và loại
+  /// không có dòng trong bảng (dữ liệu cũ) luôn được phép. Chỉ áp cho giao
+  /// dịch MỚI — hoàn tác vẫn đưa tiền về đúng pool cũ dù loại đã ngừng.
+  Future<void> _assertSavingsDestinationActive(
+    domain.Transaction transaction,
+  ) async {
+    final kind = transaction.transferKind;
+    if (kind != TransferKind.savingsTopup &&
+        kind != TransferKind.savingsConvert) {
+      return;
+    }
+    final ref = transaction.destinationRefId;
+    if (transaction.destinationKind != PoolKind.memberSavingsAsset ||
+        ref == null) {
+      return;
+    }
+    final assetTypeId = parseSavingsAssetRefId(ref)?.assetTypeId;
+    if (assetTypeId == null || SystemSavingsAssets.isSystem(assetTypeId)) {
+      return;
+    }
+    final row = await (_db.select(
+      _db.savingsAssetTypeRows,
+    )..where((r) => r.id.equals(assetTypeId))).getSingleOrNull();
+    if (row != null && !row.isActive) {
+      throw SavingsAssetInactiveException(assetTypeId);
+    }
+  }
+
   @override
   Future<domain.Transaction> addTransaction(
     domain.Transaction transaction,
@@ -237,6 +267,8 @@ class LocalTransactionRepository implements TransactionRepository {
           }
           validateRecoveryRelation(transaction, target);
         }
+
+        await _assertSavingsDestinationActive(transaction);
 
         final balances = computeAllPoolBalances(existing);
         _assertWontGoNegative(transaction, balances);
@@ -296,6 +328,16 @@ class LocalTransactionRepository implements TransactionRepository {
           clientTxId: IdGenerator.generate(),
           now: DateTime.now(),
         );
+        // Hoàn tác không được làm bất kỳ pool nào âm (vd hoàn tác lần nạp tiết
+        // kiệm khi 1 phần đã phân bổ đi). Chặn TRƯỚC khi ghi: 0 dòng mới, số dư
+        // không đổi; không cascade hoàn tác các giao dịch phát sinh sau.
+        final overdrawn = poolOverdrawnByReversal(
+          reversal,
+          computeAllPoolBalances(await _allTransactions()),
+        );
+        if (overdrawn != null) {
+          throw ReversalWouldOverdrawException(overdrawn.$1, overdrawn.$2);
+        }
         await _db.into(_db.transactionRows).insert(_toCompanion(reversal));
         await (_db.update(
           _db.transactionRows,
@@ -395,6 +437,19 @@ class LocalTransactionRepository implements TransactionRepository {
           final balances = computeAllPoolBalances(existing);
           applyEffect(result.reversal, 1, balances);
           _assertWontGoNegative(result.replacement, balances);
+          // Sau khi áp cả bản hoàn tác lẫn bản thay thế, không pool nào được âm
+          // (vd giảm số tiền lần nạp tiết kiệm xuống dưới phần đã phân bổ).
+          applyEffect(result.replacement, 1, balances);
+          for (final leg in [result.reversal, result.replacement]) {
+            for (final key in [
+              (leg.sourceKind, leg.sourceRefId),
+              (leg.destinationKind, leg.destinationRefId),
+            ]) {
+              if (key.$1 != PoolKind.external && (balances[key] ?? 0) < 0) {
+                throw ReversalWouldOverdrawException(key.$1, key.$2);
+              }
+            }
+          }
 
           await _db
               .into(_db.transactionRows)

@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
@@ -13,6 +14,7 @@ import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/compute_status_breakdown.dart';
 import '../../../domain/usecases/explore_transactions.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/category_label.dart';
 import '../transactions/transaction_detail_screen.dart';
@@ -125,6 +127,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
 
     final transactions = transactionsAsync.value ?? const <Transaction>[];
     final categories = categoriesAsync.value ?? const <Category>[];
+    final savingsAssetTypes =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ??
+        const <SavingsAssetType>[];
     final categoryById = {for (final c in categories) c.id: c};
     final now = DateTime.now();
     final month = DateTime(now.year, now.month);
@@ -356,6 +361,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                   key: ValueKey(t.id),
                   transaction: t,
                   category: categoryById[t.categoryId],
+                  assetTypes: savingsAssetTypes,
                 );
               },
             ),
@@ -728,18 +734,24 @@ class _ExplorerRow extends StatelessWidget {
     super.key,
     required this.transaction,
     required this.category,
+    this.assetTypes = const [],
   });
 
   final Transaction transaction;
   final Category? category;
+
+  /// Để hiện tên loại tài sản trong dòng Tiết kiệm (không bắt buộc).
+  final List<SavingsAssetType> assetTypes;
 
   @override
   Widget build(BuildContext context) {
     final t = transaction;
     final memberLabel = transactionMemberLabel(t);
     final isTransfer = t.type == TransactionType.transfer;
-    final title =
-        (isTransfer && memberLabel != null && memberLabel.contains('→'))
+    final savingsLabel = savingsTransferLabel(t, assetTypes);
+    final title = savingsLabel != null
+        ? [memberLabel, savingsLabel].whereType<String>().join(' · ')
+        : (isTransfer && memberLabel != null && memberLabel.contains('→'))
         ? memberLabel
         : [
             memberLabel,

@@ -243,6 +243,9 @@ class _TransactionDetailScreenState
     if (error is InsufficientBalanceException) {
       return 'Số dư không đủ để lưu thay đổi này.';
     }
+    if (error is ReversalWouldOverdrawException) {
+      return 'Không thể hoàn tác vì một phần số tiền này đã được chuyển hoặc sử dụng. Hãy xử lý giao dịch phát sinh sau trước.';
+    }
     if (error is PersistenceConstraintException) {
       return 'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.';
     }

@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
+import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
+import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
+import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/presentation/features/summary/summary_screen.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/counterparty_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 const _chua = Status(id: 'st_chua', categoryId: 'cho_di', name: 'CCB', sortOrder: 0);
@@ -123,6 +128,7 @@ Future<void> _pump(WidgetTester tester, List<Transaction> ledger) async {
         transactionsStreamProvider.overrideWith((ref) => Stream.value(ledger)),
         categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
         obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
+        savingsAssetTypesStreamProvider.overrideWith((ref) => Stream.value(DefaultSavingsAssetTypes.all)),
         counterpartiesStreamProvider.overrideWith((ref) => Stream.value(const [])),
       ],
       child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
@@ -415,6 +421,64 @@ void main() {
     expect(find.text('gửi chồng tiền chợ'), findsOneWidget);
     expect(find.text('Vợ · Tiết kiệm'), findsOneWidget);
     expect(find.text('- 5.000 đ'), findsOneWidget);
+  });
+
+  testWidgets('Dòng Tiết kiệm đời thường: Thêm vào / Rút từ / Tiết kiệm · A → B (không lộ enum, id, pool)', (tester) async {
+    Transaction sv(TransferKind kind, PoolKind from, String fromRef, PoolKind to, String toRef, int amount) {
+      _n++;
+      return Transaction(
+        id: 'sv$_n',
+        type: TransactionType.transfer,
+        transferKind: kind,
+        categoryId: 'tiet_kiem',
+        sourceKind: from,
+        sourceRefId: fromRef,
+        destinationKind: to,
+        destinationRefId: toRef,
+        amountMinor: amount,
+        transactionDate: _today,
+        createdAt: _today.add(Duration(seconds: _n)),
+        clientTxId: 'c-sv-$_n',
+      );
+    }
+
+    await _pump(tester, [
+      ...base,
+      sv(TransferKind.savingsTopup, PoolKind.memberAvailable, 'chong', PoolKind.memberSavingsAsset,
+          savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong), 111000),
+      sv(TransferKind.savingsWithdraw, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', FamilyMember.vo),
+          PoolKind.memberAvailable, 'vo', 222000),
+      sv(TransferKind.savingsConvert, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', FamilyMember.vo),
+          PoolKind.memberSavingsAsset, savingsAssetRefId('savings_bank', FamilyMember.vo), 333000),
+    ]);
+    expect(find.text('Chồng · Thêm vào tiết kiệm'), findsOneWidget);
+    expect(find.text('Vợ · Rút từ tiết kiệm · Vàng'), findsOneWidget);
+    expect(find.text('Vợ · Tiết kiệm · Vàng → Gửi ngân hàng'), findsOneWidget);
+    for (final leak in ['savingsTopup', 'savingsConvert', 'savings_', '|', 'memberSavingsAsset']) {
+      expect(find.textContaining(leak), findsNothing, reason: leak);
+    }
+  });
+
+  testWidgets('Lọc theo Vợ: giao dịch Tiết kiệm của Vợ hiện, của Chồng ẩn (lọc theo thành viên vẫn đúng)', (tester) async {
+    _n++;
+    Transaction topupFor(String m) => Transaction(
+      id: 'tp$m$_n',
+      type: TransactionType.transfer,
+      transferKind: TransferKind.savingsTopup,
+      categoryId: 'tiet_kiem',
+      sourceKind: PoolKind.memberAvailable,
+      sourceRefId: m,
+      destinationKind: PoolKind.memberSavingsAsset,
+      destinationRefId: savingsAssetRefId(SystemSavingsAssets.unallocatedId, m == 'vo' ? FamilyMember.vo : FamilyMember.chong),
+      amountMinor: m == 'vo' ? 123000 : 456000,
+      transactionDate: _today,
+      createdAt: _today,
+      clientTxId: 'c-tp-$m-$_n',
+    );
+    await _pump(tester, [topupFor('vo'), topupFor('chong')]);
+    await _tapKey(tester, 'summary_member_vo');
+    expect(find.text('Vợ · Thêm vào tiết kiệm'), findsOneWidget);
+    expect(find.text('Chồng · Thêm vào tiết kiệm'), findsNothing);
   });
 
   testWidgets('Có ghi chú / không ghi chú', (tester) async {

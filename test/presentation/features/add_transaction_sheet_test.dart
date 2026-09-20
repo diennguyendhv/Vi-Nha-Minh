@@ -65,6 +65,12 @@ class _FakeTransactionRepository implements TransactionRepository {
   @override
   Stream<List<Transaction>> watchTransactions() => _controller.stream;
 
+  /// Đặt sổ giả (vd có tiền tiết kiệm sẵn để test Rút / Phân bổ).
+  void seed(List<Transaction> ledger) {
+    _all = ledger;
+    _controller.add(ledger);
+  }
+
   @override
   Future<Transaction?> getTransactionById(String id) async => null;
 
@@ -164,6 +170,14 @@ class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
   Future<void> updateAssetType(SavingsAssetType assetType) async {}
   @override
   Future<void> softDeleteAssetType(String assetTypeId) async {}
+  @override
+  Future<void> renameAssetType(String assetTypeId, String newName) async {}
+  @override
+  Future<void> reactivateAssetType(String assetTypeId) async {}
+  @override
+  Stream<Set<String>> watchDeletableAssetTypeIds() => Stream.value(const {});
+  @override
+  Future<void> deleteAssetTypePermanently(String assetTypeId) async {}
 }
 
 class _TestCurrencyContext implements CurrencyContext {
@@ -230,6 +244,22 @@ Future<void> _pumpSheet(
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
 }
+
+/// Vợ đang có 500.000 ở "Gửi ngân hàng" (số dư ban đầu vào pool tiết kiệm).
+List<Transaction> _voBankSavings() => [
+  Transaction(
+    id: 'seed-bank',
+    type: TransactionType.income,
+    categoryId: 'so_du_ban_dau',
+    sourceKind: PoolKind.external,
+    destinationKind: PoolKind.memberSavingsAsset,
+    destinationRefId: savingsAssetRefId(DefaultSavingsAssetTypes.bankId, FamilyMember.vo),
+    amountMinor: 500000,
+    transactionDate: DateTime(2026, 9, 1),
+    createdAt: DateTime(2026, 9, 1),
+    clientTxId: 'seed-bank-client',
+  ),
+];
 
 Future<void> _selectDropdown(
   WidgetTester tester,
@@ -380,7 +410,6 @@ void main() {
     testWidgets('Tiết kiệm nạp: note được lưu', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
       await _tapSegment(tester, 'Tiết kiệm');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
       await _typeNote(tester, 'Gửi kỳ hạn 6 tháng');
       await _typeDigits(tester, '100000');
       await _tapSave(tester);
@@ -391,9 +420,11 @@ void main() {
 
     testWidgets('Tiết kiệm rút: note được lưu', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
       await _tapSegment(tester, 'Tiết kiệm');
-      await _tapSegment(tester, 'Rút về ví');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
+      await _tapSegment(tester, 'Rút về số dư');
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
       await _typeNote(tester, 'Rút chi tiêu tháng 9');
       await _typeDigits(tester, '20000');
       await _tapSave(tester);
@@ -404,10 +435,12 @@ void main() {
 
     testWidgets('Tiết kiệm chuyển đổi: note được lưu', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
       await _tapSegment(tester, 'Tiết kiệm');
-      await _tapSegment(tester, 'Chuyển đổi');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.gold.name);
+      await _tapSegment(tester, 'Phân bổ');
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
+      await _selectDropdown(tester, 'Chọn nơi phân bổ', 'Vàng · 0 đ');
       await _typeNote(tester, 'Mua vàng');
       await _typeDigits(tester, '70000');
       await _tapSave(tester);
@@ -632,7 +665,7 @@ void main() {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
 
       await _tapSegment(tester, 'Tiết kiệm');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
+      expect(find.text('Chọn loại tài sản'), findsNothing, reason: 'Thêm vào tiết kiệm KHÔNG hỏi loại tài sản');
       await _typeDigits(tester, '100000');
       await _tapSave(tester);
       await tester.pumpAndSettle();
@@ -643,16 +676,22 @@ void main() {
       expect(tx.sourceKind, PoolKind.memberAvailable);
       expect(tx.sourceRefId, 'vo');
       expect(tx.destinationKind, PoolKind.memberSavingsAsset);
-      expect(tx.destinationRefId, savingsAssetRefId(DefaultSavingsAssetTypes.bankId, FamilyMember.vo));
+      expect(
+        tx.destinationRefId,
+        savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.vo),
+        reason: 'mặc định vào "Chưa phân bổ"',
+      );
       expect(tx.amountMinor, 100000);
     });
 
     testWidgets('6 — SAVINGS_WITHDRAW map đúng', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
 
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
       await _tapSegment(tester, 'Tiết kiệm');
-      await _tapSegment(tester, 'Rút về ví');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
+      await _tapSegment(tester, 'Rút về số dư');
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
       await _typeDigits(tester, '20000');
       await _tapSave(tester);
       await tester.pumpAndSettle();
@@ -670,10 +709,12 @@ void main() {
     testWidgets('7 — SAVINGS_CONVERT map đúng', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
 
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
       await _tapSegment(tester, 'Tiết kiệm');
-      await _tapSegment(tester, 'Chuyển đổi');
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.bank.name);
-      await _selectDropdown(tester, 'Chọn loại tài sản', DefaultSavingsAssetTypes.gold.name);
+      await _tapSegment(tester, 'Phân bổ');
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
+      await _selectDropdown(tester, 'Chọn nơi phân bổ', 'Vàng · 0 đ');
       await _typeDigits(tester, '70000');
       await _tapSave(tester);
       await tester.pumpAndSettle();
@@ -686,6 +727,59 @@ void main() {
       expect(tx.destinationKind, PoolKind.memberSavingsAsset);
       expect(tx.destinationRefId, savingsAssetRefId(DefaultSavingsAssetTypes.goldId, FamilyMember.vo));
       expect(tx.amountMinor, 70000);
+    });
+
+    testWidgets('Phân bổ: nguồn chỉ liệt kê dòng CÒN TIỀN; đích gồm Chưa phân bổ + loại đang dùng, KHÔNG có nguồn và loại đã ngừng', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
+      await _tapSegment(tester, 'Tiết kiệm');
+      await _tapSegment(tester, 'Phân bổ');
+
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
+      // Mở dropdown đích và đọc các lựa chọn.
+      final field = find.text('Chọn nơi phân bổ').first;
+      await tester.ensureVisible(field);
+      await tester.tap(field, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.text('Chưa phân bổ · 0 đ'), findsWidgets);
+      expect(find.text('Vàng · 0 đ'), findsWidgets);
+      expect(find.text('Gửi ngân hàng · 500.000 đ'), findsOneWidget, reason: 'chỉ còn ô Nguồn đang chọn; KHÔNG có trong danh sách đích (không phân bổ vào chính nguồn)');
+    });
+
+    testWidgets('Rút: chỉ thấy nguồn còn tiền — nếu chưa có tiền tiết kiệm thì báo, Lưu bị khoá', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      await _tapSegment(tester, 'Tiết kiệm');
+      await _tapSegment(tester, 'Rút về số dư');
+      expect(find.text('Chưa có khoản tiết kiệm nào'), findsOneWidget);
+      await _typeDigits(tester, '1000');
+      final save = find.byType(ElevatedButton).last;
+      expect(tester.widget<ElevatedButton>(save).onPressed, isNull);
+    });
+
+    testWidgets('Đổi thành viên trong panel Tiết kiệm xoá nguồn đã chọn (không lẫn Vợ ↔ Chồng)', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      fakeRepo.seed(_voBankSavings());
+      await tester.pumpAndSettle();
+      await _tapSegment(tester, 'Tiết kiệm');
+      await _tapSegment(tester, 'Rút về số dư');
+      await _selectDropdown(tester, 'Chọn nguồn', 'Gửi ngân hàng · 500.000 đ');
+      await _typeDigits(tester, '1000');
+      await _tapSegment(tester, 'Chồng');
+      // Chồng không có tiền tiết kiệm: nguồn cũ của Vợ bị bỏ, không thể lưu.
+      expect(find.text('Chưa có khoản tiết kiệm nào'), findsOneWidget);
+      expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton).last).onPressed, isNull);
+    });
+
+    testWidgets('SavingsMemberMismatchException → thông báo dễ hiểu, không lộ chi tiết', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen);
+      await _tapSegment(tester, 'Tiết kiệm');
+      await _typeDigits(tester, '1000');
+      fakeRepo.nextAddError = const SavingsMemberMismatchException('savingsTopup');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('phải cùng một người'), findsOneWidget);
+      expect(find.textContaining('savingsTopup'), findsNothing);
     });
 
     testWidgets('8 — MEMBER_TO_MEMBER map đúng', (tester) async {
