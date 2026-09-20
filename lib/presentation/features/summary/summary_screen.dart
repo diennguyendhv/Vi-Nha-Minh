@@ -893,24 +893,55 @@ class _MultiSelectSheetState extends State<_MultiSelectSheet> {
   }
 }
 
-/// Sắp xếp: chọn 1 trong 4 (Ngày mới → cũ / cũ → mới, Số tiền lớn → nhỏ /
-/// nhỏ → lớn). Đơn giản, không nhiều tầng — tránh chọn hai tiêu chí làm rối.
+/// Sắp xếp: 2 dòng — "Ngày" và "Số tiền" — mỗi dòng có nút mũi tên ↑ (tăng dần)
+/// và ↓ (giảm dần). Chỉ 1 lựa chọn đang hoạt động tại 1 thời điểm (chạm mũi tên
+/// nào thì lựa chọn đó thay thế lựa chọn cũ) — không nhiều tầng, tránh rối.
 class _SortSheet extends StatelessWidget {
   const _SortSheet({required this.current, required this.onChanged});
 
   final SortRule current;
   final ValueChanged<SortRule> onChanged;
 
-  static const _options = <(String keyName, String label, SortRule rule)>[
-    ('date_desc', 'Ngày: mới → cũ', SortRule(SortKey.date)),
-    ('date_asc', 'Ngày: cũ → mới', SortRule(SortKey.date, ascending: true)),
-    ('amount_desc', 'Số tiền: lớn → nhỏ', SortRule(SortKey.amount)),
-    (
-      'amount_asc',
-      'Số tiền: nhỏ → lớn',
-      SortRule(SortKey.amount, ascending: true),
-    ),
-  ];
+  Widget _row(BuildContext context, String label, SortKey key) {
+    Widget arrow(bool ascending) {
+      final selected = current.key == key && current.ascending == ascending;
+      final name = '${key == SortKey.date ? 'date' : 'amount'}_'
+          '${ascending ? 'asc' : 'desc'}';
+      return IconButton.filledTonal(
+        key: Key('sort_$name'),
+        isSelected: selected,
+        tooltip: ascending ? 'Tăng dần' : 'Giảm dần',
+        style: IconButton.styleFrom(
+          backgroundColor: selected ? AppColors.accent : AppColors.chipBackground,
+          foregroundColor: selected ? Colors.white : AppColors.textPrimary,
+        ),
+        icon: Icon(
+          ascending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+        ),
+        onPressed: () {
+          onChanged(SortRule(key, ascending: ascending));
+          Navigator.of(context).pop();
+        },
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+          arrow(true),
+          const SizedBox(width: 8),
+          arrow(false),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -926,27 +957,14 @@ class _SortSheet extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
           ),
-          for (final o in _options)
-            ListTile(
-              key: Key('sort_option_${o.$1}'),
-              dense: true,
-              title: Text(o.$2),
-              trailing: current == o.$3
-                  ? const Icon(Icons.check_rounded, color: AppColors.accent)
-                  : null,
-              onTap: () {
-                onChanged(o.$3);
-                Navigator.of(context).pop();
-              },
-            ),
+          _row(context, 'Ngày', SortKey.date),
+          _row(context, 'Số tiền', SortKey.amount),
         ],
       ),
     );
   }
 }
 
-/// "27 giao dịch · 01/09 – 30/09" + Thu/Chi của CHÍNH tập đang xem (không
-/// gộp thành một con số mơ hồ; Chuyển không tính vào Thu/Chi).
 class _ResultHeader extends StatelessWidget {
   const _ResultHeader({super.key, required this.result, required this.selection});
 

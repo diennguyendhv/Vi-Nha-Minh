@@ -427,20 +427,21 @@ void main() {
     }
   });
 
-  testWidgets('Sắp xếp chỉ Ngày / Số tiền: mặc định Ngày ↓; chọn Số tiền lớn → nhỏ rồi nhỏ → lớn; nhãn nút phản ánh; không còn tiêu chí thứ 2', (tester) async {
+  testWidgets('Sắp xếp: 2 dòng Ngày / Số tiền, mỗi dòng có mũi tên ↑ ↓; mặc định Ngày ↓; một lựa chọn duy nhất; nhãn nút phản ánh', (tester) async {
     await _pump(tester, base);
     expect(find.text('Sắp xếp: Ngày ↓'), findsOneWidget);
 
     Future<void> choose(String option) async {
       await _tapKey(tester, 'summary_sort_button');
-      // 4 lựa chọn rõ ràng, không có Người/Danh mục/Trạng thái và không có "Rồi theo".
-      expect(find.byKey(const Key('sort_option_date_desc')), findsOneWidget);
-      expect(find.byKey(const Key('sort_option_date_asc')), findsOneWidget);
-      expect(find.byKey(const Key('sort_option_amount_desc')), findsOneWidget);
-      expect(find.byKey(const Key('sort_option_amount_asc')), findsOneWidget);
+      // Đúng 2 dòng (Ngày, Số tiền) x 2 mũi tên; không có tiêu chí thứ hai, không có Người/Danh mục/Trạng thái.
+      for (final k in ['date_asc', 'date_desc', 'amount_asc', 'amount_desc']) {
+        expect(find.byKey(Key('sort_$k')), findsOneWidget);
+      }
+      expect(find.text('Ngày'), findsWidgets);
+      expect(find.text('Số tiền'), findsOneWidget);
       expect(find.text('Rồi theo'), findsNothing);
       expect(find.text('Danh mục'), findsNothing, reason: 'không còn khóa sắp xếp Danh mục');
-      await tester.tap(find.byKey(Key('sort_option_$option')));
+      await tester.tap(find.byKey(Key('sort_$option')));
       await tester.pumpAndSettle();
     }
 
@@ -682,7 +683,7 @@ void main() {
     await _pickCategories(tester, ['sinh_hoat', 'luong_gv']);
     expect(_header(tester), isNot(contains('1800 giao dịch')));
     await _tapKey(tester, 'summary_sort_button');
-    await tester.tap(find.byKey(const Key('sort_option_amount_desc')));
+    await tester.tap(find.byKey(const Key('sort_amount_desc')));
     await tester.pumpAndSettle();
 
     await tester.drag(_scrollView(), const Offset(0, -1500));
