@@ -74,7 +74,10 @@ def write_md(out, stats, facts, recs, sim):
     w("| Dòng | Ngày | Số tiền | Người | Ghi chú | Khớp dòng | Độ tin cậy | Lý do |\n|---:|---|---:|---|---|---:|---|---|")
     for e in stats["mirrorReport"]:
         w(f"| {e['mirrorRow']} | {e['date'][:19]} | {money(e['amount'])} | {e['member']} | {e['note'] or ''} | {e['matchedRow']} | {e['confidence']} | {e['reason']} |")
-    w("\n12 dòng HIGH/MEDIUM → LEGACY_TRANSFER_MIRROR_SKIPPED; 1 dòng LOW → REVIEW_TRANSFER_MIRROR. Excel KHÔNG dùng hạng mục 'Vợ chồng' ở công thức nào (số dư chỉ dùng 'Chồng đưa vợ'/'Vợ đưa chồng') nên bỏ qua không làm lệch số dư.\n")
+    from collections import Counter as _C
+    cf = _C(e["confidence"] for e in stats["mirrorReport"])
+    w(f"\nTổng {len(stats['mirrorReport'])} dòng 'Vợ chồng' = {cf['HIGH']} HIGH + {cf['MEDIUM']} MEDIUM (khớp bình thường: {cf['HIGH'] + cf['MEDIUM']}) + {cf['LOW']} LOW. Khớp bình thường → LEGACY_TRANSFER_MIRROR_SKIPPED; dòng LOW (hàng 299) do chủ dự án quyết định bỏ qua (V2-2B), giữ chú thích LOW.")
+    w("Excel KHÔNG dùng hạng mục 'Vợ chồng' ở công thức nào (số dư chỉ dùng 'Chồng đưa vợ'/'Vợ đưa chồng') nên bỏ qua không làm lệch số dư.\n")
 
     def lst(cls):
         return [r for r in recs if r["cls"] == cls]

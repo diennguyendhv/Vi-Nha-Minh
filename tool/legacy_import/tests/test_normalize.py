@@ -53,9 +53,10 @@ class ClassificationRules(unittest.TestCase):
         r = run(row(2, "Cho đi", None))[0][2]
         self.assertEqual(r["cls"], "SKIP_NO_AMOUNT")
 
-    def test_zero_amount_needs_review(self):
+    def test_zero_amount_is_skipped_not_imported(self):
         r = run(row(2, "Cho đi", 0))[0][2]
-        self.assertEqual(r["cls"], "REVIEW_ZERO_AMOUNT")
+        self.assertEqual(r["cls"], "SKIP_ZERO_AMOUNT")
+        self.assertIsNone(r["amountMinor"])
 
     def test_marker_rows(self):
         recs = run(row(2, None, None, member=None, note="Tháng 3"), row(3, None, None, note="QL tài khoản"))[0]
@@ -115,13 +116,35 @@ class TransfersAndMirrors(unittest.TestCase):
         self.assertEqual(mirrors[0]["confidence"], "MEDIUM")
         self.assertEqual(recs[3]["cls"], "LEGACY_TRANSFER_MIRROR_SKIPPED")
 
-    def test_mirror_different_day_is_not_guessed(self):
+    def test_low_confidence_mirror_is_skipped_by_owner_decision_but_annotated(self):
         recs, mirrors, _ = run(
             row(2, "Vợ đưa chồng", 400000, member="Vợ", date="2026-02-22T13:00:00.000"),
             row(3, "Vợ chồng", -400000, member="Chồng", date="2026-02-24T22:00:00.000"),
         )
-        self.assertEqual(recs[3]["cls"], "REVIEW_TRANSFER_MIRROR")
+        self.assertEqual(recs[3]["cls"], "LEGACY_TRANSFER_MIRROR_SKIPPED")
+        self.assertEqual(recs[3]["mirrorConfidence"], "LOW")
         self.assertEqual(mirrors[0]["confidence"], "LOW")
+        self.assertIn("chủ dự án", recs[3]["normalizationReason"])
+
+    def test_low_confidence_mirror_can_still_be_sent_to_review(self):
+        rows = [row(2, "Vợ đưa chồng", 400000, member="Vợ", date="2026-02-22T13:00:00.000"),
+                row(3, "Vợ chồng", -400000, member="Chồng", date="2026-02-24T22:00:00.000")]
+        recs = {r["sourceRow"]: r for r in N.normalize(rows, skip_low_confidence_mirrors=False)[0]}
+        self.assertEqual(recs[3]["cls"], "REVIEW_TRANSFER_MIRROR")
+
+    def test_all_13_style_mirrors_are_skipped_none_imported(self):
+        rows = [row(2, "Chồng đưa vợ", 100, date="2026-03-01T10:00:00.000"),
+                row(3, "Vợ chồng", -100, member="Vợ", date="2026-03-01T10:00:01.000")]
+        recs, _, _ = run(*rows)
+        self.assertNotIn("IMPORT", recs[3]["cls"])
+        self.assertEqual(recs[3]["cls"], "LEGACY_TRANSFER_MIRROR_SKIPPED")
+
+    def test_legacy_status_on_system_transfer_and_savings_is_dropped_but_kept_raw(self):
+        recs, _, _ = run(row(2, "Tiết kiệm", 1000, status="Đã gửi"), row(3, "Chồng đưa vợ", 500, status="Đã gửi"))
+        for n in (2, 3):
+            self.assertIsNone(recs[n]["statusProposal"])
+            self.assertEqual(recs[n]["rawStatus"], "Đã gửi")
+            self.assertTrue(any(f.startswith("LEGACY_STATUS_DROPPED") for f in recs[n]["flags"]))
 
     def test_mirror_without_any_directional_row_needs_review(self):
         recs, mirrors, _ = run(row(3, "Vợ chồng", -700000, member="Vợ"))

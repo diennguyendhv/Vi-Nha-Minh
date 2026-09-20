@@ -53,6 +53,16 @@ def _parse_date(s):
         return None
 
 
+def _drop_legacy_status(rec: dict) -> None:
+    """Danh mục hệ thống Chuyển/Tiết kiệm không có Trạng thái: statusId = null.
+
+    Giá trị nguồn (rawStatus) chỉ còn trong provenance/audit, KHÔNG vào Ghi chú.
+    """
+    if rec["statusProposal"]:
+        rec["flags"].append("LEGACY_STATUS_DROPPED:" + rec["statusProposal"])
+        rec["statusProposal"] = None
+
+
 def classify(raw: dict) -> dict:
     """Phân loại 1 dòng nguồn. Trả về bản ghi có provenance + chuẩn hóa."""
     rec = {
@@ -95,7 +105,7 @@ def classify(raw: dict) -> dict:
     if m is None:
         return done("REVIEW_OTHER", f"Thành tiền không phải số nguyên VND hợp lệ: {amt!r}")
     if m == 0:
-        return done("REVIEW_ZERO_AMOUNT", "Thành tiền = 0 (không đưa vào Financial Engine)")
+        return done("SKIP_ZERO_AMOUNT", "Thành tiền = 0 — không nhập (quyết định chủ dự án V2-2B); chỉ giữ trong audit")
     # 3. Ngày
     d = _parse_date(raw.get("date"))
     if d is None:
@@ -127,6 +137,7 @@ def classify(raw: dict) -> dict:
             return done("REVIEW_OTHER", f"{cat} với số tiền ÂM — không rõ ý nghĩa")
         rec.update(transactionType="transfer", transferKind="memberToMember",
                    member=src, counterMember=dst, categoryProposal="Chuyển tiền giữa Vợ/Chồng")
+        _drop_legacy_status(rec)
         if mem is not None and mem != src:
             rec["flags"].append("MEMBER_CONTRADICTS_DIRECTION")
         if mem is None:
@@ -158,6 +169,7 @@ def classify(raw: dict) -> dict:
         return done("IMPORT_OTHER_INFLOW", f"{cat} < 0 → Khoản thu khác (|số tiền|), không phải Doanh thu")
     if cat == SAVINGS_CATEGORY:
         rec.update(transactionType="transfer", categoryProposal="Tiết kiệm")
+        _drop_legacy_status(rec)
         if m > 0:
             rec["transferKind"] = "savingsTopup"
             return done("IMPORT_SAVINGS_TOPUP", "Tiết kiệm > 0: Khả dụng → Tiết kiệm (Chưa phân bổ)")
@@ -166,7 +178,7 @@ def classify(raw: dict) -> dict:
     return done("REVIEW_OTHER", "không khớp quy tắc nào")  # pragma: no cover
 
 
-def match_mirrors(records: list) -> list:
+def match_mirrors(records: list, skip_low_confidence: bool = True) -> list:
     """Khớp từng dòng 'Vợ chồng' (đối ứng) với 1 dòng chuyển có hướng.
 
     Đối ứng của 'Chồng đưa vợ' do Vợ ghi (số ÂM); đối ứng của 'Vợ đưa chồng' do
@@ -219,11 +231,14 @@ def match_mirrors(records: list) -> list:
             conf = "LOW"
         entry.update(matchedRow=row, confidence=conf,
                      reason=f"|Δt|={int(dt)}s; {'cùng ngày' if same_day else 'khác ngày'}; ứng viên còn trống={len(free)}")
-        if conf in ("HIGH", "MEDIUM"):
+        if conf in ("HIGH", "MEDIUM") or (conf == "LOW" and skip_low_confidence):
             used.add(row)
             m["cls"] = "LEGACY_TRANSFER_MIRROR_SKIPPED"
             m["normalizationReason"] = f"đối ứng của dòng {row} ({d['rawCategory']}), độ tin cậy {conf}"
+            if conf == "LOW":
+                m["normalizationReason"] += " — chủ dự án quyết định bỏ qua (V2-2B): " + entry["reason"]
             m["mirrorOf"] = row
+            m["mirrorConfidence"] = conf
         else:
             m["cls"] = "REVIEW_TRANSFER_MIRROR"
             m["normalizationReason"] = f"khớp không chắc chắn với dòng {row} ({conf}): {entry['reason']}"
@@ -253,10 +268,10 @@ def flag_exact_duplicates(records: list) -> list:
     return dups
 
 
-def normalize(raw_rows: list):
+def normalize(raw_rows: list, skip_low_confidence_mirrors: bool = True):
     """Toàn bộ pipeline. Trả về (records, mirror_report, duplicate_groups)."""
     recs = [classify(r) for r in sorted(raw_rows, key=lambda r: r["row"])]
-    mirror_report = match_mirrors(recs)
+    mirror_report = match_mirrors(recs, skip_low_confidence_mirrors)
     dups = flag_exact_duplicates(recs)
     return recs, mirror_report, dups
 
