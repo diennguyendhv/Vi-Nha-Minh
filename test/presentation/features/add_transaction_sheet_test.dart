@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/application/currency/currency_context.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/core/constants/default_funds.dart';
@@ -99,7 +100,7 @@ class _FakeTransactionRepository implements TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) async {}
 
   Future<void> dispose() => _controller.close();

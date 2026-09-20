@@ -1,3 +1,4 @@
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
@@ -47,7 +48,7 @@ class RecordingTransactionRepository implements TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) async {}
 
   @override

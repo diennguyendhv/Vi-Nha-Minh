@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/application/currency/currency_context.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/core/constants/default_funds.dart';
@@ -40,7 +41,7 @@ class RecordedUpdateCall {
     this.note,
     this.memberRefId,
     this.transactionDate,
-    this.statusId,
+    this.status,
   });
 
   final String transactionId;
@@ -49,7 +50,7 @@ class RecordedUpdateCall {
   final String? note;
   final String? memberRefId;
   final DateTime? transactionDate;
-  final String? statusId;
+  final FieldUpdate<String>? status;
 }
 
 class _FakeTransactionRepository implements TransactionRepository {
@@ -86,7 +87,7 @@ class _FakeTransactionRepository implements TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) async {
     updateCalls.add(
       RecordedUpdateCall(
@@ -96,7 +97,7 @@ class _FakeTransactionRepository implements TransactionRepository {
         note: note,
         memberRefId: memberRefId,
         transactionDate: transactionDate,
-        statusId: statusId,
+        status: status,
       ),
     );
     if (pendingGate != null) await pendingGate!.future;
@@ -606,7 +607,7 @@ void main() {
       await _tapSave(tester);
       await tester.pumpAndSettle();
       final call = fakeRepo.updateCalls.single;
-      expect(call.statusId, 'cho_di_da_chuan_bi');
+      expect(call.status, isNull, reason: 'không đụng trạng thái → KHÔNG đổi (null), giữ bước lịch sử');
     });
 
     testWidgets('F30 — mở bộ chọn: bước đang dùng + bước lịch sử của chính giao dịch, không có bước ẩn khác', (
@@ -658,7 +659,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final call = fakeRepo.updateCalls.single;
-      expect(call.statusId, 'cho_di_da_chuan_bi');
+      expect(call.status, const FieldUpdate.set('cho_di_da_chuan_bi'));
       expect(
         call.amountMinor,
         100000,
@@ -836,6 +837,62 @@ void main() {
       }
     });
 
+    testWidgets('B — có trạng thái X, chọn "Không có trạng thái" → lưu XÓA trạng thái (clear), không phải "không đổi"', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      final field = find.byKey(const Key('detail_status_field'));
+      expect(find.descendant(of: field, matching: find.text('ĐG')), findsOneWidget, reason: 'mở Sửa thấy X');
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Không có trạng thái').last);
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.updateCalls.single.status, const FieldUpdate<String>.clear());
+    });
+
+    testWidgets('D — trạng thái null, chọn X → lưu SET X', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      final field = find.byKey(const Key('detail_status_field'));
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ĐG').last);
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.updateCalls.single.status, const FieldUpdate.set('cho_di_da_gui'));
+    });
+
+    testWidgets('E/F — đổi danh mục rồi chọn lại trạng thái: sau khi đổi danh mục ô về "Không có trạng thái", chọn bước mới của danh mục mới được set', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('DH').last);
+      await tester.pumpAndSettle();
+      final field = find.byKey(const Key('detail_status_field'));
+      expect(find.descendant(of: field, matching: find.text('Không có trạng thái')), findsOneWidget);
+
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ĐD').last);
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.updateCalls.single.categoryId, 'dang_hien');
+      expect(fakeRepo.updateCalls.single.status, const FieldUpdate.set('dang_hien_da_dang'));
+    });
+
     testWidgets('E — cùng danh mục: giữ nguyên trạng thái hiện có khi lưu', (tester) async {
       fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
@@ -844,7 +901,7 @@ void main() {
       await _tapSave(tester);
       await tester.pumpAndSettle();
 
-      expect(fakeRepo.updateCalls.single.statusId, 'cho_di_da_gui');
+      expect(fakeRepo.updateCalls.single.status, isNull, reason: 'cùng danh mục, không đụng trạng thái → giữ nguyên');
     });
 
     testWidgets('Giao dịch chưa có trạng thái ở danh mục có trạng thái: hiện "Không có trạng thái" (không tự chọn bước đầu) và lưu vẫn null', (tester) async {
@@ -857,7 +914,7 @@ void main() {
 
       await _tapSave(tester);
       await tester.pumpAndSettle();
-      expect(fakeRepo.updateCalls.single.statusId, isNull);
+      expect(fakeRepo.updateCalls.single.status, isNull, reason: 'trạng thái vốn null, không đổi');
     });
 
     testWidgets('G — đổi sang danh mục khác CÓ trạng thái: về "Không có trạng thái", không tự chọn bước của danh mục mới', (tester) async {
@@ -874,7 +931,7 @@ void main() {
       await _tapSave(tester);
       await tester.pumpAndSettle();
       expect(fakeRepo.updateCalls.single.categoryId, 'dang_hien');
-      expect(fakeRepo.updateCalls.single.statusId, isNull);
+      expect(fakeRepo.updateCalls.single.status, const FieldUpdate<String>.clear());
     });
 
     testWidgets('Đổi danh mục: trạng thái cũ bị xóa ngay và lưu KHÔNG mang trạng thái cũ', (tester) async {
@@ -889,7 +946,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fakeRepo.updateCalls.single.categoryId, 'sinh_hoat');
-      expect(fakeRepo.updateCalls.single.statusId, isNull);
+      expect(fakeRepo.updateCalls.single.status, const FieldUpdate<String>.clear());
     });
   });
 

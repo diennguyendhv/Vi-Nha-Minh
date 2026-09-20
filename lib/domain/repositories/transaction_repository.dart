@@ -1,4 +1,5 @@
 import '../entities/obligation_direction.dart';
+import '../entities/field_update.dart';
 import '../entities/transaction.dart';
 
 /// Mô hình như bảng tính: dòng còn tồn tại thì còn ảnh hưởng. "Xóa giao dịch" =
@@ -82,9 +83,12 @@ abstract class TransactionRepository {
   /// cũ bằng 1 dòng MỚI (id + clientTxId mới) trong cùng 1 DB transaction — xoá
   /// cả họ giao dịch cũ (nếu có) rồi ghi dòng mới; KHÔNG tạo hoàn tác/bản thay
   /// thế, không để lại lịch sử ẩn. [categoryId]/[note]/[transactionDate]/
-  /// [statusId] không ảnh hưởng số dư nên update thẳng tại chỗ.
+  /// [status] không ảnh hưởng số dư nên update thẳng tại chỗ.
   ///
-  /// Đổi danh mục mà không chỉ định trạng thái hợp lệ → trạng thái cũ bị xoá
+  /// [status] phân biệt 3 ý định: `null` = KHÔNG đổi; `FieldUpdate.set(id)` = đặt
+  /// trạng thái; `FieldUpdate.clear()` = xóa về "Không có trạng thái" (null).
+  ///
+  /// Đổi danh mục mà không chỉ định trạng thái hợp lệ (status == null) → trạng thái cũ bị xoá
   /// (Invariant `status.categoryId == transaction.categoryId`).
   ///
   /// Ném [InsufficientBalanceException] nếu pool nguồn không đủ tiền,
@@ -99,7 +103,7 @@ abstract class TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   });
 
   /// Phase 8.7 — tất toán (thu hồi Receivable / trả nợ Payable) 1

@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
@@ -478,7 +479,7 @@ void main() {
 
       final before = computeAllPoolBalances(await repo.watchTransactions().first);
 
-      await repo.updateTransaction(tx.id, statusId: 'st1');
+      await repo.updateTransaction(tx.id, status: const FieldUpdate.set('st1'));
 
       final after = computeAllPoolBalances(await repo.watchTransactions().first);
 

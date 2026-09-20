@@ -1,3 +1,4 @@
+import '../../domain/entities/field_update.dart';
 import '../../domain/repositories/transaction_repository.dart';
 
 /// Wrapper mỏng quanh [TransactionRepository.updateTransaction] — Phase 4
@@ -20,7 +21,7 @@ class UpdateTransactionUseCase {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) {
     return _repository.updateTransaction(
       transactionId,
@@ -29,7 +30,7 @@ class UpdateTransactionUseCase {
       note: note,
       memberRefId: memberRefId,
       transactionDate: transactionDate,
-      statusId: statusId,
+      status: status,
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/repositories/local_category_repository.dart';
@@ -523,7 +524,7 @@ void main() {
       await repo.addTransaction(income('i1', vo, 1000000));
       await repo.addTransaction(expense('e1', vo, 1000));
       await expectLater(
-        repo.updateTransaction('e1', statusId: 'cho_di_da_gui'),
+        repo.updateTransaction('e1', status: const FieldUpdate.set('cho_di_da_gui')),
         throwsA(isA<InvalidStatusForCategoryException>()),
       );
     });

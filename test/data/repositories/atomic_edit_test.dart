@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/repositories/local_category_repository.dart';
@@ -131,7 +132,7 @@ void main() {
       await repo.addTransaction(income('i1', 1000000));
       await repo.addTransaction(expense('e1', 10000, category: 'cho_di', statusId: 'cho_di_da_gui'));
 
-      await repo.updateTransaction('e1', categoryId: 'zz_edit', statusId: 'zz_todo', amountMinor: 20000);
+      await repo.updateTransaction('e1', categoryId: 'zz_edit', status: const FieldUpdate.set('zz_todo'), amountMinor: 20000);
 
       final list = await all();
       final moved = list.firstWhere((t) => t.type == TransactionType.expense);
@@ -147,7 +148,7 @@ void main() {
       await repo.addTransaction(expense('e1', 10000));
 
       await expectLater(
-        repo.updateTransaction('e1', categoryId: 'zz_edit', statusId: 'cho_di_da_gui', amountMinor: 20000),
+        repo.updateTransaction('e1', categoryId: 'zz_edit', status: const FieldUpdate.set('cho_di_da_gui'), amountMinor: 20000),
         throwsA(isA<InvalidStatusForCategoryException>()),
       );
 

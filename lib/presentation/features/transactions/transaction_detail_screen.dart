@@ -7,6 +7,7 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/pool_kind.dart';
+import '../../../domain/entities/field_update.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
@@ -65,7 +66,7 @@ class _TransactionDetailScreenState
 
   /// Giá trị đang chọn của ô Trạng thái: bước hiện tại nếu còn hợp lệ, ngược lại
   /// `null` = "Không có trạng thái". KHÔNG tự chọn bước đầu tiên (trạng thái luôn
-  /// tùy chọn, và ô hiển thị phải khớp đúng giá trị sẽ được lưu).
+  /// tùy chọn; ô hiển thị khớp đúng giá trị sẽ được lưu).
   String? _statusValue(Category category) {
     final choices = _statusChoices(category);
     return choices.any((s) => s.id == _statusId) ? _statusId : null;
@@ -147,6 +148,14 @@ class _TransactionDetailScreenState
   /// "financial vs non-financial" ở đây, tránh lặp lại logic đã có sẵn ở
   /// Repository (mục 4: "Do not duplicate logic... if Repository already
   /// owns that distinction").
+  /// Ý định của người dùng với trạng thái: không đổi → `null`; đổi sang bước khác
+  /// → set; về "Không có trạng thái" → clear (KHÔNG dùng `null` cho cả hai).
+  FieldUpdate<String>? _statusUpdateFor(Transaction current) {
+    if (_statusId == current.statusId) return null;
+    final id = _statusId;
+    return id == null ? const FieldUpdate.clear() : FieldUpdate.set(id);
+  }
+
   Future<void> _save(Transaction current) async {
     if (!_canMutateGeneric(current)) return;
     if (_submitting) return; // chặn double-tap.
@@ -162,7 +171,7 @@ class _TransactionDetailScreenState
         note: _noteController.text.trim(),
         memberRefId: _member?.name,
         transactionDate: _transactionDate,
-        statusId: _statusId,
+        status: _statusUpdateFor(current),
       );
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
@@ -491,7 +500,7 @@ class _TransactionDetailScreenState
               ),
             ),
             const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
+            DropdownButtonFormField<String?>(
               key: const Key('detail_status_field'),
               value: _statusValue(selectedCategory),
               isExpanded: true,
@@ -499,22 +508,20 @@ class _TransactionDetailScreenState
                 isDense: true,
                 border: OutlineInputBorder(),
               ),
-              // Chưa có trạng thái → hiện "Không có trạng thái" (KHÔNG tự chọn bước
-              // đầu). Đã có trạng thái thì chỉ đổi sang bước khác (Sửa không xóa
-              // trạng thái về trống — ngữ nghĩa Sửa giữ nguyên).
-              hint: const Text('Không có trạng thái'),
               items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Không có trạng thái'),
+                ),
                 for (final s in _statusChoices(selectedCategory))
-                  DropdownMenuItem<String>(
+                  DropdownMenuItem<String?>(
                     value: s.id,
                     child: Text(
                       s.isActive ? s.name : '${s.name} (ngừng sử dụng)',
                     ),
                   ),
               ],
-              onChanged: (id) {
-                if (id != null) setState(() => _statusId = id);
-              },
+              onChanged: (id) => setState(() => _statusId = id),
             ),
             if (transaction.statusUpdatedAt != null)
               Padding(

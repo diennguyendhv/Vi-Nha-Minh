@@ -4,6 +4,7 @@ import 'package:drift/native.dart' show SqliteException;
 import '../../core/utils/id_generator.dart';
 import '../../domain/engine/financial_engine.dart';
 import '../../domain/engine/obligation_settlement.dart';
+import '../../domain/entities/field_update.dart';
 import '../../domain/entities/obligation_direction.dart';
 import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/savings_asset_type.dart' show SystemSavingsAssets;
@@ -501,8 +502,11 @@ class LocalTransactionRepository implements TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) async {
+    // null = không đổi; set(id) = đặt; clear() = về null.
+    final statusId = status?.value;
+    final explicitClear = status?.isClear ?? false;
     try {
       await _db.transaction(() async {
         final existing = await _allTransactions();
@@ -521,10 +525,12 @@ class LocalTransactionRepository implements TransactionRepository {
         // (hoặc lưu lại 1 giao dịch cũ đã lệch) mà không chỉ định trạng thái
         // hợp lệ → XOÁ trạng thái cũ (không để nó "mắc kẹt" ở danh mục khác).
         final effectiveCategoryId = categoryId ?? original.categoryId;
-        var clearStatus = false;
+        // Xóa trạng thái vốn đã trống = không làm gì (không đụng statusUpdatedAt).
+        var clearStatus = explicitClear && original.statusId != null;
         if (statusId != null) {
           await _assertStatusBelongs(statusId, effectiveCategoryId);
-        } else if (original.statusId != null &&
+        } else if (!explicitClear &&
+            original.statusId != null &&
             !await _statusBelongs(original.statusId!, effectiveCategoryId)) {
           clearStatus = true;
         }

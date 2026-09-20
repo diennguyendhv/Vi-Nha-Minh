@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:vi_nha_minh/domain/entities/field_update.dart';
 import 'package:vi_nha_minh/core/utils/id_generator.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/engine/obligation_settlement.dart';
@@ -131,7 +132,7 @@ class FakeLoanTransactionRepository implements TransactionRepository {
     String? note,
     String? memberRefId,
     DateTime? transactionDate,
-    String? statusId,
+    FieldUpdate<String>? status,
   }) => throw UnimplementedError('not exercised by loans_screen_test.dart');
 
   @override
