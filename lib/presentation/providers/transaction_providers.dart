@@ -4,6 +4,7 @@ import '../../application/commands/create_transaction_command_factory.dart';
 import '../../application/use_cases/add_transaction_use_case.dart';
 import '../../application/use_cases/change_transaction_status_use_case.dart';
 import '../../application/use_cases/get_transaction_by_id_use_case.dart';
+import '../../application/use_cases/delete_transaction_use_case.dart';
 import '../../application/use_cases/reverse_transaction_use_case.dart';
 import '../../application/use_cases/update_transaction_use_case.dart';
 import '../../application/use_cases/watch_transactions_use_case.dart';
@@ -55,6 +56,13 @@ final reverseTransactionUseCaseProvider = Provider<ReverseTransactionUseCase>((
 ) {
   final repository = ref.watch(transactionRepositoryProvider);
   return ReverseTransactionUseCase(repository);
+});
+
+final deleteTransactionUseCaseProvider = Provider<DeleteTransactionUseCase>((
+  ref,
+) {
+  final repository = ref.watch(transactionRepositoryProvider);
+  return DeleteTransactionUseCase(repository);
 });
 
 final changeTransactionStatusUseCaseProvider =

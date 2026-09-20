@@ -111,6 +111,12 @@ class FakeLoanTransactionRepository implements TransactionRepository {
       _byClientTxId(clientTxId);
 
   @override
+  Future<int> purgeDeletedHistory(String categoryId) async => 0;
+
+  @override
+  Future<void> deleteTransaction(String transactionId) async {}
+
+  @override
   Future<void> reverseTransaction(String transactionId) =>
       throw UnimplementedError('not exercised by loans_screen_test.dart');
 

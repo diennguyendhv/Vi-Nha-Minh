@@ -12,6 +12,7 @@ import '../../domain/entities/transaction_type.dart';
 import '../../domain/entities/transfer_kind.dart';
 import '../../domain/errors/domain_exceptions.dart';
 import '../../domain/repositories/transaction_repository.dart';
+import '../../domain/usecases/compute_deletable_master_data.dart' show deletedHistoryIdsForCategory;
 import '../local/app_database.dart';
 
 /// Lưu giao dịch bằng SQLite trên máy (Giai đoạn A — local-first). Được
@@ -269,6 +270,12 @@ class LocalTransactionRepository implements TransactionRepository {
         }
 
         await _assertSavingsDestinationActive(transaction);
+        if (transaction.statusId != null) {
+          await _assertStatusBelongs(
+            transaction.statusId!,
+            transaction.categoryId,
+          );
+        }
 
         final balances = computeAllPoolBalances(existing);
         _assertWontGoNegative(transaction, balances);
@@ -350,6 +357,62 @@ class LocalTransactionRepository implements TransactionRepository {
     }
   }
 
+  @override
+  Future<void> deleteTransaction(String transactionId) async {
+    await _db.transaction(() async {
+      final all = await _allTransactions();
+      if (!all.any((t) => t.id == transactionId)) {
+        throw TransactionNotFoundException(transactionId);
+      }
+      final family = transactionFamilyIds(transactionId, all);
+      final blocked = deleteBlockReason(family, all);
+      if (blocked != null) throw TransactionDeleteBlockedException(blocked);
+      final overdrawn = poolOverdrawnByRemoval(all, family);
+      if (overdrawn != null) {
+        throw DeleteWouldOverdrawException(overdrawn.$1, overdrawn.$2);
+      }
+      await (_db.delete(
+        _db.transactionRows,
+      )..where((r) => r.id.isIn(family))).go();
+    });
+  }
+
+  @override
+  Future<int> purgeDeletedHistory(String categoryId) async {
+    return _db.transaction(() async {
+      final all = await _allTransactions();
+      final ids = deletedHistoryIdsForCategory(categoryId, all);
+      if (ids.isEmpty) return 0;
+      final blocked = deleteBlockReason(ids, all);
+      if (blocked != null) throw TransactionDeleteBlockedException(blocked);
+      final overdrawn = poolOverdrawnByRemoval(all, ids);
+      if (overdrawn != null) {
+        throw DeleteWouldOverdrawException(overdrawn.$1, overdrawn.$2);
+      }
+      await (_db.delete(
+        _db.transactionRows,
+      )..where((r) => r.id.isIn(ids))).go();
+      return ids.length;
+    });
+  }
+
+  /// Trạng thái [statusId] có thuộc danh mục [categoryId] không (Invariant:
+  /// `status.categoryId == transaction.categoryId`).
+  Future<bool> _statusBelongs(String statusId, String categoryId) async {
+    final row = await (_db.select(
+      _db.statusRows,
+    )..where((r) => r.id.equals(statusId))).getSingleOrNull();
+    // Trạng thái không tồn tại: để khoá ngoại báo lỗi tham chiếu như trước,
+    // không tự coi là "sai danh mục".
+    return row == null || row.categoryId == categoryId;
+  }
+
+  Future<void> _assertStatusBelongs(String statusId, String categoryId) async {
+    if (!await _statusBelongs(statusId, categoryId)) {
+      throw InvalidStatusForCategoryException(statusId, categoryId);
+    }
+  }
+
   /// Với INCOME, "người tiêu" = `destinationRefId`; với EXPENSE nguồn ví
   /// (`sourceKind == memberAvailable`), = `sourceRefId`. TRANSFER hoặc
   /// EXPENSE nguồn Quỹ không có khái niệm "người tiêu" đơn — trả về
@@ -392,6 +455,18 @@ class LocalTransactionRepository implements TransactionRepository {
           throw TransactionNotFoundException(transactionId);
         }
 
+        // Invariant status.categoryId == transaction.categoryId. Đổi danh mục
+        // (hoặc lưu lại 1 giao dịch cũ đã lệch) mà không chỉ định trạng thái
+        // hợp lệ → XOÁ trạng thái cũ (không để nó "mắc kẹt" ở danh mục khác).
+        final effectiveCategoryId = categoryId ?? original.categoryId;
+        var clearStatus = false;
+        if (statusId != null) {
+          await _assertStatusBelongs(statusId, effectiveCategoryId);
+        } else if (original.statusId != null &&
+            !await _statusBelongs(original.statusId!, effectiveCategoryId)) {
+          clearStatus = true;
+        }
+
         final amountChanged =
             amountMinor != null && amountMinor != original.amountMinor;
         String? newSourceRefId;
@@ -426,6 +501,7 @@ class LocalTransactionRepository implements TransactionRepository {
             newDestinationRefId: newDestinationRefId,
             newTransactionDate: transactionDate,
             newStatusId: statusId,
+            clearStatus: clearStatus,
             reversalId: IdGenerator.generate(),
             replacementId: IdGenerator.generate(),
             clientTxId: IdGenerator.generate(),
@@ -469,7 +545,8 @@ class LocalTransactionRepository implements TransactionRepository {
         if (categoryId == null &&
             note == null &&
             transactionDate == null &&
-            statusId == null) {
+            statusId == null &&
+            !clearStatus) {
           return;
         }
         await (_db.update(
@@ -483,8 +560,10 @@ class LocalTransactionRepository implements TransactionRepository {
             transactionDate: transactionDate != null
                 ? Value(transactionDate)
                 : const Value.absent(),
-            statusId: statusId != null ? Value(statusId) : const Value.absent(),
-            statusUpdatedAt: statusId != null
+            statusId: statusId != null
+                ? Value(statusId)
+                : (clearStatus ? const Value(null) : const Value.absent()),
+            statusUpdatedAt: (statusId != null || clearStatus)
                 ? Value(DateTime.now())
                 : const Value.absent(),
           ),

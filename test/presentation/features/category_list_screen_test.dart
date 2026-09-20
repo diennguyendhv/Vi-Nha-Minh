@@ -4,10 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
+import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
+import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/repositories/category_repository.dart';
+import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/presentation/features/category/category_list_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 Category _custom(
   String id,
@@ -26,6 +30,22 @@ Category _custom(
   isDefault: false,
   isActive: active,
 );
+
+class _PurgeTxRepo implements TransactionRepository {
+  _PurgeTxRepo(this.ledger);
+  final List<Transaction> ledger;
+  final purged = <String>[];
+  @override
+  Stream<List<Transaction>> watchTransactions() => Stream.value(ledger);
+  @override
+  Future<int> purgeDeletedHistory(String categoryId) async {
+    purged.add(categoryId);
+    return 2;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+}
 
 class _RecordingCategoryRepository implements CategoryRepository {
   _RecordingCategoryRepository(this.all, this.deletable);
@@ -156,9 +176,27 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final repo = _RecordingCategoryRepository(stopped, {'chua_dung'});
+      // 'da_dung' có giao dịch ĐANG TỒN TẠI; 'chua_dung' thì không.
+      final ledger = [
+        Transaction(
+          id: 'tx-da-dung',
+          type: TransactionType.expense,
+          categoryId: 'da_dung',
+          sourceKind: PoolKind.memberAvailable,
+          sourceRefId: 'vo',
+          destinationKind: PoolKind.external,
+          amountMinor: 1000,
+          transactionDate: DateTime(2026, 9, 1),
+          createdAt: DateTime(2026, 9, 1),
+          clientTxId: 'c-da-dung',
+        ),
+      ];
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [categoryRepositoryProvider.overrideWithValue(repo)],
+          overrides: [
+            categoryRepositoryProvider.overrideWithValue(repo),
+            transactionsStreamProvider.overrideWith((ref) => Stream.value(ledger)),
+          ],
           child: const MaterialApp(home: CategoryListScreen()),
         ),
       );
@@ -219,6 +257,63 @@ void main() {
         expect(find.byKey(Key('stopped_category_$id')), findsNothing, reason: id);
       }
       expect(find.byKey(const Key('stopped_category_sinh_hoat')), findsOneWidget);
+    });
+
+    testWidgets('Danh mục ngừng chỉ bị giữ bởi lịch sử ẩn đã xóa: có nút "Dọn lịch sử đã xóa" (xác nhận, Huỷ không làm gì); danh mục bị giữ bởi giao dịch sống thì KHÔNG có', (tester) async {
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      Transaction row(String id, String cat, {String? reversalOf, String? reversedBy}) => Transaction(
+        id: id,
+        type: TransactionType.expense,
+        categoryId: cat,
+        sourceKind: PoolKind.memberAvailable,
+        sourceRefId: 'vo',
+        destinationKind: PoolKind.external,
+        amountMinor: 1000,
+        reversalOfTxId: reversalOf,
+        reversedByTxId: reversedBy,
+        transactionDate: DateTime(2026, 9, 1),
+        createdAt: DateTime(2026, 9, 1),
+        clientTxId: 'k$id',
+      );
+      final ledger = [
+        row('o', 'chua_dung', reversedBy: 'r'),
+        row('r', 'chua_dung', reversalOf: 'o'),
+        row('live', 'da_dung'),
+      ];
+      final txRepo = _PurgeTxRepo(ledger);
+      final catRepo = _RecordingCategoryRepository(stopped, const {});
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            categoryRepositoryProvider.overrideWithValue(catRepo),
+            transactionRepositoryProvider.overrideWithValue(txRepo),
+          ],
+          child: const MaterialApp(home: CategoryListScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('category_stopped_section')));
+      await tester.tap(find.byKey(const Key('category_stopped_section')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('purge_history_chua_dung')), findsOneWidget);
+      expect(find.byKey(const Key('purge_history_da_dung')), findsNothing, reason: 'còn giao dịch sống');
+      expect(find.text('Còn giao dịch đã xóa trước đây (đang ẩn).'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('purge_history_chua_dung')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Huỷ'));
+      await tester.pumpAndSettle();
+      expect(txRepo.purged, isEmpty);
+
+      await tester.tap(find.byKey(const Key('purge_history_chua_dung')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirm_purge_history')));
+      await tester.pumpAndSettle();
+      expect(txRepo.purged, ['chua_dung']);
     });
 
     testWidgets('Sử dụng lại → updateCategory cùng id, isActive=true; KHÔNG tạo mới', (tester) async {

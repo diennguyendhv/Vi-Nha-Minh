@@ -53,6 +53,24 @@ abstract class TransactionRepository {
   /// `reversedByTxId != null` (Invariant 13 — không hoàn tác 2 lần).
   Future<void> reverseTransaction(String transactionId);
 
+  /// XOÁ THẬT giao dịch (hành động người dùng "Xóa giao dịch"): xoá vật lý dòng
+  /// đó cùng toàn bộ "họ giao dịch" của nó (gốc + hoàn tác + bản thay thế…) trong
+  /// 1 DB transaction; số dư/báo cáo tự tính lại từ các giao dịch còn lại. KHÔNG
+  /// tạo giao dịch bù trừ. Ném:
+  /// - [TransactionNotFoundException] nếu không tồn tại;
+  /// - [TransactionDeleteBlockedException] nếu dính Vay & Cho vay / hoàn tiền-thu hồi;
+  /// - [DeleteWouldOverdrawException] nếu xoá làm bất kỳ pool nào âm.
+  /// Không có dòng nào bị đổi nếu ném lỗi. Nhận id của BẤT KỲ dòng nào trong họ
+  /// (kể cả dòng ẩn của cơ chế hoàn tác cũ) — để dọn lịch sử ẩn khi người dùng
+  /// chủ động chọn.
+  Future<void> deleteTransaction(String transactionId);
+
+  /// Dọn LỊCH SỬ ẨN đã "xóa" theo cơ chế cũ (gốc + hoàn tác, không còn dòng đang
+  /// hiệu lực) mà còn dùng [categoryId] — do người dùng chủ động chọn. Xóa cả họ
+  /// trong 1 DB transaction, cùng kiểm tra an toàn như [deleteTransaction].
+  /// Trả về số dòng đã xóa (0 nếu không có gì để dọn).
+  Future<int> purgeDeletedHistory(String categoryId);
+
   /// Sửa 1 giao dịch — bỏ trống field nào thì giữ nguyên giá trị cũ.
   ///
   /// [amountMinor] và [memberRefId] (người tiêu — map vào `sourceRefId`

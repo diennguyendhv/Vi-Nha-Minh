@@ -181,18 +181,18 @@ class _TransactionDetailScreenState
     showAddTransactionSheet(context, recoveryTarget: current);
   }
 
-  /// Reverse — Phase 7 mục 6: gọi thẳng `ReverseTransactionUseCase`, KHÔNG
-  /// tự build bản hoàn tác/tính hiệu ứng ngược nào ở Presentation. Không
-  /// xoá cứng — Repository (frozen) tạo bản reversal mới, đánh dấu
-  /// `reversedByTxId` lên bản gốc.
+  /// "Xóa giao dịch" = XOÁ THẬT (không còn tạo bản hoàn tác): gọi
+  /// `DeleteTransactionUseCase`; Repository xoá vật lý cả họ giao dịch trong 1
+  /// DB transaction và số liệu tự tính lại. Bị chặn nếu làm pool âm hoặc dính
+  /// Vay/Hoàn tiền — hiện thông báo dễ hiểu, không ghi gì.
   Future<void> _delete(Transaction current) async {
     if (!_canMutateGeneric(current)) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Xoá giao dịch này?'),
+        title: const Text('Xóa giao dịch này?'),
         content: const Text(
-          'Giao dịch sẽ được hoàn tác (số dư trở lại đúng trước khi ghi) — vẫn lưu trong lịch sử để đối chiếu.',
+          'Giao dịch sẽ bị xóa khỏi lịch sử và số liệu sẽ được tính lại.',
         ),
         actions: [
           TextButton(
@@ -201,7 +201,7 @@ class _TransactionDetailScreenState
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Xoá'),
+            child: const Text('Xóa'),
           ),
         ],
       ),
@@ -212,7 +212,7 @@ class _TransactionDetailScreenState
 
     setState(() => _submitting = true);
     try {
-      await ref.read(reverseTransactionUseCaseProvider)(current.id);
+      await ref.read(deleteTransactionUseCaseProvider)(current.id);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
       if (mounted) {
@@ -245,6 +245,17 @@ class _TransactionDetailScreenState
     }
     if (error is ReversalWouldOverdrawException) {
       return 'Không thể hoàn tác vì một phần số tiền này đã được chuyển hoặc sử dụng. Hãy xử lý giao dịch phát sinh sau trước.';
+    }
+    if (error is DeleteWouldOverdrawException) {
+      return 'Không thể xóa vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch sau. Hãy xử lý giao dịch phát sinh sau trước.';
+    }
+    if (error is TransactionDeleteBlockedException) {
+      return error.reason == DeleteBlockReason.linkedLoan
+          ? 'Giao dịch này thuộc một khoản vay / cho vay nên chưa thể xóa ở đây.'
+          : 'Giao dịch này liên quan đến một khoản hoàn tiền / thu hồi nên chưa thể xóa ở đây.';
+    }
+    if (error is InvalidStatusForCategoryException) {
+      return 'Trạng thái đã chọn không thuộc danh mục này — vui lòng chọn lại.';
     }
     if (error is PersistenceConstraintException) {
       return 'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.';
@@ -521,7 +532,7 @@ class _TransactionDetailScreenState
               side: const BorderSide(color: AppColors.expenseAmount),
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
-            child: const Text('Xoá giao dịch'),
+            child: const Text('Xóa giao dịch'),
           ),
         ],
       ),

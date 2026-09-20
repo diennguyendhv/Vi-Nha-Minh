@@ -587,7 +587,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   List<Widget> _statusSection() {
     final active = _statuses.where((s) => s.isActive).toList();
     final stopped = _statuses.where((s) => !s.isActive).toList();
-    final deletable = ref.watch(deletableStatusIdsProvider).valueOrNull ?? {};
+    final deletable = ref.watch(deletableStatusIdsProvider);
     // Chỉ bước ĐÃ LƯU là ngừng sử dụng mới có thể xoá hẳn (bước vừa bấm
     // "Ngừng sử dụng" trong bản nháp thì phải Lưu trước).
     bool canDelete(Status s) =>

@@ -137,6 +137,51 @@ class SavingsAssetInactiveException implements Exception {
       'SavingsAssetInactiveException: loại tài sản $assetTypeId đã ngừng, không nhận thêm tiền';
 }
 
+/// Ném ra khi XOÁ THẬT 1 giao dịch sẽ làm 1 pool âm (vd xoá lần nạp tiết kiệm
+/// khi 1 phần đã phân bổ / xoá khoản thu khi tiền đã chi). Không xoá gì, không
+/// cascade — người dùng phải xử lý giao dịch phát sinh sau trước.
+class DeleteWouldOverdrawException implements Exception {
+  const DeleteWouldOverdrawException(this.poolKind, this.refId);
+
+  final PoolKind poolKind;
+  final String? refId;
+
+  @override
+  String toString() =>
+      'DeleteWouldOverdrawException: xoá sẽ làm pool $poolKind($refId) âm';
+}
+
+/// Lý do 1 giao dịch (hoặc họ giao dịch của nó) chưa được xoá thật.
+enum DeleteBlockReason {
+  /// Thuộc / gắn với khoản Vay & Cho vay (obligation, tất toán).
+  linkedLoan,
+
+  /// Là giao dịch hoàn tiền/thu hồi, hoặc có giao dịch hoàn tiền/thu hồi trỏ tới.
+  linkedRecovery,
+}
+
+class TransactionDeleteBlockedException implements Exception {
+  const TransactionDeleteBlockedException(this.reason);
+
+  final DeleteBlockReason reason;
+
+  @override
+  String toString() => 'TransactionDeleteBlockedException: $reason';
+}
+
+/// Ném ra khi 1 giao dịch dùng trạng thái KHÔNG thuộc danh mục của nó
+/// (`status.categoryId != transaction.categoryId`).
+class InvalidStatusForCategoryException implements Exception {
+  const InvalidStatusForCategoryException(this.statusId, this.categoryId);
+
+  final String statusId;
+  final String categoryId;
+
+  @override
+  String toString() =>
+      'InvalidStatusForCategoryException: trạng thái $statusId không thuộc danh mục $categoryId';
+}
+
 /// Ném ra khi `amountMinor` không hợp lệ — Invariant 12
 /// (`docs/financial-core-v2.md` mục 18): luôn phải dương, không chấp nhận 0
 /// hay số âm. Đây là validate THẬT ở tầng Financial Engine (không bị strip

@@ -7,6 +7,8 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/transaction_providers.dart';
+import '../../../domain/usecases/compute_deletable_master_data.dart';
 import 'category_edit_screen.dart';
 
 /// Màn "Danh mục" — 2 tầng: 4 NHÓM CHÍNH cố định (hệ thống định nghĩa, không
@@ -106,7 +108,16 @@ class _StoppedSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (categories.isEmpty) return const SizedBox.shrink();
-    final deletable = ref.watch(deletableCategoryIdsProvider).valueOrNull ?? {};
+    final deletable = ref.watch(deletableCategoryIdsProvider);
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
+    final allCategories =
+        ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
+    // Danh mục đã ngừng mà CHỈ còn bị giữ bởi lịch sử ẩn (đã "xóa" theo cách
+    // cũ): dọn lịch sử đó thì xóa hẳn được.
+    bool heldByHiddenHistory(Category c) =>
+        !deletable.contains(c.id) &&
+        categoryHeldOnlyByDeletedHistory(c, transactions, allCategories);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Theme(
@@ -135,9 +146,11 @@ class _StoppedSection extends ConsumerWidget {
                 ),
                 subtitle: deletable.contains(c.id)
                     ? null
-                    : const Text(
-                        'Đã được dùng trong lịch sử nên không thể xóa.',
-                        style: TextStyle(fontSize: 11.5),
+                    : Text(
+                        heldByHiddenHistory(c)
+                            ? 'Còn giao dịch đã xóa trước đây (đang ẩn).'
+                            : 'Đã được dùng trong lịch sử nên không thể xóa.',
+                        style: const TextStyle(fontSize: 11.5),
                       ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -149,6 +162,12 @@ class _StoppedSection extends ConsumerWidget {
                           .updateCategory(c.copyWith(isActive: true)),
                       child: const Text('Sử dụng lại'),
                     ),
+                    if (heldByHiddenHistory(c))
+                      TextButton(
+                        key: Key('purge_history_${c.id}'),
+                        onPressed: () => _confirmPurge(context, ref, c),
+                        child: const Text('Dọn lịch sử đã xóa'),
+                      ),
                     if (deletable.contains(c.id))
                       TextButton(
                         key: Key('delete_category_${c.id}'),
@@ -165,6 +184,49 @@ class _StoppedSection extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _confirmPurge(
+    BuildContext context,
+    WidgetRef ref,
+    Category category,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dọn lịch sử đã xóa?'),
+        content: Text(
+          'Các giao dịch đã xóa trước đây (đang ẩn) của "${category.name}" sẽ bị xóa hẳn khỏi dữ liệu. Số dư không thay đổi.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('confirm_purge_history'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Dọn'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await ref.read(transactionRepositoryProvider).purgeDeletedHistory(category.id);
+    } on DeleteWouldOverdrawException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chưa thể dọn vì số liệu đang phụ thuộc vào các giao dịch này.')),
+        );
+      }
+    } on TransactionDeleteBlockedException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Chưa thể dọn vì có giao dịch liên quan khoản vay / hoàn tiền.')),
+        );
+      }
+    }
   }
 
   Future<void> _confirmDelete(

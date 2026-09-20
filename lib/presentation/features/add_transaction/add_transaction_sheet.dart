@@ -317,6 +317,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     if (error is InsufficientBalanceException) {
       return 'Số dư không đủ để ghi giao dịch này.';
     }
+    if (error is InvalidStatusForCategoryException) {
+      return 'Trạng thái đã chọn không thuộc danh mục này — vui lòng chọn lại.';
+    }
     if (error is SavingsMemberMismatchException) {
       return 'Giao dịch tiết kiệm phải cùng một người (Vợ hoặc Chồng) — vui lòng chọn lại.';
     }

@@ -79,6 +79,12 @@ class _FakeTransactionRepository implements TransactionRepository {
       null;
 
   @override
+  Future<int> purgeDeletedHistory(String categoryId) async => 0;
+
+  @override
+  Future<void> deleteTransaction(String transactionId) async {}
+
+  @override
   Future<void> reverseTransaction(String transactionId) async {}
 
   @override

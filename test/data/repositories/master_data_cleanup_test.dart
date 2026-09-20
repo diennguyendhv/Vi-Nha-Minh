@@ -167,7 +167,11 @@ void main() {
       await statuses.addStatus(stat('s_used', 'c_owner'));
       // Giao dịch dùng bước này nhưng thuộc danh mục KHÁC: danh mục owner tự nó
       // chưa có giao dịch, chỉ bước con bị dùng.
-      await transactions.addTransaction(spend('t1', 'sinh_hoat', statusId: 's_used'));
+      await transactions.addTransaction(spend('t1', 'sinh_hoat'));
+      // Dữ liệu CŨ bị lệch (giao dịch Sinh hoạt gắn trạng thái của danh mục khác —
+      // trường hợp "Chi Phí Vận Hành" thật). Bất biến mới chặn tạo mới kiểu này,
+      // nên giả lập bằng SQL để kiểm tra luật xoá vẫn coi bước đó là đã dùng.
+      await db.customStatement("UPDATE transaction_rows SET status_id = 's_used' WHERE id = 't1'");
       await categories.softDeleteCategory('c_owner');
 
       expect(await deletableCats(), isNot(contains('c_owner')));

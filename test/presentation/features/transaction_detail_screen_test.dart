@@ -107,6 +107,25 @@ class _FakeTransactionRepository implements TransactionRepository {
     }
   }
 
+  final List<String> deleteCalls = [];
+  Object? nextDeleteError;
+
+  @override
+  Future<int> purgeDeletedHistory(String categoryId) async => 0;
+
+  @override
+  Future<void> deleteTransaction(String transactionId) async {
+    deleteCalls.add(transactionId);
+    if (pendingGate != null) await pendingGate!.future;
+    if (nextDeleteError != null) {
+      final err = nextDeleteError!;
+      nextDeleteError = null;
+      throw err;
+    }
+    _current = _current.where((t) => t.id != transactionId).toList();
+    _controller.add(_current);
+  }
+
   @override
   Future<void> reverseTransaction(String transactionId) async {
     reverseCalls.add(transactionId);
@@ -441,7 +460,7 @@ void main() {
         expect(find.byType(TextField), findsNothing);
         expect(find.byType(EditableText), findsNothing);
         expect(find.text('Lưu thay đổi'), findsNothing);
-        expect(find.text('Xoá giao dịch'), findsNothing);
+        expect(find.text('Xóa giao dịch'), findsNothing);
         expect(find.text('Hoàn tiền / Thu hồi'), findsNothing);
         expect(find.text('Loan history entry'), findsOneWidget);
         expect(find.textContaining('obligationId'), findsNothing);
@@ -453,7 +472,7 @@ void main() {
         expect(detail.obligationId, 'loan-1');
         expect(detail.direction, direction);
         expect(fakeRepo.updateCalls, isEmpty);
-        expect(fakeRepo.reverseCalls, isEmpty);
+        expect(fakeRepo.deleteCalls, isEmpty);
       });
     }
 
@@ -474,7 +493,7 @@ void main() {
           .onPressed!;
       final delete = tester
           .widget<OutlinedButton>(
-            find.widgetWithText(OutlinedButton, 'Xoá giao dịch'),
+            find.widgetWithText(OutlinedButton, 'Xóa giao dịch'),
           )
           .onPressed!;
       final recover = tester
@@ -490,7 +509,7 @@ void main() {
       recover();
       await tester.pumpAndSettle();
       expect(fakeRepo.updateCalls, isEmpty);
-      expect(fakeRepo.reverseCalls, isEmpty);
+      expect(fakeRepo.deleteCalls, isEmpty);
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.byType(BottomSheet), findsNothing);
     });
@@ -500,14 +519,14 @@ void main() {
     ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
-      await tester.tap(find.text('Xoá giao dịch'));
+      await tester.tap(find.text('Xóa giao dịch'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       fakeRepo.seed([loanTransaction('receivable-creation', id: 'tx1')]);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Xoá').last);
+      await tester.tap(find.text('Xóa').last);
       await tester.pumpAndSettle();
-      expect(fakeRepo.reverseCalls, isEmpty);
+      expect(fakeRepo.deleteCalls, isEmpty);
       expect(find.text('Xem khoản vay'), findsOneWidget);
     });
 
@@ -526,7 +545,7 @@ void main() {
       );
       expect(find.byType(TextField), findsNothing);
       expect(find.text('Lưu thay đổi'), findsNothing);
-      expect(find.text('Xoá giao dịch'), findsNothing);
+      expect(find.text('Xóa giao dịch'), findsNothing);
     });
   });
 
@@ -712,19 +731,19 @@ void main() {
     });
   });
 
-  group('Hoàn tác bị chặn vì làm pool âm (Savings 2 tầng)', () {
-    testWidgets('ReversalWouldOverdrawException → thông báo dễ hiểu, giao dịch còn nguyên (không pop), không lộ chi tiết kỹ thuật', (tester) async {
+  group('Xóa bị chặn vì làm pool âm / dính Vay-Hoàn tiền', () {
+    testWidgets('DeleteWouldOverdrawException → thông báo dễ hiểu, giao dịch còn nguyên (không pop), không lộ chi tiết kỹ thuật', (tester) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
-      fakeRepo.nextReverseError = const ReversalWouldOverdrawException(PoolKind.memberSavingsAsset, 'x|vo');
+      fakeRepo.nextDeleteError = const DeleteWouldOverdrawException(PoolKind.memberSavingsAsset, 'x|vo');
 
-      await tester.tap(find.text('Xoá giao dịch'));
+      await tester.tap(find.text('Xóa giao dịch'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Xoá').last);
+      await tester.tap(find.text('Xóa').last);
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Không thể hoàn tác vì một phần số tiền này đã được chuyển hoặc sử dụng'),
+        find.textContaining('Không thể xóa vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch sau'),
         findsOneWidget,
       );
       expect(find.textContaining('Hãy xử lý giao dịch phát sinh sau trước'), findsOneWidget);
@@ -735,19 +754,53 @@ void main() {
     });
   });
 
+  group('Xóa thật — câu chữ và chặn', () {
+    testWidgets('Hộp thoại xác nhận dùng câu chữ "Xóa" (không còn "hoàn tác")', (tester) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      await tester.tap(find.text('Xóa giao dịch'));
+      await tester.pumpAndSettle();
+      expect(find.text('Xóa giao dịch này?'), findsOneWidget);
+      expect(find.text('Giao dịch sẽ bị xóa khỏi lịch sử và số liệu sẽ được tính lại.'), findsOneWidget);
+      expect(find.textContaining('hoàn tác'), findsNothing);
+      expect(find.textContaining('Hoàn tác'), findsNothing);
+      // Huỷ thì không xóa.
+      await tester.tap(find.text('Huỷ'));
+      await tester.pumpAndSettle();
+      expect(fakeRepo.deleteCalls, isEmpty);
+    });
+
+    for (final reason in DeleteBlockReason.values) {
+      testWidgets('Dính ${reason.name} → thông báo dễ hiểu, không xóa', (tester) async {
+        fakeRepo.seed([_expenseTx()]);
+        await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+        fakeRepo.nextDeleteError = TransactionDeleteBlockedException(reason);
+        await tester.tap(find.text('Xóa giao dịch'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Xóa').last);
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining(reason == DeleteBlockReason.linkedLoan ? 'khoản vay / cho vay' : 'hoàn tiền / thu hồi'),
+          findsOneWidget,
+        );
+        expect(find.byType(TransactionDetailScreen), findsOneWidget);
+      });
+    }
+  });
+
   group('Reversal path (Phase 7 mục 23)', () {
     testWidgets(
-      '6/7 — Xoá gọi ReverseTransactionUseCase với đúng id, pop sau thành công',
+      '6/7 — Xóa gọi DeleteTransactionUseCase (xóa thật) với đúng id, pop sau thành công',
       (tester) async {
         fakeRepo.seed([_expenseTx()]);
         await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-        await tester.tap(find.text('Xoá giao dịch'));
+        await tester.tap(find.text('Xóa giao dịch'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Xoá').last); // xác nhận dialog
+        await tester.tap(find.text('Xóa').last); // xác nhận dialog
         await tester.pumpAndSettle();
 
-        expect(fakeRepo.reverseCalls, ['tx1']);
+        expect(fakeRepo.deleteCalls, ['tx1']);
         expect(
           find.byType(TransactionDetailScreen),
           findsNothing,
@@ -763,35 +816,35 @@ void main() {
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
       fakeRepo.pendingGate = Completer<void>();
-      await tester.tap(find.text('Xoá giao dịch'));
+      await tester.tap(find.text('Xóa giao dịch'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Xoá').last);
+      await tester.tap(find.text('Xóa').last);
       await tester.pump(); // build lại với _submitting = true, chưa settle.
 
-      // Nút "Xoá giao dịch" giờ đã bị disable (onPressed: null khi _submitting).
-      await tester.tap(find.text('Xoá giao dịch'), warnIfMissed: false);
+      // Nút "Xóa giao dịch" giờ đã bị disable (onPressed: null khi _submitting).
+      await tester.tap(find.text('Xóa giao dịch'), warnIfMissed: false);
       await tester.pump();
 
-      expect(fakeRepo.reverseCalls, hasLength(1));
+      expect(fakeRepo.deleteCalls, hasLength(1));
 
       fakeRepo.pendingGate!.complete();
       await tester.pumpAndSettle();
     });
 
-    testWidgets('9 — AlreadyReversedException → message an toàn, không crash', (
+    testWidgets('9 — giao dịch không còn tồn tại khi Xóa → message an toàn, không crash', (
       tester,
     ) async {
       fakeRepo.seed([_expenseTx()]);
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
 
-      fakeRepo.nextReverseError = const AlreadyReversedException('tx1', 'rev1');
-      await tester.tap(find.text('Xoá giao dịch'));
+      fakeRepo.nextDeleteError = const TransactionNotFoundException('tx1');
+      await tester.tap(find.text('Xóa giao dịch'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Xoá').last);
+      await tester.tap(find.text('Xóa').last);
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Giao dịch này đã được xử lý rồi, vui lòng tải lại.'),
+        find.text('Giao dịch không còn tồn tại — có thể đã bị xoá ở nơi khác.'),
         findsOneWidget,
       );
       expect(find.textContaining('Exception'), findsNothing);
@@ -912,7 +965,7 @@ void main() {
       await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
       expect(find.widgetWithText(OutlinedButton, 'Hoàn tiền / Thu hồi'), findsNothing);
       expect(find.widgetWithText(ElevatedButton, 'Lưu thay đổi'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, 'Xoá giao dịch'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Xóa giao dịch'), findsOneWidget);
     });
 
     testWidgets('giao dịch cũ đã có recovery vẫn hiện thẻ "Đã thu hồi" (tương thích lịch sử), không lỗi', (tester) async {

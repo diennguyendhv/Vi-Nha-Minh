@@ -256,6 +256,84 @@ void validateRecoveryRelation(Transaction recovery, Transaction target) {
   }
 }
 
+/// "Họ giao dịch" của [id]: mọi dòng nối với nhau qua `reversalOfTxId` /
+/// `correctsTxId` / `reversedByTxId` (gốc → hoàn tác → bản thay thế → …). Tổng
+/// hiệu ứng của cả họ = hiệu ứng của DUY NHẤT dòng đang hiệu lực (các cặp gốc +
+/// hoàn tác triệt tiêu nhau) — nên xoá cả họ bỏ đúng hiệu ứng của giao dịch đó,
+/// không để lại nửa chuỗi. Trả về tập id (luôn gồm [id] nếu tồn tại).
+Set<String> transactionFamilyIds(String id, Iterable<Transaction> all) {
+  final ids = {for (final t in all) t.id};
+  if (!ids.contains(id)) return <String>{};
+  final adjacency = <String, Set<String>>{};
+  void link(String a, String? b) {
+    if (b == null || !ids.contains(b)) return;
+    (adjacency[a] ??= <String>{}).add(b);
+    (adjacency[b] ??= <String>{}).add(a);
+  }
+
+  for (final t in all) {
+    link(t.id, t.reversalOfTxId);
+    link(t.id, t.correctsTxId);
+    link(t.id, t.reversedByTxId);
+  }
+  final family = <String>{id};
+  final queue = [id];
+  while (queue.isNotEmpty) {
+    final cur = queue.removeLast();
+    for (final n in adjacency[cur] ?? const <String>{}) {
+      if (family.add(n)) queue.add(n);
+    }
+  }
+  return family;
+}
+
+/// Lý do KHÔNG được xoá thật [familyIds] (null = không bị chặn): dòng thuộc
+/// Vay & Cho vay (`obligationId`/`settlementGroupId`), hoặc dính hoàn tiền/thu
+/// hồi (`recoveryOfTxId`) — cả chiều đi lẫn chiều trỏ tới. Không cascade vào
+/// lịch sử nâng cao.
+DeleteBlockReason? deleteBlockReason(
+  Set<String> familyIds,
+  Iterable<Transaction> all,
+) {
+  for (final t in all) {
+    final inFamily = familyIds.contains(t.id);
+    if (inFamily) {
+      if (t.obligationId != null || t.settlementGroupId != null) {
+        return DeleteBlockReason.linkedLoan;
+      }
+      if (t.recoveryOfTxId != null) return DeleteBlockReason.linkedRecovery;
+    } else {
+      if (t.recoveryOfTxId != null && familyIds.contains(t.recoveryOfTxId)) {
+        return DeleteBlockReason.linkedRecovery;
+      }
+      if (t.settlementGroupId != null &&
+          familyIds.contains(t.settlementGroupId)) {
+        return DeleteBlockReason.linkedLoan;
+      }
+    }
+  }
+  return null;
+}
+
+/// Pool bị làm ÂM nếu bỏ [familyIds] khỏi sổ (tính lại từ các giao dịch còn
+/// lại) — hoặc null nếu an toàn. Chỉ tính pool mà việc xoá làm GIẢM và đẩy
+/// xuống < 0. KHÔNG sửa dữ liệu, không đổi `applyEffect`.
+PoolRef? poolOverdrawnByRemoval(
+  Iterable<Transaction> all,
+  Set<String> familyIds,
+) {
+  final before = computeAllPoolBalances(all);
+  final after = computeAllPoolBalances(
+    all.where((t) => !familyIds.contains(t.id)),
+  );
+  for (final e in after.entries) {
+    if (e.key.$1 == PoolKind.external) continue;
+    final was = before[e.key] ?? 0;
+    if (e.value < 0 && e.value < was) return e.key;
+  }
+  return null;
+}
+
 /// Tạo bản hoàn tác của [original] — source/destination đảo ngược, cùng
 /// `amountMinor`, `reversalOfTxId = original.id` (mục 21). `applyEffect` của
 /// bản này tự động triệt tiêu đúng hiệu ứng cũ khi cộng dồn vào balance.
@@ -310,6 +388,7 @@ Transaction buildReversal(
   String? newDestinationRefId,
   DateTime? newTransactionDate,
   String? newStatusId,
+  bool clearStatus = false,
   required String reversalId,
   required String replacementId,
   required String clientTxId,
@@ -333,8 +412,10 @@ Transaction buildReversal(
     amountMinor: newAmountMinor,
     currency: original.currency,
     note: newNote ?? original.note,
-    statusId: newStatusId ?? original.statusId,
-    statusUpdatedAt: newStatusId != null ? now : original.statusUpdatedAt,
+    statusId: clearStatus ? null : (newStatusId ?? original.statusId),
+    statusUpdatedAt: clearStatus || newStatusId != null
+        ? now
+        : original.statusUpdatedAt,
     transactionDate: newTransactionDate ?? original.transactionDate,
     createdAt: now,
     correctsTxId: original.id,

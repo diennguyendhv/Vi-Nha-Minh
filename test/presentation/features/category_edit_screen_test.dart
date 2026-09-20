@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
+import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/repositories/category_repository.dart';
@@ -67,8 +68,10 @@ class _FakeStatusRepository implements StatusRepository {
 
 /// Nếu màn này chạm vào ledger (ghi giao dịch) test sẽ ném lỗi ngay.
 class _ReadOnlyTransactionRepository implements TransactionRepository {
+  _ReadOnlyTransactionRepository([this.ledger = const []]);
+  final List<Transaction> ledger;
   @override
-  Stream<List<Transaction>> watchTransactions() => Stream.value(const []);
+  Stream<List<Transaction>> watchTransactions() => Stream.value(ledger);
   @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
 }
@@ -80,6 +83,20 @@ final _threeStepCategories = <Category>[
     c.id == 'cho_di' ? c.copyWith(statuses: c.statuses.take(3).toList()) : c,
 ];
 
+Transaction _txUsingStatus(String statusId) => Transaction(
+  id: 'used-$statusId',
+  type: TransactionType.expense,
+  categoryId: 'cho_di',
+  statusId: statusId,
+  sourceKind: PoolKind.memberAvailable,
+  sourceRefId: 'vo',
+  destinationKind: PoolKind.external,
+  amountMinor: 1000,
+  transactionDate: DateTime(2026, 9, 1),
+  createdAt: DateTime(2026, 9, 1),
+  clientTxId: 'c-used-$statusId',
+);
+
 typedef _Repos = ({_FakeCategoryRepository cats, _FakeStatusRepository statuses});
 
 Future<_Repos> _pump(
@@ -88,7 +105,7 @@ Future<_Repos> _pump(
   List<Category>? categories,
   TransactionType? initialType,
   bool initialSecondGroup = false,
-  Set<String> deletableStatuses = const {},
+  Set<String> usedStatusIds = const {},
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -96,13 +113,18 @@ Future<_Repos> _pump(
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final cats = _FakeCategoryRepository(categories ?? _threeStepCategories);
-  final statuses = _FakeStatusRepository()..deletable = deletableStatuses;
+  final statuses = _FakeStatusRepository();
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         categoryRepositoryProvider.overrideWithValue(cats),
         statusRepositoryProvider.overrideWithValue(statuses),
-        transactionRepositoryProvider.overrideWithValue(_ReadOnlyTransactionRepository()),
+        transactionRepositoryProvider.overrideWithValue(
+          _ReadOnlyTransactionRepository([
+            // Giao dịch ĐANG TỒN TẠI dùng các bước này → không xóa hẳn được.
+            for (final id in usedStatusIds) _txUsingStatus(id),
+          ]),
+        ),
       ],
       child: MaterialApp(
         home: Builder(
@@ -559,11 +581,11 @@ void main() {
     Future<_Repos> pumpChoDi(
       WidgetTester tester, {
       Set<String> stopped = const {},
-      Set<String> deletable = const {},
+      Set<String> used = const {},
     }) => _pump(
       tester,
       categoryId: 'cho_di',
-      deletableStatuses: deletable,
+      usedStatusIds: used,
       categories: [for (final c in DefaultCategories.all) c.id == 'cho_di' ? choDiWith(stopped: stopped) : c],
     );
 
@@ -628,7 +650,7 @@ void main() {
       await pumpChoDi(
         tester,
         stopped: {'cho_di_chua_chuan_bi', 'cho_di_da_gui'},
-        deletable: {'cho_di_da_gui'},
+        used: {'cho_di_chua_chuan_bi'},
       );
 
       expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsOneWidget);
@@ -644,7 +666,6 @@ void main() {
       final repos = await pumpChoDi(
         tester,
         stopped: {'cho_di_da_gui'},
-        deletable: {'cho_di_da_gui'},
       );
 
       await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
@@ -669,7 +690,7 @@ void main() {
     });
 
     testWidgets('Bước vừa bấm "Ngừng sử dụng" trong bản nháp (chưa Lưu) KHÔNG có Xóa hẳn dù id nằm trong danh sách an toàn', (tester) async {
-      await pumpChoDi(tester, deletable: {'cho_di_da_gui'});
+      await pumpChoDi(tester);
 
       await tester.tap(find.byKey(const Key('status_stop_cho_di_da_gui')));
       await tester.pumpAndSettle();
