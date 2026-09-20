@@ -223,6 +223,12 @@ class _StaticFundRepository implements FundRepository {
   Future<void> updateFund(Fund fund) async {}
   @override
   Future<void> softDeleteFund(String fundId) async {}
+
+  @override
+  Future<void> reactivateFund(String fundId) async {}
+
+  @override
+  Future<void> deleteFundPermanently(String fundId) async {}
 }
 
 class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {

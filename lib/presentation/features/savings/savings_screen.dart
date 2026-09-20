@@ -8,6 +8,9 @@ import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_savings_breakdown.dart';
+import '../../../domain/usecases/deletion_check.dart';
+import '../../providers/category_providers.dart';
+import '../../widgets/stopped_item_tile.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
@@ -76,7 +79,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
         ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? [];
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
-    final deletable = ref.watch(deletableSavingsAssetTypeIdsProvider);
+    final categories =
+        ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
 
     final breakdown = computeMemberSavingsBreakdown(
       _member,
@@ -211,45 +215,16 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                 ),
                 children: [
                   for (final a in stopped)
-                    ListTile(
-                      key: Key('stopped_asset_${a.id}'),
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      leading: CircleAvatar(
-                        radius: 9,
-                        backgroundColor: a.color,
-                      ),
-                      title: Text(
-                        a.name,
-                        style: const TextStyle(color: AppColors.textMuted),
-                      ),
-                      subtitle: deletable.contains(a.id)
-                          ? null
-                          : const Text(
-                              'Đã được dùng trong lịch sử nên không thể xóa.',
-                              style: TextStyle(fontSize: 11.5),
-                            ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(
-                            key: Key('reuse_asset_${a.id}'),
-                            onPressed: () => ref
-                                .read(savingsAssetTypeRepositoryProvider)
-                                .reactivateAssetType(a.id),
-                            child: const Text('Sử dụng lại'),
-                          ),
-                          if (deletable.contains(a.id))
-                            TextButton(
-                              key: Key('delete_asset_${a.id}'),
-                              onPressed: () => _once(() => _deleteAsset(a)),
-                              child: const Text(
-                                'Xóa hẳn',
-                                style: TextStyle(color: AppColors.expenseAmount),
-                              ),
-                            ),
-                        ],
-                      ),
+                    StoppedItemTile(
+                      idKey: 'asset_${a.id}',
+                      name: a.name,
+                      color: a.color,
+                      noun: 'loại tiết kiệm này',
+                      check: checkSavingsAssetDeletion(a.id, categories, transactions),
+                      onReuse: () => ref
+                          .read(savingsAssetTypeRepositoryProvider)
+                          .reactivateAssetType(a.id),
+                      onDelete: () => _once(() => _deleteAsset(a)),
                     ),
                 ],
               ),
@@ -267,12 +242,19 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
           .softDeleteAssetType(asset.id);
     } on SavingsAssetTypeNotEmptyException {
       if (!mounted) return;
+      final remaining = checkSavingsAssetDeletion(
+        asset.id,
+        ref.read(categoriesStreamProvider).valueOrNull ?? const [],
+        ref.read(transactionsStreamProvider).valueOrNull ?? const [],
+      ).remainingBalance;
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Chưa thể ngừng sử dụng loại này'),
-          content: const Text(
-            'Vẫn còn tiền trong loại này — rút hoặc phân bổ hết trước.',
+          content: Text(
+            remaining == null
+                ? 'Vẫn còn tiền trong loại này — rút hoặc chuyển đi trước.'
+                : 'Loại tiết kiệm này vẫn còn ${Formatters.amount(remaining)} — hãy rút về số dư hoặc chuyển sang loại khác trước.',
           ),
           actions: [
             TextButton(

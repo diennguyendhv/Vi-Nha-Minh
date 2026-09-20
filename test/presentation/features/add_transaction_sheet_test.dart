@@ -8,6 +8,7 @@ import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
+import 'package:vi_nha_minh/presentation/features/category/category_edit_screen.dart';
 import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
@@ -166,6 +167,12 @@ class _StaticFundRepository implements FundRepository {
   Future<void> updateFund(Fund fund) async {}
   @override
   Future<void> softDeleteFund(String fundId) async {}
+
+  @override
+  Future<void> reactivateFund(String fundId) async {}
+
+  @override
+  Future<void> deleteFundPermanently(String fundId) async {}
 }
 
 class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
@@ -368,6 +375,25 @@ void main() {
       for (final chip in ['Chợ', 'Xăng xe', 'Cà phê', 'Hoá đơn']) {
         expect(find.text(chip), findsNothing, reason: 'chip "$chip" đã bỏ');
       }
+    });
+
+    testWidgets('Nhóm chưa có danh mục con: "Chưa có danh mục" + [+ Thêm danh mục] mở tạo danh mục đúng nhóm; KHÔNG seed danh mục giả', (tester) async {
+      // Người dùng mới: chỉ có danh mục HỆ THỐNG (Chuyển…), chưa có danh mục Thu/Chi nào.
+      final onlySystem = [for (final c in DefaultCategories.freshSystem) c];
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chi, categories: onlySystem);
+      expect(find.byKey(const Key('add_no_category')), findsOneWidget);
+      expect(find.text('Chưa có danh mục'), findsOneWidget);
+      expect(find.text('Chọn danh mục'), findsNothing, reason: 'không có bộ chọn rỗng');
+
+      // Nhóm "Chi phí kinh doanh" cũng rỗng → mở màn tạo danh mục với nhóm đó.
+      await _tapSegment(tester, 'Chi phí kinh doanh');
+      expect(find.byKey(const Key('add_no_category')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('add_no_category_create')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CategoryEditScreen), findsOneWidget);
+      final screen = tester.widget<CategoryEditScreen>(find.byType(CategoryEditScreen));
+      expect(screen.initialType, TransactionType.expense);
+      expect(screen.initialSecondGroup, isTrue);
     });
 
     testWidgets('Không nhập note: lưu bình thường với note rỗng (không bắt buộc)', (tester) async {

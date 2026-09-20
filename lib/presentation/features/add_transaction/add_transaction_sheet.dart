@@ -21,6 +21,7 @@ import '../../widgets/amount_input_formatter.dart';
 import '../../widgets/sheet_error_banner.dart';
 import '../../widgets/tap_guard.dart';
 import '../../providers/category_providers.dart';
+import '../category/category_edit_screen.dart';
 import '../../providers/fund_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
@@ -223,6 +224,19 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       if (c.id == id) return c;
     }
     return null;
+  }
+
+  /// Nhóm chưa có danh mục con → mở tạo danh mục ngay trong nhóm đó (Thu/Chi ×
+  /// nhóm chính). Không seed danh mục giả để né trạng thái rỗng.
+  void _openAddCategory(TransactionType type, {required bool secondGroup}) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CategoryEditScreen(
+          initialType: type,
+          initialSecondGroup: secondGroup,
+        ),
+      ),
+    );
   }
 
   void _pickCategory(Category category) {
@@ -805,6 +819,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             categories: incomeCategories,
             selectedId: _categoryId,
             onTap: _pickCategory,
+            onAddCategory: () => _openAddCategory(
+              TransactionType.income,
+              secondGroup: _otherInflow,
+            ),
           ),
           if (category != null && category.hasStatus) ...[
             const SizedBox(height: 16),
@@ -848,6 +866,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             categories: expenseCategories,
             selectedId: _categoryId,
             onTap: _pickCategory,
+            onAddCategory: () => _openAddCategory(
+              TransactionType.expense,
+              secondGroup: _businessExpense,
+            ),
           ),
           if (category != null && category.hasStatus) ...[
             const SizedBox(height: 16),
@@ -1277,18 +1299,35 @@ class _CategoryChipGrid extends StatelessWidget {
     required this.categories,
     required this.selectedId,
     required this.onTap,
+    this.onAddCategory,
   });
 
   final List<Category> categories;
   final String? selectedId;
   final ValueChanged<Category> onTap;
 
+  /// Mở tạo danh mục ngay trong nhóm đang chọn khi nhóm chưa có danh mục con.
+  final VoidCallback? onAddCategory;
+
   @override
   Widget build(BuildContext context) {
     if (categories.isEmpty) {
-      return const Text(
-        'Chưa có danh mục nào — tạo ở tab Danh mục trước.',
-        style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+      return Row(
+        key: const Key('add_no_category'),
+        children: [
+          const Expanded(
+            child: Text(
+              'Chưa có danh mục',
+              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+          ),
+          if (onAddCategory != null)
+            OutlinedButton(
+              key: const Key('add_no_category_create'),
+              onPressed: onAddCategory,
+              child: const Text('+ Thêm danh mục'),
+            ),
+        ],
       );
     }
     final validSelectedId = categories.any((c) => c.id == selectedId)

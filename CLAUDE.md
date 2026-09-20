@@ -126,3 +126,9 @@ Hành động người dùng "Xóa giao dịch" xóa VẬT LÝ dòng + cả họ
 - Trạng thái trùng tên ở 2 danh mục vẫn là 2 id — bộ chọn hiển thị "ĐD · Cho đi". Danh mục/Trạng thái đã ngừng chỉ hiện trong bộ chọn khi còn giao dịch dùng.
 - Không có cờ "hiển thị thống kê": user quyết định bằng bộ lọc. Nhóm chính (4 nhóm) chỉ còn dùng để NHÓM hiển thị trong bộ chọn danh mục, không phải bộ lọc bắt buộc.
 
+## 18. Người dùng mới tối giản + vòng đời thống nhất (Category / Status / Quỹ / Loại tiết kiệm)
+- **Seed người dùng mới** (`SeedProfile.fresh`, mặc định của `AppDatabase()` thật): chỉ danh mục HỆ THỐNG (Chuyển tiền, Nạp quỹ, Tiết kiệm + 5 danh mục tính năng nâng cao ẩn — cần cho engine), **0 danh mục con Thu/Chi, 0 trạng thái**, 1 Quỹ ("Quỹ tiền ăn"), 1 loại tiết kiệm ("Gửi ngân hàng"; "Chưa phân bổ" là hạ tầng ảo, không có row). 4 nhóm Thu/Chi là ngữ nghĩa hệ thống; danh mục con/trạng thái/quỹ/loại tiết kiệm do gia đình tự tạo. `SeedProfile.demo` (mặc định của `forTesting`) = bộ đầy đủ của hộ chủ dự án, chỉ cho test/golden.
+- Sheet Thêm giao dịch: nhóm chưa có danh mục con → "Chưa có danh mục" + [+ Thêm danh mục] (mở `CategoryEditScreen` đúng nhóm). KHÔNG seed danh mục giả để né trạng thái rỗng.
+- **Một mô hình xóa cho mọi dữ liệu do gia đình tạo**: `DeletionCheckResult` (`deletion_check.dart`) với blocker `transaction` (mở được), `balance` (còn X đ), `hiddenHistory`, `systemProtected`. `checkCategoryDeletion/checkStatusDeletion/checkFundDeletion/checkSavingsAssetDeletion`. Sạch dấu vết → "Xóa hẳn"; không thì nói ĐÚNG lý do (`deletionReasonText`) + [Xem giao dịch] → [Mở giao dịch]; quay lại là cập nhật ngay (suy ra từ dữ liệu hiện tại). UI dùng chung `StoppedItemTile`.
+- **Chỉ "Chưa phân bổ" (`savings_unallocated`) là hạ tầng** (không đổi tên/ngừng/xóa). Quỹ — kể cả Quỹ tiền ăn — xóa hẳn được khi 0 số dư + 0 giao dịch. Trang chủ thiếu Quỹ tiền ăn → thẻ "Chưa có Quỹ tiền ăn" + [Tạo quỹ] (không crash, không tự tạo lại).
+

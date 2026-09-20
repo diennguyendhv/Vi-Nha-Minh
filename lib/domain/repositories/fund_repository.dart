@@ -13,4 +13,12 @@ abstract class FundRepository {
   /// Ném [FundNotEmptyException] nếu `balance != 0` — phải rút hết quỹ
   /// trước bằng 1 giao dịch `TRANSFER(FUND_WITHDRAW)`.
   Future<void> softDeleteFund(String fundId);
+
+  /// Dùng lại quỹ đã ngừng — giữ NGUYÊN id.
+  Future<void> reactivateFund(String fundId);
+
+  /// XÓA HẲN quỹ (chỉ khi đã ngừng và không dòng nào — kể cả lịch sử ẩn — còn
+  /// chạm quỹ; kiểm tra lại trong 1 DB transaction). Ném [FundNotDeletableException]
+  /// nếu không đủ điều kiện. Không quỹ nào là "hệ thống".
+  Future<void> deleteFundPermanently(String fundId);
 }

@@ -1,7 +1,11 @@
 import '../../core/constants/advanced_system_categories.dart';
 import '../entities/category.dart';
+import '../entities/family_member.dart';
+import '../entities/pool_kind.dart';
+import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
+import 'compute_pool_balance.dart';
 
 /// Vì sao 1 danh mục / trạng thái chưa xóa hẳn được.
 enum DeletionBlockerKind {
@@ -12,8 +16,13 @@ enum DeletionBlockerKind {
   /// "Dọn lịch sử đã xóa".
   hiddenHistory,
 
-  /// Danh mục hệ thống (Chuyển / tính năng nâng cao) — không bao giờ xóa hẳn.
-  systemCategory,
+  /// Mục hệ thống (danh mục Chuyển / tính năng nâng cao, loại tiết kiệm "Chưa
+  /// phân bổ") — hạ tầng của app, không bao giờ đổi tên / ngừng / xóa hẳn.
+  systemProtected,
+
+  /// Quỹ / loại tiết kiệm vẫn còn tiền ([DeletionBlocker.amountMinor]) — phải
+  /// rút hoặc chuyển đi trước.
+  balance,
 }
 
 class DeletionBlocker {
@@ -50,6 +59,17 @@ class DeletionCheckResult {
     for (final b in blockers)
       if (b.kind == DeletionBlockerKind.transaction) b,
   ];
+
+  /// Số tiền còn lại (nếu có blocker số dư) — dùng cho câu "vẫn còn X đ".
+  int? get remainingBalance {
+    for (final b in blockers) {
+      if (b.kind == DeletionBlockerKind.balance) return b.amountMinor;
+    }
+    return null;
+  }
+
+  bool get isSystemProtected =>
+      blockers.any((b) => b.kind == DeletionBlockerKind.systemProtected);
 
   bool get hasHiddenHistory =>
       blockers.any((b) => b.kind == DeletionBlockerKind.hiddenHistory);
@@ -109,7 +129,7 @@ DeletionCheckResult checkCategoryDeletion(
   if (category.type == TransactionType.transfer ||
       AdvancedSystemCategories.contains(category.id)) {
     return const DeletionCheckResult([
-      DeletionBlocker(kind: DeletionBlockerKind.systemCategory),
+      DeletionBlocker(kind: DeletionBlockerKind.systemProtected),
     ]);
   }
   final statusIds = {for (final s in category.statuses) s.id};
@@ -137,5 +157,76 @@ DeletionCheckResult checkStatusDeletion(
       {for (final c in categories) c.id: c},
       _statusNames(categories),
     ).toList(),
+  );
+}
+
+/// Blocker số dư (nếu còn tiền) đặt TRƯỚC các blocker giao dịch: người dùng thấy
+/// ngay "còn X đ" rồi mới tới danh sách giao dịch cần xử lý.
+List<DeletionBlocker> _withBalance(
+  int balance,
+  List<DeletionBlocker> transactionBlockers,
+) => [
+  if (balance > 0)
+    DeletionBlocker(kind: DeletionBlockerKind.balance, amountMinor: balance),
+  ...transactionBlockers,
+];
+
+/// Quỹ: xóa hẳn được khi không dòng nào (kể cả lịch sử ẩn) chạm quỹ. Còn tiền →
+/// blocker số dư; còn giao dịch → blocker giao dịch (mở được). Không có quỹ nào
+/// là "hệ thống" — kể cả Quỹ tiền ăn mặc định xóa được khi hết dấu vết.
+DeletionCheckResult checkFundDeletion(
+  String fundId,
+  Iterable<Category> categories,
+  List<Transaction> transactions,
+) {
+  bool holds(Transaction t) =>
+      (t.sourceKind == PoolKind.fund && t.sourceRefId == fundId) ||
+      (t.destinationKind == PoolKind.fund && t.destinationRefId == fundId);
+  return DeletionCheckResult(
+    _withBalance(
+      computeFundBalance(fundId, transactions),
+      _blockersFor(
+        holds,
+        transactions,
+        {for (final c in categories) c.id: c},
+        _statusNames(categories),
+      ).toList(),
+    ),
+  );
+}
+
+/// Loại tiết kiệm: "Chưa phân bổ" là hạ tầng (systemProtected). Loại thường: xóa
+/// hẳn được khi tổng số dư (cả Vợ và Chồng) = 0 và không dòng nào chạm nó.
+DeletionCheckResult checkSavingsAssetDeletion(
+  String assetTypeId,
+  Iterable<Category> categories,
+  List<Transaction> transactions,
+) {
+  if (SystemSavingsAssets.isSystem(assetTypeId)) {
+    return const DeletionCheckResult([
+      DeletionBlocker(kind: DeletionBlockerKind.systemProtected),
+    ]);
+  }
+  bool touches(PoolKind kind, String? ref) =>
+      kind == PoolKind.memberSavingsAsset &&
+      ref != null &&
+      parseSavingsAssetRefId(ref)?.assetTypeId == assetTypeId;
+  bool holds(Transaction t) =>
+      touches(t.sourceKind, t.sourceRefId) ||
+      touches(t.destinationKind, t.destinationRefId);
+  var balance = 0;
+  for (final m in FamilyMember.values) {
+    balance += computeMemberSavingsByAssetType(assetTypeId, m, transactions);
+  }
+  return DeletionCheckResult(
+    _withBalance(
+      balance,
+      _blockersFor(
+        holds,
+        transactions,
+        {for (final c in categories) c.id: c},
+        _statusNames(categories),
+      ).toList(),
+    ),
   );
 }

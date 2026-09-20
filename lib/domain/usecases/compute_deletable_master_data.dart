@@ -1,5 +1,6 @@
 import '../engine/financial_engine.dart';
 import '../entities/category.dart';
+import '../entities/fund.dart';
 import '../entities/transaction.dart';
 import 'deletion_check.dart';
 
@@ -82,3 +83,16 @@ HiddenHistoryPurge hiddenHistoryPurgeForStatus(
   String statusId,
   List<Transaction> transactions,
 ) => hiddenHistoryPurge((t) => t.statusId == statusId, transactions);
+
+/// Id quỹ ĐÃ NGỪNG an toàn để hiện "Xóa hẳn": không dòng nào (đang tồn tại hoặc
+/// lịch sử ẩn) còn chạm quỹ. Dữ liệu HIỆN TẠI — xóa giao dịch cuối cùng của quỹ
+/// thì "Xóa hẳn" xuất hiện ngay.
+Set<String> computeDeletableFundIds(
+  Iterable<Fund> funds,
+  Iterable<Category> categories,
+  List<Transaction> transactions,
+) => {
+  for (final f in funds)
+    if (!f.isActive && checkFundDeletion(f.id, categories, transactions).canDelete)
+      f.id,
+};

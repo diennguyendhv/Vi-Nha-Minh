@@ -74,4 +74,35 @@ class LocalFundRepository implements FundRepository {
       const FundRowsCompanion(isActive: Value(false)),
     );
   }
+
+  @override
+  Future<void> reactivateFund(String fundId) async {
+    await (_db.update(
+      _db.fundRows,
+    )..where((r) => r.id.equals(fundId))).write(
+      const FundRowsCompanion(isActive: Value(true)),
+    );
+  }
+
+  @override
+  Future<void> deleteFundPermanently(String fundId) async {
+    await _db.transaction(() async {
+      final row = await (_db.select(
+        _db.fundRows,
+      )..where((r) => r.id.equals(fundId))).getSingleOrNull();
+      if (row == null || row.isActive) {
+        throw FundNotDeletableException(fundId);
+      }
+      final refs = await _db
+          .customSelect(
+            'SELECT COUNT(*) AS n FROM transaction_rows '
+            "WHERE (source_kind = 'fund' AND source_ref_id = ?1) "
+            "OR (destination_kind = 'fund' AND destination_ref_id = ?1)",
+            variables: [Variable.withString(fundId)],
+          )
+          .getSingle();
+      if (refs.read<int>('n') > 0) throw FundNotDeletableException(fundId);
+      await (_db.delete(_db.fundRows)..where((r) => r.id.equals(fundId))).go();
+    });
+  }
 }

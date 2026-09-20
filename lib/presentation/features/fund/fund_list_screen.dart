@@ -5,7 +5,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/fund.dart';
+import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
+import '../../../domain/usecases/deletion_check.dart';
+import '../../providers/category_providers.dart';
+import '../../widgets/stopped_item_tile.dart';
 import '../../providers/fund_providers.dart';
 import '../../providers/transaction_providers.dart';
 import 'fund_detail_screen.dart';
@@ -27,23 +31,106 @@ class FundListScreen extends ConsumerWidget {
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final categories =
+        ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
+    final deletable = ref.watch(deletableFundIdsProvider);
     final active = funds.where((f) => f.isActive).toList();
+    final stopped = funds.where((f) => !f.isActive).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Quỹ')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (active.isEmpty)
+            const Padding(
+              key: Key('fund_list_empty'),
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                'Chưa có quỹ nào.',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            ),
           for (final f in active)
             _FundTile(fund: f, balance: computeFundBalance(f.id, transactions)),
           const SizedBox(height: 12),
           OutlinedButton(
+            key: const Key('fund_create'),
             onPressed: () => _createFund(context, ref),
             child: const Text('+ Tạo quỹ mới'),
+          ),
+          if (stopped.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                key: const Key('fund_stopped_section'),
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  'Ngừng sử dụng (${stopped.length})',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                children: [
+                  for (final f in stopped)
+                    StoppedItemTile(
+                      idKey: 'fund_${f.id}',
+                      name: f.name,
+                      color: f.color,
+                      noun: 'quỹ này',
+                      check: checkFundDeletion(f.id, categories, transactions),
+                      onReuse: () =>
+                          ref.read(fundRepositoryProvider).reactivateFund(f.id),
+                      onDelete: () => _confirmDelete(context, ref, f, deletable),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Fund fund,
+    Set<String> deletable,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Xóa hẳn "${fund.name}"?'),
+        content: const Text('Quỹ sẽ biến mất và không thể khôi phục.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_fund'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa hẳn'),
           ),
         ],
       ),
     );
+    if (ok != true) return;
+    try {
+      await ref.read(fundRepositoryProvider).deleteFundPermanently(fund.id);
+    } on FundNotDeletableException {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Quỹ này vừa có giao dịch mới nên không thể xóa.'),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _createFund(BuildContext context, WidgetRef ref) async {

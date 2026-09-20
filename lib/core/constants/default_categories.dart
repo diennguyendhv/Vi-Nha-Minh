@@ -216,6 +216,23 @@ class DefaultCategories {
     groupKey: CategoryGroupKey.businessExpense,
   );
 
+  /// Seed cho NGƯỜI DÙNG MỚI (`SeedProfile.fresh`): chỉ các danh mục HỆ THỐNG mà
+  /// app cần để chạy (Chuyển tiền, Nạp quỹ, Tiết kiệm + 5 danh mục của tính năng
+  /// nâng cao — ẩn mặc định). KHÔNG có danh mục con nào: 4 nhóm Thu/Chi là ngữ
+  /// nghĩa hệ thống, danh mục con do gia đình tự tạo (không seed cấu trúc riêng
+  /// của 1 hộ), và không có trạng thái nào.
+  static const freshSystem = <Category>[
+    chuyenTienThanhVien,
+    napQuy,
+    tietKiem,
+    hoanTienThuHoi,
+    choVay,
+    laiChoVay,
+    vayNo,
+    traNo,
+  ];
+
+  /// Seed đầy đủ của hộ chủ dự án (`SeedProfile.demo`) — dùng cho test/golden.
   static const all = <Category>[
     soDuBanDau,
     thuKhac,

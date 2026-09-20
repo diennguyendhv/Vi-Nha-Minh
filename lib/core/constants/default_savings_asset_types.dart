@@ -43,5 +43,9 @@ class DefaultSavingsAssetTypes {
     color: Color(0xFF8FA3B3),
   );
 
+  /// Seed cho người dùng mới: chỉ "Gửi ngân hàng" (+ "Chưa phân bổ" là hạ tầng
+  /// ảo, không có row). Vàng/Chứng khoán/… do gia đình tự thêm.
+  static const fresh = <SavingsAssetType>[bank];
+
   static const all = <SavingsAssetType>[bank, gold, stocks, other];
 }

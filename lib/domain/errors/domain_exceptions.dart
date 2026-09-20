@@ -115,6 +115,17 @@ class ReversalWouldOverdrawException implements Exception {
 
 /// Ném ra khi cố xoá hẳn 1 loại tài sản tiết kiệm không đủ điều kiện (còn
 /// đang dùng, còn số dư, đã từng có giao dịch, hoặc là tài sản hệ thống).
+/// Quỹ chưa thể xóa hẳn: còn đang sử dụng, còn tiền hoặc còn giao dịch chạm quỹ.
+class FundNotDeletableException implements Exception {
+  const FundNotDeletableException(this.fundId);
+
+  final String fundId;
+
+  @override
+  String toString() =>
+      'FundNotDeletableException: quỹ $fundId không đủ điều kiện xóa hẳn';
+}
+
 class SavingsAssetTypeNotDeletableException implements Exception {
   const SavingsAssetTypeNotDeletableException(this.assetTypeId);
 

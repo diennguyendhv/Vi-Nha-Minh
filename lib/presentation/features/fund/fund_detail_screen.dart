@@ -48,7 +48,17 @@ class FundDetailScreen extends ConsumerWidget {
           ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
 
     return Scaffold(
-      appBar: AppBar(title: Text(fund.name)),
+      appBar: AppBar(
+        title: Text(fund.name),
+        actions: [
+          IconButton(
+            key: const Key('fund_rename'),
+            tooltip: 'Đổi tên quỹ',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => _rename(context, ref, fund!),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
         children: [
@@ -95,15 +105,45 @@ class FundDetailScreen extends ConsumerWidget {
             ...history.map((t) => _EntryRow(transaction: t, fundId: fundId)),
           const SizedBox(height: 24),
           TextButton(
+            key: const Key('fund_stop'),
             onPressed: () => _deleteFund(context, ref, balance),
             child: const Text(
-              'Xoá quỹ này',
+              'Ngừng sử dụng quỹ này',
               style: TextStyle(color: AppColors.expenseAmount),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _rename(BuildContext context, WidgetRef ref, Fund fund) async {
+    final controller = TextEditingController(text: fund.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Đổi tên quỹ'),
+        content: TextField(
+          key: const Key('fund_rename_field'),
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Tên quỹ'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Huỷ'),
+          ),
+          FilledButton(
+            key: const Key('fund_rename_save'),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: const Text('Lưu'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty || name == fund.name) return;
+    await ref.read(fundRepositoryProvider).updateFund(fund.copyWith(name: name));
   }
 
   Future<void> _deleteFund(
@@ -115,9 +155,9 @@ class FundDetailScreen extends ConsumerWidget {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Chưa thể xoá quỹ này'),
+          title: const Text('Chưa thể ngừng sử dụng quỹ này'),
           content: Text(
-            'Quỹ còn ${Formatters.amount(balance)} — rút hết về ví (nút "Nạp quỹ" → chọn "Rút") trước khi xoá.',
+            'Quỹ vẫn còn ${Formatters.amount(balance)} — rút hết về ví (nút "Nạp quỹ" → chọn "Rút") trước khi ngừng sử dụng.',
           ),
           actions: [
             TextButton(

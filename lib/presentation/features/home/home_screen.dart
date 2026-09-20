@@ -19,6 +19,7 @@ import '../../providers/fund_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
 import '../fund/fund_detail_screen.dart';
+import '../fund/fund_list_screen.dart';
 import '../loans/loans_screen.dart';
 import '../savings/savings_screen.dart';
 import '../settings/settings_screen.dart';
@@ -157,6 +158,18 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
           onDetail: () =>
               ref.read(currentTabProvider.notifier).state = AppTab.summary,
         ),
+        if (foodFund == null) ...[
+          const SizedBox(height: 14),
+          // Quỹ do gia đình tạo/xóa được — thiếu Quỹ tiền ăn thì hiện trạng thái
+          // rỗng (KHÔNG tự tạo lại, không crash).
+          _NoFundCard(
+            onCreate: () => _once(
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const FundListScreen()),
+              ),
+            ),
+          ),
+        ],
         if (foodFund != null) ...[
           const SizedBox(height: 14),
           _FoodFundCard(
@@ -527,6 +540,35 @@ class _FoodFundCard extends StatelessWidget {
             key: const Key('home_food_fund_topup'),
             onPressed: onTopUp,
             child: const Text('Nạp quỹ'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoFundCard extends StatelessWidget {
+  const _NoFundCard({required this.onCreate});
+
+  final VoidCallback onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      key: const Key('home_no_fund'),
+      onTap: onCreate,
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Chưa có Quỹ tiền ăn',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+          ),
+          OutlinedButton(
+            key: const Key('home_no_fund_create'),
+            onPressed: onCreate,
+            child: const Text('Tạo quỹ'),
           ),
         ],
       ),

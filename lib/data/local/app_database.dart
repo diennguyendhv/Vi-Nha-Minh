@@ -174,11 +174,22 @@ class SavingsAssetTypeRows extends Table {
   ],
 )
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  /// DB thật trên máy: người dùng mới bắt đầu với bộ seed TỐI GIẢN
+  /// ([SeedProfile.fresh]).
+  AppDatabase({this.seedProfile = SeedProfile.fresh})
+    : super(_openConnection());
 
   /// Dùng cho unit/widget test: cơ sở dữ liệu tạm trong bộ nhớ, không đụng
-  /// file thật trên máy.
-  AppDatabase.forTesting(super.executor);
+  /// file thật trên máy. Mặc định seed đầy đủ của hộ chủ dự án
+  /// ([SeedProfile.demo]) để test cũ/golden không đổi; test seed mới truyền
+  /// `seed: SeedProfile.fresh`.
+  AppDatabase.forTesting(
+    super.executor, {
+    SeedProfile seed = SeedProfile.demo,
+  }) : seedProfile = seed;
+
+  /// Bộ seed dùng khi file DB được tạo mới.
+  final SeedProfile seedProfile;
 
   /// Tăng mỗi lần đổi schema. Version 1-3: app chưa từng phát hành, chưa có
   /// dữ liệu người dùng thật cần giữ, nên `onUpgrade` cho các version cũ này
@@ -242,7 +253,7 @@ class AppDatabase extends _$AppDatabase {
       // lại mỗi lần mở DB (không chỉ lúc tạo mới).
       await customStatement('PRAGMA foreign_keys = ON');
       if (details.wasCreated) {
-        await seedDefaults(this);
+        await seedDefaults(this, seedProfile);
       }
     },
   );

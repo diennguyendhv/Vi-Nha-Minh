@@ -360,7 +360,8 @@ void main() {
       await tester.tap(find.text('Ngừng sử dụng'));
       await tester.pumpAndSettle();
       expect(find.text('Chưa thể ngừng sử dụng loại này'), findsOneWidget);
-      expect(find.textContaining('rút hoặc phân bổ hết'), findsOneWidget);
+      expect(find.textContaining('rút'), findsWidgets);
+      expect(find.textContaining('chuyển'), findsWidgets);
       expect(repo2.calls, isEmpty);
     });
 
@@ -377,7 +378,16 @@ void main() {
 
       expect(find.byKey(Key('delete_asset_${DefaultSavingsAssetTypes.stocksId}')), findsOneWidget);
       expect(find.byKey(const Key('delete_asset_$gold')), findsNothing, reason: 'đã dùng lịch sử');
-      expect(find.text('Đã được dùng trong lịch sử nên không thể xóa.'), findsOneWidget);
+      // Vàng bị 2 giao dịch giữ: giải thích ĐÚNG lý do + cho xem/mở từng giao dịch cản.
+      expect(find.text('Chưa thể xóa loại tiết kiệm này. Đang được sử dụng bởi 2 giao dịch.'), findsOneWidget);
+      expect(find.byKey(const Key('blockers_asset_$gold')), findsOneWidget);
+      expect(find.byKey(Key('blockers_asset_${DefaultSavingsAssetTypes.stocksId}')), findsNothing);
+      await tester.tap(find.byKey(const Key('blockers_asset_$gold')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('blocking_transactions_dialog')), findsOneWidget);
+      expect(find.text('Mở giao dịch'), findsNWidgets(2), reason: '2 giao dịch đang giữ Vàng');
+      await tester.tap(find.text('Đóng'));
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('reuse_asset_$gold')));
       await tester.pumpAndSettle();

@@ -171,6 +171,12 @@ class _StaticFundRepository implements FundRepository {
   Future<void> updateFund(Fund fund) async {}
   @override
   Future<void> softDeleteFund(String fundId) async {}
+
+  @override
+  Future<void> reactivateFund(String fundId) async {}
+
+  @override
+  Future<void> deleteFundPermanently(String fundId) async {}
 }
 
 class _StaticSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
@@ -417,14 +423,19 @@ void main() {
   });
 
   group('Quỹ tiền ăn — nhận diện bằng id ổn định, không bằng tên', () {
-    testWidgets('Không có quỹ → không hiện thẻ', (tester) async {
+    testWidgets('Không có quỹ (đã xóa hẳn) → KHÔNG crash, hiện trạng thái rỗng "Chưa có Quỹ tiền ăn" + [Tạo quỹ], không tự tạo lại', (tester) async {
       await pumpWith(tester, const [], funds: const []);
+      expect(tester.takeException(), isNull);
       expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
+      expect(find.text('Chưa có Quỹ tiền ăn'), findsOneWidget);
+      expect(find.byKey(const Key('home_no_fund_create')), findsOneWidget);
     });
 
     testWidgets('Quỹ đã ngừng (isActive=false) → không hiện', (tester) async {
       await pumpWith(tester, const [], funds: [DefaultFunds.anUong.copyWith(isActive: false)]);
       expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
     });
 
     testWidgets('Quỹ tên "Quỹ tiền ăn" nhưng KHÁC id → không nhầm', (tester) async {
@@ -432,11 +443,13 @@ void main() {
         Fund(id: 'quy_khac', name: 'Quỹ tiền ăn', color: Colors.red),
       ]);
       expect(find.byKey(const Key('home_food_fund')), findsNothing);
+      expect(find.byKey(const Key('home_no_fund')), findsOneWidget);
     });
 
     testWidgets('Đổi tên quỹ (cùng id) → vẫn hiện, theo tên mới', (tester) async {
       await pumpWith(tester, const [], funds: [DefaultFunds.anUong.copyWith(name: 'Bữa cơm')]);
       expect(find.byKey(const Key('home_food_fund')), findsOneWidget);
+      expect(find.byKey(const Key('home_no_fund')), findsNothing);
       expect(find.text('BỮA CƠM'), findsOneWidget);
     });
   });
