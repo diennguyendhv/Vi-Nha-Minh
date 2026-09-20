@@ -6,6 +6,7 @@ import 'package:vi_nha_minh/domain/entities/status.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_deletable_master_data.dart';
+import 'package:vi_nha_minh/domain/usecases/deletion_check.dart';
 
 Transaction _t(
   String id, {
@@ -49,7 +50,7 @@ void main() {
     expect(computeDeletableCategoryIds(cats, const []), {'c1'});
   });
 
-  test('Danh mục đang dùng / bị danh mục khác trỏ tới / có bước con đang được dùng → không xóa hẳn', () {
+  test('Danh mục đang dùng / có bước con đang được dùng → không xóa hẳn; linkedExpenseCategoryId (metadata cũ) KHÔNG chặn', () {
     final s = const Status(id: 's1', categoryId: 'c2', name: 'B', sortOrder: 0);
     final cats = [
       _c('active', active: true),
@@ -61,7 +62,7 @@ void main() {
     final d = computeDeletableCategoryIds(cats, ledger);
     expect(d, isNot(contains('active')));
     expect(d, isNot(contains('c2')), reason: 'bước con s1 đang được giao dịch dùng');
-    expect(d, isNot(contains('c4')), reason: 'c3 trỏ tới c4');
+    expect(d, contains('c4'), reason: 'c3 trỏ tới c4 nhưng đó chỉ là metadata cũ, không chặn');
     expect(d, contains('c3'));
   });
 
@@ -75,30 +76,61 @@ void main() {
     expect(computeDeletableStatusIds(cats, const []), {'s_stop', 's_held'}, reason: 'giao dịch cuối cùng đã bị xóa thật');
   });
 
-  group('Lịch sử ẩn đã xóa theo cách cũ', () {
+  group('Lịch sử ẩn (dữ liệu của cơ chế cũ)', () {
     final pair = [
       _t('o', category: 'zz', reversedBy: 'r'),
       _t('r', category: 'zz', reversalOf: 'o'),
     ];
+    bool holdsZz(Transaction t) => t.categoryId == 'zz';
 
-    test('Cặp gốc + hoàn tác (không còn dòng hiệu lực) được nhận diện; giao dịch sống thì không', () {
-      expect(deletedHistoryIdsForCategory('zz', pair), {'o', 'r'});
-      expect(deletedHistoryIdsForCategory('zz', [...pair, _t('live', category: 'zz')]), {'o', 'r'});
-      expect(deletedHistoryIdsForCategory('khac', pair), isEmpty);
-      // Họ còn dòng đang hiệu lực (đã sửa số tiền, bản thay thế còn sống) → KHÔNG phải lịch sử ẩn.
+    test('Cặp gốc + hoàn tác không còn dòng hiệu lực → xoá cả họ; danh mục khác → rỗng', () {
+      expect(hiddenHistoryPurge(holdsZz, pair).deleteIds, {'o', 'r'});
+      expect(hiddenHistoryPurge((t) => t.categoryId == 'khac', pair).isEmpty, isTrue);
+    });
+
+    test('Họ còn dòng hiệu lực (đã sửa kiểu cũ): chỉ xoá dòng ẩn, giữ bản thay thế và bỏ correctsTxId treo', () {
       final chain = [
         _t('o2', category: 'zz', reversedBy: 'r2'),
         _t('r2', category: 'zz', reversalOf: 'o2'),
-        _t('p2', category: 'zz', corrects: 'o2'),
+        _t('p2', category: 'khac', corrects: 'o2'),
       ];
-      expect(deletedHistoryIdsForCategory('zz', chain), isEmpty);
+      final p = hiddenHistoryPurge(holdsZz, chain);
+      expect(p.deleteIds, {'o2', 'r2'});
+      expect(p.relinkIds, {'p2'});
+    });
+  });
+
+  group('DeletionCheckResult / blockers', () {
+    test('Danh mục còn giao dịch đang hiệu lực → blocker có ngày, số tiền, tên trạng thái', () {
+      const s = Status(id: 'zs', categoryId: 'zz', name: 'Đã trả', sortOrder: 0);
+      final cats = [_c('zz', statuses: [s])];
+      final ledger = [_t('a', category: 'zz', statusId: 'zs')];
+      final r = checkCategoryDeletion(cats.first, cats, ledger);
+      expect(r.canDelete, isFalse);
+      expect(r.transactionBlockers.single.transactionId, 'a');
+      expect(r.transactionBlockers.single.statusName, 'Đã trả');
+      expect(r.transactionBlockers.single.categoryName, 'zz');
     });
 
-    test('Danh mục ngừng chỉ bị giữ bởi lịch sử ẩn → cho phép "Dọn"; còn giao dịch sống → không', () {
+    test('Hết giao dịch → canDelete; lịch sử ẩn tách riêng khỏi giao dịch sống', () {
       final cats = [_c('zz')];
-      expect(categoryHeldOnlyByDeletedHistory(cats.first, pair, cats), isTrue);
-      expect(categoryHeldOnlyByDeletedHistory(cats.first, [...pair, _t('live', category: 'zz')], cats), isFalse);
-      expect(categoryHeldOnlyByDeletedHistory(cats.first, const [], cats), isFalse, reason: 'không có gì để dọn');
+      expect(checkCategoryDeletion(cats.first, cats, const []).canDelete, isTrue);
+      final hidden = [
+        _t('o', category: 'zz', reversedBy: 'r'),
+        _t('r', category: 'zz', reversalOf: 'o'),
+      ];
+      final r = checkCategoryDeletion(cats.first, cats, hidden);
+      expect(r.transactionBlockers, isEmpty);
+      expect(r.onlyHiddenHistory, isTrue);
+    });
+
+    test('Trạng thái được 2 giao dịch dùng → 2 blocker; gỡ 1 vẫn chặn; gỡ hết → xoá được', () {
+      const s = Status(id: 's1', categoryId: 'c1', name: 'B', sortOrder: 0, isActive: false);
+      final cats = [_c('c1', statuses: [s])];
+      final two = [_t('a', statusId: 's1'), _t('b', statusId: 's1')];
+      expect(checkStatusDeletion('s1', cats, two).transactionBlockers.length, 2);
+      expect(checkStatusDeletion('s1', cats, [two.first]).canDelete, isFalse);
+      expect(checkStatusDeletion('s1', cats, const []).canDelete, isTrue);
     });
   });
 }

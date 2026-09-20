@@ -8,7 +8,8 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/transaction_providers.dart';
-import '../../../domain/usecases/compute_deletable_master_data.dart';
+import '../../../domain/usecases/deletion_check.dart';
+import '../transactions/blocking_transactions_dialog.dart';
 import 'category_edit_screen.dart';
 
 /// Màn "Danh mục" — 2 tầng: 4 NHÓM CHÍNH cố định (hệ thống định nghĩa, không
@@ -113,11 +114,10 @@ class _StoppedSection extends ConsumerWidget {
         ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
     final allCategories =
         ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
-    // Danh mục đã ngừng mà CHỈ còn bị giữ bởi lịch sử ẩn (đã "xóa" theo cách
-    // cũ): dọn lịch sử đó thì xóa hẳn được.
-    bool heldByHiddenHistory(Category c) =>
-        !deletable.contains(c.id) &&
-        categoryHeldOnlyByDeletedHistory(c, transactions, allCategories);
+    // Vì sao chưa xóa hẳn được — suy ra từ dữ liệu ĐANG XEM nên tự cập nhật ngay
+    // khi người dùng sửa/xóa giao dịch đang giữ danh mục.
+    DeletionCheckResult checkOf(Category c) =>
+        checkCategoryDeletion(c, allCategories, transactions);
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Theme(
@@ -147,9 +147,7 @@ class _StoppedSection extends ConsumerWidget {
                 subtitle: deletable.contains(c.id)
                     ? null
                     : Text(
-                        heldByHiddenHistory(c)
-                            ? 'Còn giao dịch đã xóa trước đây (đang ẩn).'
-                            : 'Đã được dùng trong lịch sử nên không thể xóa.',
+                        _holdReason(checkOf(c)),
                         style: const TextStyle(fontSize: 11.5),
                       ),
                 trailing: Row(
@@ -162,7 +160,19 @@ class _StoppedSection extends ConsumerWidget {
                           .updateCategory(c.copyWith(isActive: true)),
                       child: const Text('Sử dụng lại'),
                     ),
-                    if (heldByHiddenHistory(c))
+                    if (!deletable.contains(c.id) &&
+                        checkOf(c).transactionBlockers.isNotEmpty)
+                      TextButton(
+                        key: Key('show_blockers_${c.id}'),
+                        onPressed: () => showBlockingTransactions(
+                          context,
+                          title: 'Chưa thể xóa "${c.name}"',
+                          message: _holdReason(checkOf(c)),
+                          blockers: checkOf(c).blockers,
+                        ),
+                        child: const Text('Xem giao dịch'),
+                      ),
+                    if (!deletable.contains(c.id) && checkOf(c).hasHiddenHistory)
                       TextButton(
                         key: Key('purge_history_${c.id}'),
                         onPressed: () => _confirmPurge(context, ref, c),
@@ -184,6 +194,18 @@ class _StoppedSection extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// "Đang được sử dụng bởi n giao dịch." / lịch sử ẩn / danh mục hệ thống.
+  static String _holdReason(DeletionCheckResult check) {
+    final n = check.transactionBlockers.length;
+    if (n > 0) {
+      return 'Chưa thể xóa danh mục này. Đang được sử dụng bởi $n giao dịch.';
+    }
+    if (check.hasHiddenHistory) {
+      return 'Còn giao dịch đã xóa/sửa trước đây (đang ẩn) — dọn lịch sử để xóa.';
+    }
+    return 'Danh mục hệ thống nên không thể xóa.';
   }
 
   Future<void> _confirmPurge(

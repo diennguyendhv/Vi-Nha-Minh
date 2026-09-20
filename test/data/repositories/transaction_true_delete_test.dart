@@ -19,6 +19,7 @@ import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/errors/domain_exceptions.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_pool_balance.dart';
+import '../../support/legacy_correction.dart';
 
 /// "Xóa giao dịch" = XOÁ THẬT: dòng (và cả họ gốc/hoàn tác/thay thế) biến mất
 /// khỏi DB, số dư tính lại từ các giao dịch còn lại; bị chặn nếu làm pool âm
@@ -308,9 +309,9 @@ void main() {
     test('K — chuỗi sửa số tiền (gốc → hoàn tác → thay thế → …): xóa giao dịch hiện tại xóa CẢ HỌ, không nửa chuỗi', () async {
       await repo.addTransaction(income('i1', vo, 1000000));
       await repo.addTransaction(expense('e1', vo, 200000));
-      await repo.updateTransaction('e1', amountMinor: 300000); // gốc + hoàn tác + thay thế #1
+      await legacyCorrect(repo, 'e1', amount: 300000); // gốc + hoàn tác + thay thế #1
       final latest1 = (await all()).firstWhere((t) => t.correctsTxId == 'e1');
-      await repo.updateTransaction(latest1.id, amountMinor: 400000); // gốc #1 + hoàn tác + thay thế #2
+      await legacyCorrect(repo, latest1.id, amount: 400000); // gốc #1 + hoàn tác + thay thế #2
       expect(await rows(), 1 + 5);
       final current = (await all()).firstWhere((t) => t.isVisibleHead && t.type == TransactionType.expense);
       expect(current.amountMinor, 400000);
@@ -324,7 +325,7 @@ void main() {
     test('K2 — xóa bằng id của dòng GỐC cũng ra cùng kết quả (mọi dòng trong họ đều là điểm vào)', () async {
       await repo.addTransaction(income('i1', vo, 1000000));
       await repo.addTransaction(expense('e1', vo, 200000));
-      await repo.updateTransaction('e1', amountMinor: 300000);
+      await legacyCorrect(repo, 'e1', amount: 300000);
 
       await repo.deleteTransaction('e1');
 
@@ -336,7 +337,7 @@ void main() {
       await repo.addTransaction(income('i1', vo, 1000000));
       await repo.addTransaction(expense('e1', vo, 100000));
       await repo.addTransaction(expense('e2', vo, 50000));
-      await repo.updateTransaction('e1', amountMinor: 120000);
+      await legacyCorrect(repo, 'e1', amount: 120000);
 
       await repo.deleteTransaction('e1');
 
@@ -348,7 +349,7 @@ void main() {
     test('Họ mà xóa làm pool âm → CHẶN cả họ (không xóa nửa chuỗi)', () async {
       await repo.addTransaction(income('i1', chong, 5000000));
       await repo.addTransaction(topup('t1', chong, 1000000));
-      await repo.updateTransaction('t1', amountMinor: 900000); // t1 + hoàn tác + thay thế
+      await legacyCorrect(repo, 't1', amount: 900000); // t1 + hoàn tác + thay thế
       final head = (await all()).firstWhere((t) => t.correctsTxId == 't1');
       await repo.addTransaction(allocate('a1', chong, 500000));
       final rowsBefore = await rows();
@@ -501,15 +502,21 @@ void main() {
       expect(e1.statusId, isNull);
     });
 
-    test('Đổi danh mục KÈM sửa số tiền (đường hoàn tác + thay thế) cũng xóa trạng thái cũ', () async {
+    test('Đổi danh mục KÈM sửa số tiền: dòng cũ biến mất, dòng mới đúng danh mục, trạng thái cũ bị xóa, không để lại lịch sử ẩn', () async {
       await repo.addTransaction(income('i1', vo, 1000000));
       await repo.addTransaction(expense('e1', vo, 1000, category: 'cho_di', statusId: 'cho_di_da_gui'));
 
       await repo.updateTransaction('e1', categoryId: 'sinh_hoat', amountMinor: 2000);
 
-      final head = (await all()).firstWhere((t) => t.correctsTxId == 'e1');
+      final list = await all();
+      expect(list.any((t) => t.id == 'e1'), isFalse, reason: 'dòng cũ mất');
+      expect(list.length, 2, reason: 'chỉ còn khoản thu + dòng mới');
+      final head = list.firstWhere((t) => t.type == TransactionType.expense);
       expect(head.categoryId, 'sinh_hoat');
       expect(head.statusId, isNull);
+      expect(head.amountMinor, 2000);
+      expect(list.any((t) => t.categoryId == 'cho_di' || t.statusId != null), isFalse, reason: 'không còn tham chiếu danh mục/trạng thái cũ');
+      expect(list.every((t) => t.reversalOfTxId == null && t.reversedByTxId == null && t.correctsTxId == null), isTrue);
     });
 
     test('Chỉ định trạng thái không thuộc danh mục khi sửa → từ chối', () async {
@@ -578,9 +585,10 @@ void main() {
     await repo.addTransaction(topup('t1', chong, 1000000));
     await repo.addTransaction(allocate('a1', chong, 400000));
     await repo.addTransaction(expense('e1', chong, 100000));
-    await repo.updateTransaction('e1', amountMinor: 150000);
+    await repo.updateTransaction('e1', amountMinor: 150000); // thay dòng cũ bằng dòng mới (id mới)
     await repo.deleteTransaction('a1');
-    await repo.deleteTransaction('e1');
+    final replaced = (await all()).firstWhere((t) => t.type == TransactionType.expense);
+    await repo.deleteTransaction(replaced.id);
     final integrity = await db.customSelect('PRAGMA integrity_check').get();
     expect(integrity.single.data.values.single, 'ok');
     expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);

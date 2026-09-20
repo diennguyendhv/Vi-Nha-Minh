@@ -17,6 +17,7 @@ import '../../providers/obligation_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/amount_input_formatter.dart';
 import '../../widgets/amount_preview.dart';
+import 'blocking_transactions_dialog.dart';
 import '../add_transaction/add_transaction_sheet.dart';
 import '../loans/loan_detail_screen.dart';
 
@@ -163,10 +164,7 @@ class _TransactionDetailScreenState
       );
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
+      await _showError(error);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -215,13 +213,39 @@ class _TransactionDetailScreenState
       await ref.read(deleteTransactionUseCaseProvider)(current.id);
       if (mounted) Navigator.of(context).pop();
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
+      await _showError(error);
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// Hiện lỗi: nếu biết giao dịch nào đang cản (xóa/sửa làm số dư âm) thì cho mở
+  /// thẳng giao dịch đó; ngược lại chỉ báo bằng SnackBar.
+  Future<void> _showError(Object error) async {
+    if (!mounted) return;
+    final ids = error is DeleteWouldOverdrawException
+        ? error.blockingTransactionIds
+        : (error is ChangeWouldOverdrawException
+            ? error.blockingTransactionIds
+            : const <String>[]);
+    final blockers = blockersFromTransactionIds(
+      ids,
+      ref.read(transactionsStreamProvider).valueOrNull ?? const [],
+      ref.read(categoriesStreamProvider).valueOrNull ?? const [],
+    );
+    if (blockers.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      return;
+    }
+    await showBlockingTransactions(
+      context,
+      title: error is DeleteWouldOverdrawException
+          ? 'Chưa thể xóa giao dịch'
+          : 'Chưa thể lưu thay đổi',
+      message: _errorMessage(error),
+      blockers: blockers,
+    );
   }
 
   /// Ánh xạ typed exception (Domain/Repository/Application, đã frozen) sang
@@ -247,7 +271,10 @@ class _TransactionDetailScreenState
       return 'Không thể hoàn tác vì một phần số tiền này đã được chuyển hoặc sử dụng. Hãy xử lý giao dịch phát sinh sau trước.';
     }
     if (error is DeleteWouldOverdrawException) {
-      return 'Không thể xóa vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch sau. Hãy xử lý giao dịch phát sinh sau trước.';
+      return 'Giao dịch này chưa thể xóa vì số tiền đã được sử dụng ở giao dịch sau.';
+    }
+    if (error is ChangeWouldOverdrawException) {
+      return 'Không thể lưu thay đổi vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch khác.';
     }
     if (error is TransactionDeleteBlockedException) {
       return error.reason == DeleteBlockReason.linkedLoan
@@ -357,15 +384,12 @@ class _TransactionDetailScreenState
                   for (final c in sameTypeCategories) {
                     if (c.id == id) newCategory = c;
                   }
-                  // Đổi hạng mục có thể đổi luôn bộ statuses hợp lệ: giữ
-                  // status hiện tại nếu nó thuộc hạng mục mới (kể cả đã ẩn —
-                  // đó là trạng thái lịch sử của chính giao dịch này), ngược
-                  // lại lấy bước ĐANG DÙNG đầu tiên (hoặc null).
+                  // Đổi hạng mục: trạng thái cũ (thuộc hạng mục khác) bị xóa ngay —
+                  // không giữ ngầm, không tự ánh xạ theo tên. Người dùng tự chọn
+                  // trạng thái của hạng mục mới nếu cần.
                   if (newCategory != null &&
                       newCategory.statuses.every((s) => s.id != _statusId)) {
-                    _statusId = newCategory.hasStatus
-                        ? newCategory.activeStatuses.first.id
-                        : null;
+                    _statusId = null;
                   }
                 });
               },

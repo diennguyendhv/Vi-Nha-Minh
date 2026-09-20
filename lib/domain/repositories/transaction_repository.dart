@@ -1,10 +1,10 @@
 import '../entities/obligation_direction.dart';
 import '../entities/transaction.dart';
 
-/// `Transaction` là **append-only** cho mọi field ảnh hưởng balance (mục 21
-/// — Phương án B, reversal ledger đầy đủ). Không có `deleteTransaction` tự
-/// do: `reverseTransaction`/`updateTransaction` dưới đây là toàn bộ cách
-/// hợp lệ để "sửa"/"xoá" một giao dịch.
+/// Mô hình như bảng tính: dòng còn tồn tại thì còn ảnh hưởng. "Xóa giao dịch" =
+/// [deleteTransaction] (xoá thật); "Sửa giao dịch" = [updateTransaction] (thay dòng
+/// cũ bằng dòng mới, atomic). `reverseTransaction`/reversal ledger chỉ còn cho
+/// nghiệp vụ Vay và dữ liệu cũ.
 abstract class TransactionRepository {
   /// Trả về TOÀN BỘ transaction (kể cả bản đã bị hoàn tác/bản reversal nội
   /// bộ) — cần đủ để tính balance đúng (`computeAllPoolBalances` cộng dồn
@@ -71,21 +71,27 @@ abstract class TransactionRepository {
   /// Trả về số dòng đã xóa (0 nếu không có gì để dọn).
   Future<int> purgeDeletedHistory(String categoryId);
 
+  /// Như [purgeDeletedHistory] nhưng cho lịch sử ẩn còn dùng trạng thái [statusId].
+  Future<int> purgeDeletedHistoryForStatus(String statusId);
+
   /// Sửa 1 giao dịch — bỏ trống field nào thì giữ nguyên giá trị cũ.
   ///
-  /// [amountMinor] và [memberRefId] (người tiêu — map vào `sourceRefId`
-  /// nếu là EXPENSE nguồn ví, hoặc `destinationRefId` nếu là INCOME; không
-  /// áp dụng khi Chi dùng nguồn Quỹ hoặc khi giao dịch là TRANSFER) là 2
-  /// field ẢNH HƯỞNG BALANCE — đổi 1 trong 2 sẽ tự động đi qua reversal
-  /// ledger (mục 21, tạo thêm 2 bản ghi). [categoryId]/[note]/
-  /// [transactionDate]/[statusId] không ảnh hưởng balance nên được update
-  /// thẳng tại chỗ, không tạo bản ghi mới.
+  /// [amountMinor] và [memberRefId] (người tiêu — map vào `sourceRefId` nếu là
+  /// EXPENSE nguồn ví, hoặc `destinationRefId` nếu là INCOME; không áp dụng khi
+  /// Chi dùng nguồn Quỹ hoặc TRANSFER) ảnh hưởng số dư: đổi 1 trong 2 sẽ THAY dòng
+  /// cũ bằng 1 dòng MỚI (id + clientTxId mới) trong cùng 1 DB transaction — xoá
+  /// cả họ giao dịch cũ (nếu có) rồi ghi dòng mới; KHÔNG tạo hoàn tác/bản thay
+  /// thế, không để lại lịch sử ẩn. [categoryId]/[note]/[transactionDate]/
+  /// [statusId] không ảnh hưởng số dư nên update thẳng tại chỗ.
   ///
-  /// Ném [InsufficientBalanceException] nếu giá trị mới sẽ làm 1 pool âm.
-  /// Ném [AlreadyReversedException] nếu [transactionId] không phải bản mới
-  /// nhất còn hiệu lực của chuỗi sửa (Invariant 14) — implementation phải tự
-  /// tìm đúng bản mới nhất trước khi gọi `buildCorrection`, không tin thẳng
-  /// [transactionId] do caller truyền vào là bản mới nhất.
+  /// Đổi danh mục mà không chỉ định trạng thái hợp lệ → trạng thái cũ bị xoá
+  /// (Invariant `status.categoryId == transaction.categoryId`).
+  ///
+  /// Ném [InsufficientBalanceException] nếu pool nguồn không đủ tiền,
+  /// [ChangeWouldOverdrawException] (kèm giao dịch đang cản) nếu sổ sau khi thay
+  /// làm pool nào âm, [TransactionDeleteBlockedException] nếu dính Vay/Hoàn tiền,
+  /// [InvalidStatusForCategoryException] nếu trạng thái không thuộc danh mục.
+  /// Lỗi ở bất kỳ bước nào → rollback, giao dịch cũ nguyên vẹn.
   Future<void> updateTransaction(
     String transactionId, {
     int? amountMinor,

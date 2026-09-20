@@ -222,16 +222,33 @@ void main() {
       }
     });
 
-    test('Danh mục khác đang trỏ linkedExpenseCategoryId tới nó → không xoá hẳn', () async {
+    test('linkedExpenseCategoryId là metadata cũ: KHÔNG chặn xoá; xoá danh mục đích thì gỡ liên kết (cùng 1 DB transaction), danh mục kia còn nguyên', () async {
       await categories.addCategory(cat('c_target'));
       await categories.addCategory(cat('c_income', type: TransactionType.income, linked: 'c_target'));
       await categories.softDeleteCategory('c_target');
 
-      expect(await deletableCats(), isNot(contains('c_target')));
+      expect(await deletableCats(), contains('c_target'));
+      await categories.deleteCategoryPermanently('c_target');
+
+      expect(await catExists('c_target'), isFalse);
+      expect(await catExists('c_income'), isTrue);
+      final row = await (db.select(db.categoryRows)..where((r) => r.id.equals('c_income'))).getSingle();
+      expect(row.linkedExpenseCategoryId, isNull, reason: 'không để tham chiếu treo');
+    });
+
+    test('Danh mục đích có giao dịch thật → vẫn bị chặn và liên kết KHÔNG bị đụng', () async {
+      await fundWife();
+      await categories.addCategory(cat('c_target'));
+      await categories.addCategory(cat('c_income', type: TransactionType.income, linked: 'c_target'));
+      await transactions.addTransaction(spend('s_real', 'c_target'));
+      await categories.softDeleteCategory('c_target');
+
       await expectLater(
         categories.deleteCategoryPermanently('c_target'),
         throwsA(isA<CategoryNotDeletableException>()),
       );
+      final row = await (db.select(db.categoryRows)..where((r) => r.id.equals('c_income'))).getSingle();
+      expect(row.linkedExpenseCategoryId, 'c_target');
     });
 
     test('Kiểm tra lại trong lúc xoá: giao dịch mới xuất hiện sau khi UI thấy "an toàn" vẫn bị chặn', () async {

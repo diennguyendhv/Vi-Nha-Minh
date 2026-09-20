@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
@@ -215,9 +216,29 @@ void main() {
       expect(find.byKey(const Key('delete_category_da_dung')), findsNothing);
       expect(find.byKey(const Key('reuse_category_chua_dung')), findsOneWidget);
       expect(find.byKey(const Key('reuse_category_da_dung')), findsOneWidget);
-      expect(find.text('Đã được dùng trong lịch sử nên không thể xóa.'), findsOneWidget);
+      expect(find.text('Chưa thể xóa danh mục này. Đang được sử dụng bởi 1 giao dịch.'), findsOneWidget);
+      expect(find.byKey(const Key('show_blockers_da_dung')), findsOneWidget);
+      expect(find.byKey(const Key('show_blockers_chua_dung')), findsNothing);
       expect(find.textContaining('foreign'), findsNothing);
       expect(find.textContaining('reference'), findsNothing);
+    });
+
+    testWidgets('Danh mục bị giao dịch giữ: "Xem giao dịch" liệt kê đúng giao dịch (ngày · số tiền) và [Mở giao dịch] mở đúng màn chi tiết', (tester) async {
+      await pumpStopped(tester);
+
+      await tester.tap(find.byKey(const Key('show_blockers_da_dung')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('blocking_transactions_dialog')), findsOneWidget);
+      expect(find.byKey(const Key('blocker_tx-da-dung')), findsOneWidget);
+      expect(find.textContaining('01/09/2026'), findsOneWidget);
+      expect(find.textContaining('1.000'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('open_blocker_tx-da-dung')));
+      await tester.pumpAndSettle();
+
+      final detail = tester.widget<TransactionDetailScreen>(find.byType(TransactionDetailScreen));
+      expect(detail.transactionId, 'tx-da-dung');
     });
 
     testWidgets('Không có danh mục ngừng → không hiện khu này', (tester) async {
@@ -301,7 +322,7 @@ void main() {
 
       expect(find.byKey(const Key('purge_history_chua_dung')), findsOneWidget);
       expect(find.byKey(const Key('purge_history_da_dung')), findsNothing, reason: 'còn giao dịch sống');
-      expect(find.text('Còn giao dịch đã xóa trước đây (đang ẩn).'), findsOneWidget);
+      expect(find.text('Còn giao dịch đã xóa/sửa trước đây (đang ẩn) — dọn lịch sử để xóa.'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('purge_history_chua_dung')));
       await tester.pumpAndSettle();

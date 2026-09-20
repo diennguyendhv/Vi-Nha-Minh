@@ -12,7 +12,7 @@ import '../../domain/entities/transaction_type.dart';
 import '../../domain/entities/transfer_kind.dart';
 import '../../domain/errors/domain_exceptions.dart';
 import '../../domain/repositories/transaction_repository.dart';
-import '../../domain/usecases/compute_deletable_master_data.dart' show deletedHistoryIdsForCategory;
+import '../../domain/usecases/compute_deletable_master_data.dart' show hiddenHistoryPurge, hiddenHistoryPurgeForStatus, HiddenHistoryPurge;
 import '../local/app_database.dart';
 
 /// Lưu giao dịch bằng SQLite trên máy (Giai đoạn A — local-first). Được
@@ -369,7 +369,16 @@ class LocalTransactionRepository implements TransactionRepository {
       if (blocked != null) throw TransactionDeleteBlockedException(blocked);
       final overdrawn = poolOverdrawnByRemoval(all, family);
       if (overdrawn != null) {
-        throw DeleteWouldOverdrawException(overdrawn.$1, overdrawn.$2);
+        throw DeleteWouldOverdrawException(
+          overdrawn.$1,
+          overdrawn.$2,
+          blockingTransactionIds: blockingTransactionIds(
+            overdrawn,
+            all,
+            family,
+            since: _liveDate(all, family),
+          ),
+        );
       }
       await (_db.delete(
         _db.transactionRows,
@@ -377,23 +386,76 @@ class LocalTransactionRepository implements TransactionRepository {
     });
   }
 
-  @override
-  Future<int> purgeDeletedHistory(String categoryId) async {
+  /// Ngày của dòng đang hiệu lực trong [family] (dùng để tìm giao dịch dùng SAU).
+  DateTime? _liveDate(List<domain.Transaction> all, Set<String> family) {
+    for (final t in all) {
+      if (family.contains(t.id) && !t.isReversal && t.reversedByTxId == null) {
+        return t.transactionDate;
+      }
+    }
+    return null;
+  }
+
+  Future<int> _purge(HiddenHistoryPurge Function(List<domain.Transaction>) plan) {
     return _db.transaction(() async {
       final all = await _allTransactions();
-      final ids = deletedHistoryIdsForCategory(categoryId, all);
-      if (ids.isEmpty) return 0;
-      final blocked = deleteBlockReason(ids, all);
+      final p = plan(all);
+      if (p.isEmpty) return 0;
+      final blocked = deleteBlockReason(p.deleteIds, all);
       if (blocked != null) throw TransactionDeleteBlockedException(blocked);
-      final overdrawn = poolOverdrawnByRemoval(all, ids);
+      final overdrawn = poolOverdrawnByRemoval(all, p.deleteIds);
       if (overdrawn != null) {
         throw DeleteWouldOverdrawException(overdrawn.$1, overdrawn.$2);
       }
+      if (p.relinkIds.isNotEmpty) {
+        await (_db.update(_db.transactionRows)
+              ..where((r) => r.id.isIn(p.relinkIds)))
+            .write(const TransactionRowsCompanion(correctsTxId: Value(null)));
+      }
       await (_db.delete(
         _db.transactionRows,
-      )..where((r) => r.id.isIn(ids))).go();
-      return ids.length;
+      )..where((r) => r.id.isIn(p.deleteIds))).go();
+      return p.deleteIds.length;
     });
+  }
+
+  @override
+  Future<int> purgeDeletedHistory(String categoryId) async {
+    final statuses = await (_db.select(
+      _db.statusRows,
+    )..where((r) => r.categoryId.equals(categoryId))).get();
+    final statusIds = {for (final s in statuses) s.id};
+    return _purge(
+      (all) => hiddenHistoryPurge(
+        (t) =>
+            t.categoryId == categoryId ||
+            (t.statusId != null && statusIds.contains(t.statusId)),
+        all,
+      ),
+    );
+  }
+
+  @override
+  Future<int> purgeDeletedHistoryForStatus(String statusId) =>
+      _purge((all) => hiddenHistoryPurgeForStatus(statusId, all));
+
+  /// Lý do KHÔNG được thay dòng [family] khi sửa: thuộc Vay/Cho vay, hoặc có giao
+  /// dịch hoàn tiền/thu hồi khác trỏ tới. Bản thân là giao dịch hoàn tiền (trỏ
+  /// tới khoản chi gốc) thì được sửa — quan hệ đó được giữ ở dòng mới.
+  DeleteBlockReason? _replaceBlockReason(
+    Set<String> family,
+    List<domain.Transaction> all,
+  ) {
+    for (final t in all) {
+      if (family.contains(t.id)) {
+        if (t.obligationId != null || t.settlementGroupId != null) {
+          return DeleteBlockReason.linkedLoan;
+        }
+      } else if (t.recoveryOfTxId != null && family.contains(t.recoveryOfTxId)) {
+        return DeleteBlockReason.linkedRecovery;
+      }
+    }
+    return null;
   }
 
   /// Trạng thái [statusId] có thuộc danh mục [categoryId] không (Invariant:
@@ -489,12 +551,20 @@ class LocalTransactionRepository implements TransactionRepository {
         }
 
         if (amountChanged || memberChanged) {
-          // amountMinor hoặc người tiêu đổi — 2 field này ảnh hưởng balance,
-          // bắt buộc qua reversal ledger (mục 21). categoryId/note/
-          // transactionDate/statusId "đi kèm" luôn vào bản thay thế.
-          final result = buildCorrection(
-            original,
-            newAmountMinor: amountMinor ?? original.amountMinor,
+          // Sửa số tiền / người = THAY dòng cũ bằng dòng mới trong cùng 1 DB
+          // transaction (không tạo hoàn tác / bản thay thế → không để lại lịch
+          // sử ẩn giữ danh mục/trạng thái cũ). Họ giao dịch cũ (nếu là dữ liệu
+          // của phiên bản trước) bị xoá cả họ để không còn nửa chuỗi.
+          final family = transactionFamilyIds(transactionId, existing);
+          final live = existing.firstWhere(
+            (t) => family.contains(t.id) && !t.isReversal && t.reversedByTxId == null,
+            orElse: () => original!,
+          );
+          final blocked = _replaceBlockReason(family, existing);
+          if (blocked != null) throw TransactionDeleteBlockedException(blocked);
+          final replacement = buildReplacement(
+            live,
+            newAmountMinor: amountMinor ?? live.amountMinor,
             newCategoryId: categoryId,
             newNote: note,
             newSourceRefId: newSourceRefId,
@@ -502,42 +572,37 @@ class LocalTransactionRepository implements TransactionRepository {
             newTransactionDate: transactionDate,
             newStatusId: statusId,
             clearStatus: clearStatus,
-            reversalId: IdGenerator.generate(),
-            replacementId: IdGenerator.generate(),
+            newId: IdGenerator.generate(),
             clientTxId: IdGenerator.generate(),
             now: DateTime.now(),
           );
-
-          // Áp hiệu ứng reversal trước để check số dư đúng với trạng thái SAU
-          // khi hoàn tác bản gốc (khớp Test 10: chỉ phần chênh lệch bị chặn).
-          final balances = computeAllPoolBalances(existing);
-          applyEffect(result.reversal, 1, balances);
-          _assertWontGoNegative(result.replacement, balances);
-          // Sau khi áp cả bản hoàn tác lẫn bản thay thế, không pool nào được âm
-          // (vd giảm số tiền lần nạp tiết kiệm xuống dưới phần đã phân bổ).
-          applyEffect(result.replacement, 1, balances);
-          for (final leg in [result.reversal, result.replacement]) {
-            for (final key in [
-              (leg.sourceKind, leg.sourceRefId),
-              (leg.destinationKind, leg.destinationRefId),
-            ]) {
-              if (key.$1 != PoolKind.external && (balances[key] ?? 0) < 0) {
-                throw ReversalWouldOverdrawException(key.$1, key.$2);
-              }
-            }
-          }
-
-          await _db
-              .into(_db.transactionRows)
-              .insert(_toCompanion(result.reversal));
-          await _db
-              .into(_db.transactionRows)
-              .insert(_toCompanion(result.replacement));
-          await (_db.update(
-            _db.transactionRows,
-          )..where((r) => r.id.equals(transactionId))).write(
-            TransactionRowsCompanion(reversedByTxId: Value(result.reversal.id)),
+          // Pool NGUỒN phải đủ tiền khi bỏ dòng cũ (báo thiếu số dư như khi thêm mới).
+          _assertWontGoNegative(
+            replacement,
+            computeAllPoolBalances(existing.where((t) => !family.contains(t.id))),
           );
+          // Sổ sau khi bỏ dòng cũ + thêm dòng mới không được làm pool nào âm.
+          final overdrawn = poolOverdrawnByChange(
+            existing,
+            family,
+            added: [replacement],
+          );
+          if (overdrawn != null) {
+            throw ChangeWouldOverdrawException(
+              overdrawn.$1,
+              overdrawn.$2,
+              blockingTransactionIds: blockingTransactionIds(
+                overdrawn,
+                existing,
+                family,
+                since: live.transactionDate,
+              ),
+            );
+          }
+          await (_db.delete(
+            _db.transactionRows,
+          )..where((r) => r.id.isIn(family))).go();
+          await _db.into(_db.transactionRows).insert(_toCompanion(replacement));
           return;
         }
 

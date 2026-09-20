@@ -125,8 +125,7 @@ class LocalCategoryRepository implements CategoryRepository {
   ///
   /// Danh mục KHÔNG xoá hẳn khi: còn dùng; loại Chuyển hoặc danh mục hệ thống
   /// của tính năng nâng cao; có ≥ 1 giao dịch tham chiếu (mọi dòng sổ, kể cả
-  /// đã hoàn tác); danh mục khác đang trỏ `linkedExpenseCategoryId` tới nó;
-  /// hoặc 1 bước con của nó đã từng được giao dịch nào dùng.
+  /// đã hoàn tác); hoặc 1 bước con của nó đã từng được giao dịch nào dùng.
   Future<Set<String>> _deletableIds() async {
     final categories = await _db.select(_db.categoryRows).get();
     final statuses = await _db.select(_db.statusRows).get();
@@ -145,12 +144,6 @@ class LocalCategoryRepository implements CategoryRepository {
           .get())
         r.read<String>('id'),
     };
-    final referencedByOthers = {
-      for (final c in categories)
-        if (c.linkedExpenseCategoryId != null &&
-            c.linkedExpenseCategoryId != c.id)
-          c.linkedExpenseCategoryId!,
-    };
     final statusesByCategory = <String, List<StatusRow>>{};
     for (final s in statuses) {
       (statusesByCategory[s.categoryId] ??= []).add(s);
@@ -162,7 +155,6 @@ class LocalCategoryRepository implements CategoryRepository {
             c.type != TransactionType.transfer.name &&
             !AdvancedSystemCategories.contains(c.id) &&
             !usedCategories.contains(c.id) &&
-            !referencedByOthers.contains(c.id) &&
             (statusesByCategory[c.id] ?? const <StatusRow>[]).every(
               (s) => !usedStatuses.contains(s.id),
             ))
@@ -187,6 +179,14 @@ class LocalCategoryRepository implements CategoryRepository {
       if (!(await _deletableIds()).contains(categoryId)) {
         throw CategoryNotDeletableException(categoryId);
       }
+      // `linkedExpenseCategoryId` chỉ còn là metadata cũ đã ẩn khỏi giao diện —
+      // không được chặn xóa; gỡ mọi liên kết trỏ tới danh mục này (cùng 1 DB
+      // transaction) để không để lại tham chiếu treo.
+      await (_db.update(_db.categoryRows)
+            ..where((r) => r.linkedExpenseCategoryId.equals(categoryId)))
+          .write(
+        const CategoryRowsCompanion(linkedExpenseCategoryId: Value(null)),
+      );
       await (_db.delete(
         _db.statusRows,
       )..where((r) => r.categoryId.equals(categoryId))).go();

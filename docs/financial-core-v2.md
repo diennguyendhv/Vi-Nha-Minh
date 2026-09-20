@@ -618,3 +618,9 @@ Mỗi quyết định phạm vi dưới đây dùng đúng 1 trong 3 nhãn: **`S
 - Nhóm Thu = cờ `excludeFromTotals` (false → Doanh thu, true → Khoản thu khác). Nhóm Chi: `groupKey == business_expense` → Chi phí kinh doanh, ngược lại → Chi tiêu.
 - `computeGroupedTotals` (chỉ đọc, dùng cùng danh sách giao dịch hiệu lực): Doanh thu = `computeReportableIncomeEntries`; Khoản thu khác = tiền vào còn lại; Chi tiêu + Chi phí kinh doanh = `ThreeTotals.totalExpense`; Thu nhập ròng = Doanh thu − Chi phí kinh doanh; Dòng tiền = Doanh thu + Khoản thu khác − Chi tiêu − Chi phí kinh doanh. Đổi nhóm 1 danh mục chỉ đổi báo cáo (giao dịch giữ nguyên `categoryId`).
 - Tính năng nâng cao (Vay & Cho vay, Hoàn tiền/Thu hồi) ẩn khỏi UI mặc định bằng ID hệ thống; engine/lịch sử giữ nguyên.
+
+## Invariant 20 — Sửa giao dịch = thay dòng (atomic), không lịch sử ẩn mới
+`updateTransaction` đổi số tiền/người: trong 1 DB transaction — (1) xoá cả họ giao dịch cũ, (2) ghi 1 dòng MỚI (id + clientTxId mới, không `correctsTxId`/`reversalOfTxId`), (3) sổ sau thay không được làm pool nào âm (mới ⇒ `ChangeWouldOverdrawException` kèm giao dịch đang cản; pool nguồn thiếu ⇒ `InsufficientBalanceException`), (4) dính Vay/Hoàn tiền trỏ tới ⇒ chặn. Lỗi ⇒ rollback, dòng cũ nguyên vẹn. Reversal/correction còn lại chỉ cho nghiệp vụ Vay và dữ liệu cũ (đọc tương thích).
+
+## Master data delete dựa trên DỮ LIỆU HIỆN TẠI
+Danh mục/Trạng thái xóa hẳn được khi không dòng nào (kể cả lịch sử ẩn legacy) còn tham chiếu. Nếu không: `DeletionCheckResult.blockers` chỉ rõ giao dịch giữ (ngày, số tiền, trạng thái) để user mở và sửa/xóa; lịch sử ẩn legacy dọn bằng `purgeDeletedHistory[ForStatus]`. `linkedExpenseCategoryId` là metadata legacy: không chặn xóa và được gỡ khi xóa danh mục đích.

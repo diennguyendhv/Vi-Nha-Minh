@@ -473,20 +473,20 @@ void main() {
       await txRepo.addTransaction(topup('t1', chong, 1000000));
       await txRepo.addTransaction(convert('c1', chong, unalloc, gold, 500000));
 
-      // 1m → 900k: Chưa phân bổ còn 400k ≥ 0 → OK (đi qua reversal ledger).
+      // 1m → 900k: Chưa phân bổ còn 400k ≥ 0 → OK (thay dòng cũ bằng dòng mới).
       await txRepo.updateTransaction('t1', amountMinor: 900000);
       expect(await asset(unalloc, chong), 400000);
       expect(await asset(gold, chong), 500000);
       expect(await avail(chong), 4100000);
       await expectNoNegativePool();
 
-      // Bản thay thế mới nhất → giảm xuống 300k < 500k đã phân bổ → chặn.
+      // Dòng nạp hiện tại → giảm xuống 300k < 500k đã phân bổ → chặn.
       final latest = (await db.select(db.transactionRows).get())
-          .firstWhere((r) => r.correctsTxId == 't1' && r.reversedByTxId == null);
+          .firstWhere((r) => r.categoryId == 'tiet_kiem' && r.sourceKind == 'memberAvailable');
       final rowsBefore = await rows();
       await expectLater(
         txRepo.updateTransaction(latest.id, amountMinor: 300000),
-        throwsA(isA<ReversalWouldOverdrawException>()),
+        throwsA(isA<ChangeWouldOverdrawException>()),
       );
       expect(await rows(), rowsBefore);
       await expectNoNegativePool();

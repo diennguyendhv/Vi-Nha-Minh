@@ -128,31 +128,32 @@ void main() {
     expect(after.totalAssets, before.totalAssets);
   });
 
-  test('Correction (đổi số tiền + note): bản mới mang note MỚI, bản cũ giữ note cũ, chỉ tính 1 lần', () async {
+  test('Sửa số tiền + note: dòng cũ được THAY bằng dòng mới mang note mới, chỉ tính 1 lần, không lịch sử ẩn', () async {
     await repo.addTransaction(income(2000000, 'HP lớp Excel'));
     await repo.addTransaction(expense(200000, 'Quảng cáo', id: 'ads'));
 
     await repo.updateTransaction('ads', amountMinor: 250000, note: 'Quảng cáo Facebook tháng 9');
 
     final all = await repo.watchTransactions().first;
-    final replacement = all.firstWhere((t) => t.correctsTxId == 'ads');
+    expect(all.any((t) => t.id == 'ads'), isFalse, reason: 'dòng cũ mất hẳn');
+    final replacement = all.firstWhere((t) => t.type == TransactionType.expense);
     expect(replacement.note, 'Quảng cáo Facebook tháng 9');
     expect(replacement.amountMinor, 250000);
-    expect(await noteOf('ads'), 'Quảng cáo', reason: 'lịch sử bản gốc không bị ghi đè');
+    expect(all.length, 2);
 
     final s = await summary();
     expect(s.expense, 250000, reason: 'chỉ bản mới được tính, không phải 200k + 250k');
     expect(s.totalAssets, 2000000 - 250000);
   });
 
-  test('Correction chỉ đổi số tiền (không truyền note): note cũ được giữ nguyên', () async {
+  test('Sửa chỉ đổi số tiền (không truyền note): note cũ được giữ nguyên ở dòng mới', () async {
     await repo.addTransaction(income(2000000, 'HP'));
     await repo.addTransaction(expense(200000, 'Bảo hành máy', id: 'fix'));
 
     await repo.updateTransaction('fix', amountMinor: 300000);
 
     final all = await repo.watchTransactions().first;
-    expect(all.firstWhere((t) => t.correctsTxId == 'fix').note, 'Bảo hành máy');
+    expect(all.firstWhere((t) => t.type == TransactionType.expense).note, 'Bảo hành máy');
   });
 
   test('Note KHÔNG được parse: cùng số tiền/hạng mục, note khác hoàn toàn (hoặc rỗng) → tài chính y hệt', () async {

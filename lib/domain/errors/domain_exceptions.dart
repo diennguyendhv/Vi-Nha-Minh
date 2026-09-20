@@ -141,14 +141,40 @@ class SavingsAssetInactiveException implements Exception {
 /// khi 1 phần đã phân bổ / xoá khoản thu khi tiền đã chi). Không xoá gì, không
 /// cascade — người dùng phải xử lý giao dịch phát sinh sau trước.
 class DeleteWouldOverdrawException implements Exception {
-  const DeleteWouldOverdrawException(this.poolKind, this.refId);
+  const DeleteWouldOverdrawException(
+    this.poolKind,
+    this.refId, {
+    this.blockingTransactionIds = const [],
+  });
 
   final PoolKind poolKind;
   final String? refId;
 
+  /// Các giao dịch (đang hiệu lực) đã dùng số tiền này — để UI cho người dùng mở
+  /// và xử lý trước. Rỗng nếu không xác định được.
+  final List<String> blockingTransactionIds;
+
   @override
   String toString() =>
       'DeleteWouldOverdrawException: xoá sẽ làm pool $poolKind($refId) âm';
+}
+
+/// Ném ra khi SỬA 1 giao dịch (thay dòng cũ bằng dòng mới) sẽ làm 1 pool âm —
+/// giao dịch cũ giữ nguyên, không ghi gì.
+class ChangeWouldOverdrawException implements Exception {
+  const ChangeWouldOverdrawException(
+    this.poolKind,
+    this.refId, {
+    this.blockingTransactionIds = const [],
+  });
+
+  final PoolKind poolKind;
+  final String? refId;
+  final List<String> blockingTransactionIds;
+
+  @override
+  String toString() =>
+      'ChangeWouldOverdrawException: sửa sẽ làm pool $poolKind($refId) âm';
 }
 
 /// Lý do 1 giao dịch (hoặc họ giao dịch của nó) chưa được xoá thật.

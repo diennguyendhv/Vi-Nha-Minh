@@ -315,23 +315,101 @@ DeleteBlockReason? deleteBlockReason(
   return null;
 }
 
-/// Pool bị làm ÂM nếu bỏ [familyIds] khỏi sổ (tính lại từ các giao dịch còn
-/// lại) — hoặc null nếu an toàn. Chỉ tính pool mà việc xoá làm GIẢM và đẩy
-/// xuống < 0. KHÔNG sửa dữ liệu, không đổi `applyEffect`.
-PoolRef? poolOverdrawnByRemoval(
+/// Pool bị làm ÂM nếu bỏ [removedIds] khỏi sổ rồi thêm [added] (tính lại từ các
+/// giao dịch còn lại) — hoặc null nếu an toàn. Chỉ tính pool mà thay đổi làm
+/// GIẢM và đẩy xuống < 0 (pool đã âm từ trước không bị coi là lỗi mới). KHÔNG
+/// sửa dữ liệu, không đổi `applyEffect`.
+PoolRef? poolOverdrawnByChange(
   Iterable<Transaction> all,
-  Set<String> familyIds,
-) {
+  Set<String> removedIds, {
+  Iterable<Transaction> added = const [],
+}) {
   final before = computeAllPoolBalances(all);
-  final after = computeAllPoolBalances(
-    all.where((t) => !familyIds.contains(t.id)),
-  );
+  final after = computeAllPoolBalances([
+    ...all.where((t) => !removedIds.contains(t.id)),
+    ...added,
+  ]);
   for (final e in after.entries) {
     if (e.key.$1 == PoolKind.external) continue;
     final was = before[e.key] ?? 0;
     if (e.value < 0 && e.value < was) return e.key;
   }
   return null;
+}
+
+/// Xoá [familyIds] khỏi sổ có làm pool nào âm không (xem [poolOverdrawnByChange]).
+PoolRef? poolOverdrawnByRemoval(
+  Iterable<Transaction> all,
+  Set<String> familyIds,
+) => poolOverdrawnByChange(all, familyIds);
+
+/// Id các giao dịch ĐANG HIỆU LỰC (ngoài [removedIds]) đã dùng tiền từ [pool] —
+/// chính là thứ "cản" việc xoá/sửa giao dịch làm pool đó âm. Ưu tiên các giao
+/// dịch từ [since] trở đi (dùng SAU), mới nhất trước; nếu không có thì lấy tất cả
+/// giao dịch chi từ pool. Tối đa [limit].
+List<String> blockingTransactionIds(
+  PoolRef pool,
+  Iterable<Transaction> all,
+  Set<String> removedIds, {
+  DateTime? since,
+  int limit = 5,
+}) {
+  final consumers = [
+    for (final t in all)
+      if (!removedIds.contains(t.id) &&
+          !t.isReversal &&
+          t.reversedByTxId == null &&
+          t.sourceKind == pool.$1 &&
+          t.sourceRefId == pool.$2)
+        t,
+  ]..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+  final later = since == null
+      ? consumers
+      : consumers.where((t) => !t.transactionDate.isBefore(since)).toList();
+  return [for (final t in (later.isEmpty ? consumers : later).take(limit)) t.id];
+}
+
+/// "Sửa giao dịch" = thay dòng cũ bằng 1 dòng MỚI (cùng 1 DB transaction: xoá cả
+/// họ cũ rồi ghi dòng này). Khác [buildCorrection]: KHÔNG có bản hoàn tác và
+/// KHÔNG có `correctsTxId` — không để lại lịch sử ẩn. Quan hệ hoàn tiền/thu hồi
+/// (`recoveryOfTxId`) được giữ. Đã `validateNewTransaction`.
+Transaction buildReplacement(
+  Transaction original, {
+  required int newAmountMinor,
+  String? newCategoryId,
+  String? newNote,
+  String? newSourceRefId,
+  String? newDestinationRefId,
+  DateTime? newTransactionDate,
+  String? newStatusId,
+  bool clearStatus = false,
+  required String newId,
+  required String clientTxId,
+  required DateTime now,
+}) {
+  final replacement = Transaction(
+    id: newId,
+    type: original.type,
+    transferKind: original.transferKind,
+    categoryId: newCategoryId ?? original.categoryId,
+    sourceKind: original.sourceKind,
+    sourceRefId: newSourceRefId ?? original.sourceRefId,
+    destinationKind: original.destinationKind,
+    destinationRefId: newDestinationRefId ?? original.destinationRefId,
+    amountMinor: newAmountMinor,
+    currency: original.currency,
+    note: newNote ?? original.note,
+    statusId: clearStatus ? null : (newStatusId ?? original.statusId),
+    statusUpdatedAt: clearStatus || newStatusId != null
+        ? now
+        : original.statusUpdatedAt,
+    transactionDate: newTransactionDate ?? original.transactionDate,
+    createdAt: now,
+    recoveryOfTxId: original.recoveryOfTxId,
+    clientTxId: clientTxId,
+  );
+  validateNewTransaction(replacement);
+  return replacement;
 }
 
 /// Tạo bản hoàn tác của [original] — source/destination đảo ngược, cùng

@@ -9,6 +9,10 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/status_providers.dart';
+import '../../providers/transaction_providers.dart';
+import '../../../domain/entities/transaction.dart';
+import '../../../domain/usecases/deletion_check.dart';
+import '../transactions/blocking_transactions_dialog.dart';
 
 const _swatches = <Color>[
   Color(0xFFE8A23E),
@@ -593,11 +597,19 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     bool canDelete(Status s) =>
         deletable.contains(s.id) &&
         _originalStatuses.any((o) => o.id == s.id && !o.isActive);
-    final hasUsedStopped = stopped.any(
-      (s) =>
-          _originalStatuses.any((o) => o.id == s.id && !o.isActive) &&
-          !deletable.contains(s.id),
-    );
+    final categories =
+        ref.watch(categoriesStreamProvider).valueOrNull ?? const <Category>[];
+    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ??
+        const <Transaction>[];
+    // Bước đã lưu + ngừng sử dụng nhưng chưa xóa hẳn được (còn giao dịch giữ).
+    final heldStopped = [
+      for (final s in stopped)
+        if (_originalStatuses.any((o) => o.id == s.id && !o.isActive) &&
+            !deletable.contains(s.id))
+          s,
+    ];
+    DeletionCheckResult checkOf(Status s) =>
+        checkStatusDeletion(s.id, categories, transactions);
     final duplicate = _duplicateStatusId == null
         ? null
         : _statuses.where((s) => s.id == _duplicateStatusId).firstOrNull;
@@ -700,6 +712,27 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
                   label: 'Sử dụng lại',
                   onPressed: () => _reuseStatus(s),
                 ),
+                if (heldStopped.contains(s) &&
+                    checkOf(s).transactionBlockers.isNotEmpty)
+                  _StatusAction(
+                    key: Key('status_blockers_${s.id}'),
+                    label: 'Xem giao dịch',
+                    onPressed: () => showBlockingTransactions(
+                      context,
+                      title: 'Chưa thể xóa "${s.name}"',
+                      message:
+                          'Trạng thái này đang được ${checkOf(s).transactionBlockers.length} giao dịch sử dụng.',
+                      blockers: checkOf(s).blockers,
+                    ),
+                  ),
+                if (heldStopped.contains(s) && checkOf(s).hasHiddenHistory)
+                  _StatusAction(
+                    key: Key('status_purge_${s.id}'),
+                    label: 'Dọn lịch sử đã xóa',
+                    onPressed: () => ref
+                        .read(transactionRepositoryProvider)
+                        .purgeDeletedHistoryForStatus(s.id),
+                  ),
                 if (canDelete(s))
                   _StatusAction(
                     key: Key('status_delete_${s.id}'),
@@ -709,13 +742,18 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
               ],
             ),
           ),
-        if (hasUsedStopped)
-          const Padding(
-            key: Key('status_used_note'),
-            padding: EdgeInsets.only(top: 4),
+        if (heldStopped.isNotEmpty)
+          Padding(
+            key: const Key('status_used_note'),
+            padding: const EdgeInsets.only(top: 4),
             child: Text(
-              'Bước đã dùng trong lịch sử không thể xóa hẳn.',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              heldStopped.any((s) => checkOf(s).transactionBlockers.isNotEmpty)
+                  ? 'Bước đang được giao dịch sử dụng chưa thể xóa hẳn — bấm "Xem giao dịch" để mở và sửa.'
+                  : 'Còn lịch sử đã xóa/sửa trước đây (đang ẩn) — dọn lịch sử để xóa hẳn.',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
             ),
           ),
       ],

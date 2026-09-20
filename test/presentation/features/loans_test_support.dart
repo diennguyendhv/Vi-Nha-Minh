@@ -114,6 +114,9 @@ class FakeLoanTransactionRepository implements TransactionRepository {
   Future<int> purgeDeletedHistory(String categoryId) async => 0;
 
   @override
+  Future<int> purgeDeletedHistoryForStatus(String statusId) async => 0;
+
+  @override
   Future<void> deleteTransaction(String transactionId) async {}
 
   @override

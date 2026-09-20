@@ -434,30 +434,33 @@ void main() {
       expect(rows, hasLength(2), reason: '1 original + đúng 1 reversal, không nhân đôi');
     });
 
-    test('18/19 — correction/replacement được persist đúng, correctsTxId đúng', () async {
+    test('18/19 — sửa số tiền: dòng cũ được THAY bằng dòng mới (không hoàn tác, không correctsTxId)', () async {
       final original = buildTx(clientTxId: 'corr-1', amountMinor: 100000, destinationRefId: 'vo');
       await repo.addTransaction(original);
 
       await repo.updateTransaction(original.id, amountMinor: 250000);
 
       final rows = await db.select(db.transactionRows).get();
-      expect(rows, hasLength(3), reason: 'original + reversal + replacement');
-      final replacementRow = rows.firstWhere((r) => r.correctsTxId == original.id);
-      expect(replacementRow.amountMinor, 250000, reason: 'Test 19: correctsTxId trỏ đúng bản gốc');
-      expect(replacementRow.reversedByTxId, isNull, reason: 'bản thay thế đang là bản mới nhất, còn hiệu lực');
+      expect(rows, hasLength(1), reason: 'chỉ còn dòng mới, không hoàn tác/bản gốc ẩn');
+      expect(rows.single.id, isNot(original.id));
+      expect(rows.single.amountMinor, 250000);
+      expect(rows.single.correctsTxId, isNull);
+      expect(rows.single.reversalOfTxId, isNull);
+      expect(rows.single.reversedByTxId, isNull);
+      expect(rows.single.clientTxId, isNot(original.clientTxId), reason: 'không tái dùng mù clientTxId cũ');
     });
 
-    test('20 — original financial fields KHÔNG bị mutate sau reverse lẫn correction', () async {
+    test('20 — dòng cũ không còn tồn tại sau khi sửa (không mutate, không giữ lại)', () async {
       final original = buildTx(clientTxId: 'nomut-1', amountMinor: 100000, destinationRefId: 'vo');
       await repo.addTransaction(original);
       await repo.updateTransaction(original.id, amountMinor: 999000);
 
-      // DB có 3 row sau correction (original + reversal + replacement) —
-      // query đúng bản gốc theo id, không dùng getSingle() trên cả bảng.
-      final row = await (db.select(
+      final old = await (db.select(
         db.transactionRows,
-      )..where((r) => r.id.equals(original.id))).getSingle();
-      expect(row.amountMinor, 100000, reason: 'amount gốc không đổi dù đã bị "sửa"');
+      )..where((r) => r.id.equals(original.id))).getSingleOrNull();
+      expect(old, isNull);
+      final row = (await db.select(db.transactionRows).get()).single;
+      expect(row.amountMinor, 999000);
       expect(row.type, 'income');
       expect(row.sourceKind, 'external');
       expect(row.destinationKind, 'memberAvailable');

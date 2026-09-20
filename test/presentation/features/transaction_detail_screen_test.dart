@@ -114,6 +114,9 @@ class _FakeTransactionRepository implements TransactionRepository {
   Future<int> purgeDeletedHistory(String categoryId) async => 0;
 
   @override
+  Future<int> purgeDeletedHistoryForStatus(String statusId) async => 0;
+
+  @override
   Future<void> deleteTransaction(String transactionId) async {
     deleteCalls.add(transactionId);
     if (pendingGate != null) await pendingGate!.future;
@@ -743,14 +746,75 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Không thể xóa vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch sau'),
+        find.textContaining('Giao dịch này chưa thể xóa vì số tiền đã được sử dụng ở giao dịch sau.'),
         findsOneWidget,
       );
-      expect(find.textContaining('Hãy xử lý giao dịch phát sinh sau trước'), findsOneWidget);
       expect(find.byType(TransactionDetailScreen), findsOneWidget, reason: 'ở lại màn chi tiết');
       for (final leak in ['memberSavingsAsset', 'x|vo', 'pool', 'ledger', 'foreign']) {
         expect(find.textContaining(leak), findsNothing, reason: leak);
       }
+    });
+  });
+
+  group('Giao dịch đang cản (xóa/sửa làm số dư âm) → cho mở đúng giao dịch', () {
+    testWidgets('Xóa bị chặn có danh sách cản: hiện ngày · số tiền và [Mở giao dịch] mở đúng giao dịch đó', (tester) async {
+      fakeRepo.seed([_expenseTx(), _expenseTx(id: 'later', amountMinor: 600000)]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      fakeRepo.nextDeleteError = const DeleteWouldOverdrawException(
+        PoolKind.memberAvailable,
+        'vo',
+        blockingTransactionIds: ['later'],
+      );
+
+      await tester.tap(find.text('Xóa giao dịch'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Xóa').last);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('blocking_transactions_dialog')), findsOneWidget);
+      expect(find.textContaining('Giao dịch này chưa thể xóa vì số tiền đã được sử dụng ở giao dịch sau.'), findsOneWidget);
+      expect(find.textContaining('600.000'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('open_blocker_later')));
+      await tester.pumpAndSettle();
+
+      final screens = tester.widgetList<TransactionDetailScreen>(find.byType(TransactionDetailScreen)).toList();
+      expect(screens.last.transactionId, 'later');
+    });
+
+    testWidgets('Sửa bị chặn (ChangeWouldOverdraw): thông báo dễ hiểu + mở giao dịch cản; không lộ thuật ngữ kỹ thuật', (tester) async {
+      fakeRepo.seed([_expenseTx(), _expenseTx(id: 'later', amountMinor: 600000)]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      fakeRepo.nextUpdateError = const ChangeWouldOverdrawException(
+        PoolKind.memberAvailable,
+        'vo',
+        blockingTransactionIds: ['later'],
+      );
+
+      await tester.enterText(find.byKey(const Key('detail_amount_field')), '50000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Không thể lưu thay đổi vì số tiền từ giao dịch này đã được sử dụng hoặc chuyển ở giao dịch khác.'), findsOneWidget);
+      expect(find.byKey(const Key('open_blocker_later')), findsOneWidget);
+      for (final leak in ['pool', 'ledger', 'invariant', 'memberAvailable']) {
+        expect(find.textContaining(leak), findsNothing, reason: leak);
+      }
+    });
+
+    testWidgets('Đổi danh mục: trạng thái cũ bị xóa ngay và lưu KHÔNG mang trạng thái cũ', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: 'cho_di', statusId: 'cho_di_da_gui')]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sinh hoạt').last);
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.updateCalls.single.categoryId, 'sinh_hoat');
+      expect(fakeRepo.updateCalls.single.statusId, isNull);
     });
   });
 

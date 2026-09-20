@@ -84,7 +84,7 @@ void main() {
   });
 
   group('Update / Correction', () {
-    test('20 — update tài chính (amountMinor) đi đúng Repository contract (reversal + replacement)', () async {
+    test('20 — update tài chính (amountMinor) đi đúng Repository contract (thay dòng cũ bằng dòng mới)', () async {
       final tx = await addUseCase(
         CreateTransactionCommand(
           baseCurrencyCode: 'VND',
@@ -101,11 +101,10 @@ void main() {
       await updateUseCase(tx.id, amountMinor: 250000);
 
       final rows = await db.select(db.transactionRows).get();
-      expect(rows, hasLength(3), reason: 'original + reversal + replacement');
-      final replacement = rows.firstWhere((r) => r.correctsTxId == tx.id);
-      expect(replacement.amountMinor, 250000);
-      final original = rows.firstWhere((r) => r.id == tx.id);
-      expect(original.amountMinor, 100000, reason: 'bản gốc không bị mutate');
+      expect(rows, hasLength(1), reason: 'chỉ còn dòng mới');
+      expect(rows.single.id, isNot(tx.id));
+      expect(rows.single.amountMinor, 250000);
+      expect(rows.single.correctsTxId, isNull);
     });
 
     test('21 — update non-existing → TransactionNotFoundException', () async {

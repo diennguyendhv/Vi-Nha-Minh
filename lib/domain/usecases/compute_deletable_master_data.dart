@@ -1,8 +1,7 @@
-import '../../core/constants/advanced_system_categories.dart';
 import '../engine/financial_engine.dart';
 import '../entities/category.dart';
 import '../entities/transaction.dart';
-import '../entities/transaction_type.dart';
+import 'deletion_check.dart';
 
 /// Id các bước trạng thái ĐÃ NGỪNG và không có giao dịch nào (đang tồn tại
 /// trong sổ) tham chiếu `statusId` — an toàn để hiện "Xóa hẳn". Chỉ để HIỂN
@@ -24,65 +23,62 @@ Set<String> computeDeletableStatusIds(
 }
 
 /// Id danh mục ĐÃ NGỪNG an toàn để hiện "Xóa hẳn": không phải Chuyển / danh mục
-/// hệ thống nâng cao, không có giao dịch nào tham chiếu, không danh mục khác
-/// trỏ `linkedExpenseCategoryId`, và không bước con nào đang được giao dịch dùng.
+/// hệ thống nâng cao, không có dòng nào (đang tồn tại) tham chiếu danh mục hoặc
+/// bước con của nó. `linkedExpenseCategoryId` là metadata cũ đã ẩn — KHÔNG chặn.
 Set<String> computeDeletableCategoryIds(
   Iterable<Category> categories,
   Iterable<Transaction> transactions,
 ) {
-  final usedCategories = {for (final t in transactions) t.categoryId};
-  final usedStatuses = {
-    for (final t in transactions)
-      if (t.statusId != null) t.statusId!,
-  };
-  final referenced = {
-    for (final c in categories)
-      if (c.linkedExpenseCategoryId != null &&
-          c.linkedExpenseCategoryId != c.id)
-        c.linkedExpenseCategoryId!,
-  };
   return {
     for (final c in categories)
       if (!c.isActive &&
-          c.type != TransactionType.transfer &&
-          !AdvancedSystemCategories.contains(c.id) &&
-          !usedCategories.contains(c.id) &&
-          !referenced.contains(c.id) &&
-          c.statuses.every((s) => !usedStatuses.contains(s.id)))
+          checkCategoryDeletion(c, categories, transactions).canDelete)
         c.id,
   };
 }
 
-/// Id mọi dòng thuộc các "họ giao dịch ĐÃ XÓA theo cơ chế cũ" (gốc + hoàn tác,
-/// KHÔNG còn dòng nào đang hiệu lực) có ÍT NHẤT 1 dòng dùng [categoryId]. Đây là
-/// lịch sử ẩn — không hiện ở danh sách nhưng vẫn giữ danh mục ở trạng thái "đã
-/// dùng". Họ còn dòng đang hiệu lực (giao dịch thật) KHÔNG nằm trong kết quả.
-Set<String> deletedHistoryIdsForCategory(
-  String categoryId,
-  List<Transaction> transactions,
-) {
-  bool live(Transaction t) => t.reversedByTxId == null && t.reversalOfTxId == null;
-  final result = <String>{};
-  final handled = <String>{};
-  for (final t in transactions) {
-    if (t.categoryId != categoryId || handled.contains(t.id)) continue;
-    final family = transactionFamilyIds(t.id, transactions);
-    handled.addAll(family);
-    final anyLive = transactions.any((x) => family.contains(x.id) && live(x));
-    if (!anyLive) result.addAll(family);
-  }
-  return result;
+/// Kết quả dọn lịch sử ẩn: [deleteIds] xoá hẳn; [relinkIds] là dòng đang hiệu lực
+/// còn `correctsTxId` trỏ vào dòng bị xoá (phải đặt về null để không treo).
+class HiddenHistoryPurge {
+  const HiddenHistoryPurge(this.deleteIds, this.relinkIds);
+
+  final Set<String> deleteIds;
+  final Set<String> relinkIds;
+
+  bool get isEmpty => deleteIds.isEmpty;
 }
 
-/// Danh mục đã ngừng mà CHỈ còn bị giữ bởi lịch sử ẩn đã xóa (dọn xong là xóa
-/// hẳn được) — để hiện nút "Dọn lịch sử đã xóa".
-bool categoryHeldOnlyByDeletedHistory(
-  Category category,
+bool _isHiddenRow(Transaction t) => t.reversedByTxId != null || t.reversalOfTxId != null;
+
+/// Các dòng ẩn (đã hoàn tác / bản hoàn tác — từ cơ chế cũ) đang giữ dữ liệu khớp
+/// [holds]. Họ không còn dòng hiệu lực → xoá cả họ (giao dịch đã "xóa" từ trước).
+/// Họ còn dòng hiệu lực (giao dịch đã sửa) → chỉ xoá các dòng ẩn của họ (gốc +
+/// hoàn tác triệt tiêu nhau nên số dư không đổi), dòng hiệu lực được giữ.
+HiddenHistoryPurge hiddenHistoryPurge(
+  bool Function(Transaction) holds,
   List<Transaction> transactions,
-  Iterable<Category> categories,
 ) {
-  final ids = deletedHistoryIdsForCategory(category.id, transactions);
-  if (ids.isEmpty) return false;
-  final rest = transactions.where((t) => !ids.contains(t.id)).toList();
-  return computeDeletableCategoryIds(categories, rest).contains(category.id);
+  final deleteIds = <String>{};
+  final handled = <String>{};
+  for (final t in transactions) {
+    if (!_isHiddenRow(t) || !holds(t) || handled.contains(t.id)) continue;
+    final family = transactionFamilyIds(t.id, transactions);
+    handled.addAll(family);
+    final members = [for (final x in transactions) if (family.contains(x.id)) x];
+    final anyLive = members.any((x) => !_isHiddenRow(x));
+    deleteIds.addAll(anyLive ? [for (final x in members) if (_isHiddenRow(x)) x.id] : family);
+  }
+  final relink = {
+    for (final t in transactions)
+      if (!deleteIds.contains(t.id) &&
+          t.correctsTxId != null &&
+          deleteIds.contains(t.correctsTxId))
+        t.id,
+  };
+  return HiddenHistoryPurge(deleteIds, relink);
 }
+
+HiddenHistoryPurge hiddenHistoryPurgeForStatus(
+  String statusId,
+  List<Transaction> transactions,
+) => hiddenHistoryPurge((t) => t.statusId == statusId, transactions);
