@@ -3661,6 +3661,632 @@ class ObligationRowsCompanion extends UpdateCompanion<ObligationRow> {
   }
 }
 
+class $WalletMetaTable extends WalletMeta
+    with TableInfo<$WalletMetaTable, WalletMetaRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WalletMetaTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _singletonMeta = const VerificationMeta(
+    'singleton',
+  );
+  @override
+  late final GeneratedColumn<int> singleton = GeneratedColumn<int>(
+    'singleton',
+    aliasedName,
+    false,
+    check: () => singleton.equals(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _walletIdMeta = const VerificationMeta(
+    'walletId',
+  );
+  @override
+  late final GeneratedColumn<String> walletId = GeneratedColumn<String>(
+    'wallet_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [singleton, walletId, kind, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'wallet_meta';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WalletMetaRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('singleton')) {
+      context.handle(
+        _singletonMeta,
+        singleton.isAcceptableOrUnknown(data['singleton']!, _singletonMeta),
+      );
+    }
+    if (data.containsKey('wallet_id')) {
+      context.handle(
+        _walletIdMeta,
+        walletId.isAcceptableOrUnknown(data['wallet_id']!, _walletIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_walletIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {singleton};
+  @override
+  WalletMetaRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WalletMetaRow(
+      singleton: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}singleton'],
+      )!,
+      walletId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}wallet_id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WalletMetaTable createAlias(String alias) {
+    return $WalletMetaTable(attachedDatabase, alias);
+  }
+}
+
+class WalletMetaRow extends DataClass implements Insertable<WalletMetaRow> {
+  final int singleton;
+  final String walletId;
+  final String kind;
+  final DateTime createdAt;
+  const WalletMetaRow({
+    required this.singleton,
+    required this.walletId,
+    required this.kind,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['singleton'] = Variable<int>(singleton);
+    map['wallet_id'] = Variable<String>(walletId);
+    map['kind'] = Variable<String>(kind);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WalletMetaCompanion toCompanion(bool nullToAbsent) {
+    return WalletMetaCompanion(
+      singleton: Value(singleton),
+      walletId: Value(walletId),
+      kind: Value(kind),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WalletMetaRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WalletMetaRow(
+      singleton: serializer.fromJson<int>(json['singleton']),
+      walletId: serializer.fromJson<String>(json['walletId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'singleton': serializer.toJson<int>(singleton),
+      'walletId': serializer.toJson<String>(walletId),
+      'kind': serializer.toJson<String>(kind),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WalletMetaRow copyWith({
+    int? singleton,
+    String? walletId,
+    String? kind,
+    DateTime? createdAt,
+  }) => WalletMetaRow(
+    singleton: singleton ?? this.singleton,
+    walletId: walletId ?? this.walletId,
+    kind: kind ?? this.kind,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WalletMetaRow copyWithCompanion(WalletMetaCompanion data) {
+    return WalletMetaRow(
+      singleton: data.singleton.present ? data.singleton.value : this.singleton,
+      walletId: data.walletId.present ? data.walletId.value : this.walletId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletMetaRow(')
+          ..write('singleton: $singleton, ')
+          ..write('walletId: $walletId, ')
+          ..write('kind: $kind, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(singleton, walletId, kind, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WalletMetaRow &&
+          other.singleton == this.singleton &&
+          other.walletId == this.walletId &&
+          other.kind == this.kind &&
+          other.createdAt == this.createdAt);
+}
+
+class WalletMetaCompanion extends UpdateCompanion<WalletMetaRow> {
+  final Value<int> singleton;
+  final Value<String> walletId;
+  final Value<String> kind;
+  final Value<DateTime> createdAt;
+  const WalletMetaCompanion({
+    this.singleton = const Value.absent(),
+    this.walletId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  WalletMetaCompanion.insert({
+    this.singleton = const Value.absent(),
+    required String walletId,
+    required String kind,
+    required DateTime createdAt,
+  }) : walletId = Value(walletId),
+       kind = Value(kind),
+       createdAt = Value(createdAt);
+  static Insertable<WalletMetaRow> custom({
+    Expression<int>? singleton,
+    Expression<String>? walletId,
+    Expression<String>? kind,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (singleton != null) 'singleton': singleton,
+      if (walletId != null) 'wallet_id': walletId,
+      if (kind != null) 'kind': kind,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  WalletMetaCompanion copyWith({
+    Value<int>? singleton,
+    Value<String>? walletId,
+    Value<String>? kind,
+    Value<DateTime>? createdAt,
+  }) {
+    return WalletMetaCompanion(
+      singleton: singleton ?? this.singleton,
+      walletId: walletId ?? this.walletId,
+      kind: kind ?? this.kind,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (singleton.present) {
+      map['singleton'] = Variable<int>(singleton.value);
+    }
+    if (walletId.present) {
+      map['wallet_id'] = Variable<String>(walletId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletMetaCompanion(')
+          ..write('singleton: $singleton, ')
+          ..write('walletId: $walletId, ')
+          ..write('kind: $kind, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $FinancialMemberRowsTable extends FinancialMemberRows
+    with TableInfo<$FinancialMemberRowsTable, FinancialMemberRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FinancialMemberRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _memberIdMeta = const VerificationMeta(
+    'memberId',
+  );
+  @override
+  late final GeneratedColumn<String> memberId = GeneratedColumn<String>(
+    'member_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayOrderMeta = const VerificationMeta(
+    'displayOrder',
+  );
+  @override
+  late final GeneratedColumn<int> displayOrder = GeneratedColumn<int>(
+    'display_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    memberId,
+    label,
+    displayOrder,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'financial_member_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FinancialMemberRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('member_id')) {
+      context.handle(
+        _memberIdMeta,
+        memberId.isAcceptableOrUnknown(data['member_id']!, _memberIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_memberIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('display_order')) {
+      context.handle(
+        _displayOrderMeta,
+        displayOrder.isAcceptableOrUnknown(
+          data['display_order']!,
+          _displayOrderMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayOrderMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {memberId};
+  @override
+  FinancialMemberRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FinancialMemberRow(
+      memberId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}member_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      displayOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}display_order'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $FinancialMemberRowsTable createAlias(String alias) {
+    return $FinancialMemberRowsTable(attachedDatabase, alias);
+  }
+}
+
+class FinancialMemberRow extends DataClass
+    implements Insertable<FinancialMemberRow> {
+  final String memberId;
+  final String label;
+  final int displayOrder;
+  final DateTime createdAt;
+  const FinancialMemberRow({
+    required this.memberId,
+    required this.label,
+    required this.displayOrder,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['member_id'] = Variable<String>(memberId);
+    map['label'] = Variable<String>(label);
+    map['display_order'] = Variable<int>(displayOrder);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  FinancialMemberRowsCompanion toCompanion(bool nullToAbsent) {
+    return FinancialMemberRowsCompanion(
+      memberId: Value(memberId),
+      label: Value(label),
+      displayOrder: Value(displayOrder),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory FinancialMemberRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FinancialMemberRow(
+      memberId: serializer.fromJson<String>(json['memberId']),
+      label: serializer.fromJson<String>(json['label']),
+      displayOrder: serializer.fromJson<int>(json['displayOrder']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'memberId': serializer.toJson<String>(memberId),
+      'label': serializer.toJson<String>(label),
+      'displayOrder': serializer.toJson<int>(displayOrder),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  FinancialMemberRow copyWith({
+    String? memberId,
+    String? label,
+    int? displayOrder,
+    DateTime? createdAt,
+  }) => FinancialMemberRow(
+    memberId: memberId ?? this.memberId,
+    label: label ?? this.label,
+    displayOrder: displayOrder ?? this.displayOrder,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  FinancialMemberRow copyWithCompanion(FinancialMemberRowsCompanion data) {
+    return FinancialMemberRow(
+      memberId: data.memberId.present ? data.memberId.value : this.memberId,
+      label: data.label.present ? data.label.value : this.label,
+      displayOrder: data.displayOrder.present
+          ? data.displayOrder.value
+          : this.displayOrder,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinancialMemberRow(')
+          ..write('memberId: $memberId, ')
+          ..write('label: $label, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(memberId, label, displayOrder, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FinancialMemberRow &&
+          other.memberId == this.memberId &&
+          other.label == this.label &&
+          other.displayOrder == this.displayOrder &&
+          other.createdAt == this.createdAt);
+}
+
+class FinancialMemberRowsCompanion extends UpdateCompanion<FinancialMemberRow> {
+  final Value<String> memberId;
+  final Value<String> label;
+  final Value<int> displayOrder;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const FinancialMemberRowsCompanion({
+    this.memberId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.displayOrder = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  FinancialMemberRowsCompanion.insert({
+    required String memberId,
+    required String label,
+    required int displayOrder,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : memberId = Value(memberId),
+       label = Value(label),
+       displayOrder = Value(displayOrder),
+       createdAt = Value(createdAt);
+  static Insertable<FinancialMemberRow> custom({
+    Expression<String>? memberId,
+    Expression<String>? label,
+    Expression<int>? displayOrder,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (memberId != null) 'member_id': memberId,
+      if (label != null) 'label': label,
+      if (displayOrder != null) 'display_order': displayOrder,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  FinancialMemberRowsCompanion copyWith({
+    Value<String>? memberId,
+    Value<String>? label,
+    Value<int>? displayOrder,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return FinancialMemberRowsCompanion(
+      memberId: memberId ?? this.memberId,
+      label: label ?? this.label,
+      displayOrder: displayOrder ?? this.displayOrder,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (memberId.present) {
+      map['member_id'] = Variable<String>(memberId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (displayOrder.present) {
+      map['display_order'] = Variable<int>(displayOrder.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FinancialMemberRowsCompanion(')
+          ..write('memberId: $memberId, ')
+          ..write('label: $label, ')
+          ..write('displayOrder: $displayOrder, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3676,6 +4302,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $ObligationRowsTable obligationRows = $ObligationRowsTable(this);
+  late final $WalletMetaTable walletMeta = $WalletMetaTable(this);
+  late final $FinancialMemberRowsTable financialMemberRows =
+      $FinancialMemberRowsTable(this);
   late final Index uxTransactionClientTxId = Index(
     'ux_transaction_client_tx_id',
     'CREATE UNIQUE INDEX ux_transaction_client_tx_id ON transaction_rows (client_tx_id)',
@@ -3724,6 +4353,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     savingsAssetTypeRows,
     counterpartyRows,
     obligationRows,
+    walletMeta,
+    financialMemberRows,
     uxTransactionClientTxId,
     ixTransactionSource,
     ixTransactionDestination,
@@ -6439,6 +7070,398 @@ typedef $$ObligationRowsTableProcessedTableManager =
       ObligationRow,
       PrefetchHooks Function({bool counterpartyId})
     >;
+typedef $$WalletMetaTableCreateCompanionBuilder = WalletMetaCompanion Function({
+  Value<int> singleton,
+  required String walletId,
+  required String kind,
+  required DateTime createdAt,
+});
+typedef $$WalletMetaTableUpdateCompanionBuilder = WalletMetaCompanion Function({
+  Value<int> singleton,
+  Value<String> walletId,
+  Value<String> kind,
+  Value<DateTime> createdAt,
+});
+
+class $$WalletMetaTableFilterComposer
+    extends Composer<_$AppDatabase, $WalletMetaTable> {
+  $$WalletMetaTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get walletId => $composableBuilder(
+    column: $table.walletId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WalletMetaTableOrderingComposer
+    extends Composer<_$AppDatabase, $WalletMetaTable> {
+  $$WalletMetaTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get walletId => $composableBuilder(
+    column: $table.walletId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WalletMetaTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WalletMetaTable> {
+  $$WalletMetaTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get singleton =>
+      $composableBuilder(column: $table.singleton, builder: (column) => column);
+
+  GeneratedColumn<String> get walletId =>
+      $composableBuilder(column: $table.walletId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$WalletMetaTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WalletMetaTable,
+          WalletMetaRow,
+          $$WalletMetaTableFilterComposer,
+          $$WalletMetaTableOrderingComposer,
+          $$WalletMetaTableAnnotationComposer,
+          $$WalletMetaTableCreateCompanionBuilder,
+          $$WalletMetaTableUpdateCompanionBuilder,
+          (
+            WalletMetaRow,
+            BaseReferences<_$AppDatabase, $WalletMetaTable, WalletMetaRow>,
+          ),
+          WalletMetaRow,
+          PrefetchHooks Function()
+        > {
+  $$WalletMetaTableTableManager(_$AppDatabase db, $WalletMetaTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WalletMetaTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WalletMetaTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WalletMetaTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                Value<String> walletId = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => WalletMetaCompanion(
+                singleton: singleton,
+                walletId: walletId,
+                kind: kind,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                required String walletId,
+                required String kind,
+                required DateTime createdAt,
+              }) => WalletMetaCompanion.insert(
+                singleton: singleton,
+                walletId: walletId,
+                kind: kind,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WalletMetaTable, WalletMetaRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WalletMetaTable,
+                    WalletMetaRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WalletMetaTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WalletMetaTable,
+      WalletMetaRow,
+      $$WalletMetaTableFilterComposer,
+      $$WalletMetaTableOrderingComposer,
+      $$WalletMetaTableAnnotationComposer,
+      $$WalletMetaTableCreateCompanionBuilder,
+      $$WalletMetaTableUpdateCompanionBuilder,
+      (
+        WalletMetaRow,
+        BaseReferences<_$AppDatabase, $WalletMetaTable, WalletMetaRow>,
+      ),
+      WalletMetaRow,
+      PrefetchHooks Function()
+    >;
+typedef $$FinancialMemberRowsTableCreateCompanionBuilder =
+    FinancialMemberRowsCompanion Function({
+      required String memberId,
+      required String label,
+      required int displayOrder,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$FinancialMemberRowsTableUpdateCompanionBuilder =
+    FinancialMemberRowsCompanion Function({
+      Value<String> memberId,
+      Value<String> label,
+      Value<int> displayOrder,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$FinancialMemberRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $FinancialMemberRowsTable> {
+  $$FinancialMemberRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get memberId => $composableBuilder(
+    column: $table.memberId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FinancialMemberRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FinancialMemberRowsTable> {
+  $$FinancialMemberRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get memberId => $composableBuilder(
+    column: $table.memberId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FinancialMemberRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FinancialMemberRowsTable> {
+  $$FinancialMemberRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get memberId =>
+      $composableBuilder(column: $table.memberId, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<int> get displayOrder => $composableBuilder(
+    column: $table.displayOrder,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$FinancialMemberRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FinancialMemberRowsTable,
+          FinancialMemberRow,
+          $$FinancialMemberRowsTableFilterComposer,
+          $$FinancialMemberRowsTableOrderingComposer,
+          $$FinancialMemberRowsTableAnnotationComposer,
+          $$FinancialMemberRowsTableCreateCompanionBuilder,
+          $$FinancialMemberRowsTableUpdateCompanionBuilder,
+          (
+            FinancialMemberRow,
+            BaseReferences<
+              _$AppDatabase,
+              $FinancialMemberRowsTable,
+              FinancialMemberRow
+            >,
+          ),
+          FinancialMemberRow,
+          PrefetchHooks Function()
+        > {
+  $$FinancialMemberRowsTableTableManager(
+    _$AppDatabase db,
+    $FinancialMemberRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FinancialMemberRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FinancialMemberRowsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$FinancialMemberRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> memberId = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<int> displayOrder = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => FinancialMemberRowsCompanion(
+                memberId: memberId,
+                label: label,
+                displayOrder: displayOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String memberId,
+                required String label,
+                required int displayOrder,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => FinancialMemberRowsCompanion.insert(
+                memberId: memberId,
+                label: label,
+                displayOrder: displayOrder,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$FinancialMemberRowsTable, FinancialMemberRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $FinancialMemberRowsTable,
+                    FinancialMemberRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FinancialMemberRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FinancialMemberRowsTable,
+      FinancialMemberRow,
+      $$FinancialMemberRowsTableFilterComposer,
+      $$FinancialMemberRowsTableOrderingComposer,
+      $$FinancialMemberRowsTableAnnotationComposer,
+      $$FinancialMemberRowsTableCreateCompanionBuilder,
+      $$FinancialMemberRowsTableUpdateCompanionBuilder,
+      (
+        FinancialMemberRow,
+        BaseReferences<
+          _$AppDatabase,
+          $FinancialMemberRowsTable,
+          FinancialMemberRow
+        >,
+      ),
+      FinancialMemberRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6457,4 +7480,8 @@ class $AppDatabaseManager {
       $$CounterpartyRowsTableTableManager(_db, _db.counterpartyRows);
   $$ObligationRowsTableTableManager get obligationRows =>
       $$ObligationRowsTableTableManager(_db, _db.obligationRows);
+  $$WalletMetaTableTableManager get walletMeta =>
+      $$WalletMetaTableTableManager(_db, _db.walletMeta);
+  $$FinancialMemberRowsTableTableManager get financialMemberRows =>
+      $$FinancialMemberRowsTableTableManager(_db, _db.financialMemberRows);
 }

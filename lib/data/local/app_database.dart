@@ -6,7 +6,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
+import '../../core/utils/opaque_id.dart';
+import '../../domain/entities/wallet_identity.dart';
 import 'seed_defaults.dart';
+import 'wallet_descriptor.dart';
 
 part 'app_database.g.dart';
 
@@ -162,6 +165,37 @@ class SavingsAssetTypeRows extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// v8 — danh tính Wallet của DB này. SINGLETON: đúng 1 dòng (khóa chính `singleton`
+/// bị CHECK = 1 ⇒ không thể có dòng thứ hai, kể cả khi migration chạy lại). `walletId`
+/// là ID mờ sinh 1 lần rồi giữ vĩnh viễn — KHÔNG suy ra từ email/vai trò/thiết bị/số
+/// liệu. `kind`: `local` (chưa gắn Account nào).
+@DataClassName('WalletMetaRow')
+class WalletMeta extends Table {
+  IntColumn get singleton =>
+      // ignore: recursive_getters (cách khai báo CHECK của Drift tham chiếu chính cột)
+      integer().withDefault(const Constant(1)).check(singleton.equals(1))();
+  TextColumn get walletId => text().unique()();
+  TextColumn get kind => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {singleton};
+}
+
+/// v8 — danh tính tài chính ổn định của từng người trong Wallet. CHƯA có tài khoản,
+/// email, quyền hay lời mời (thuộc các phase Account/Membership). Với Wallet di sản,
+/// `member_id` là `vo` / `chong` — đúng chuỗi đang nằm trong `*_ref_id` của giao dịch
+/// (không phải viết lại dòng nào); Wallet mới dùng ID mờ.
+class FinancialMemberRows extends Table {
+  TextColumn get memberId => text()();
+  TextColumn get label => text()();
+  IntColumn get displayOrder => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {memberId};
+}
+
 @DriftDatabase(
   tables: [
     TransactionRows,
@@ -171,13 +205,17 @@ class SavingsAssetTypeRows extends Table {
     SavingsAssetTypeRows,
     CounterpartyRows,
     ObligationRows,
+    WalletMeta,
+    FinancialMemberRows,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   /// DB thật trên máy: người dùng mới bắt đầu với bộ seed TỐI GIẢN
   /// ([SeedProfile.fresh]).
-  AppDatabase({this.seedProfile = SeedProfile.fresh})
-    : super(_openConnection());
+  AppDatabase({
+    this.seedProfile = SeedProfile.fresh,
+    WalletDescriptor wallet = WalletDescriptor.legacyLocal,
+  }) : super(_openWalletConnection(wallet));
 
   /// Dùng cho unit/widget test: cơ sở dữ liệu tạm trong bộ nhớ, không đụng
   /// file thật trên máy. Mặc định seed đầy đủ của hộ chủ dự án
@@ -205,8 +243,10 @@ class AppDatabase extends _$AppDatabase {
   /// `createTable` không cần rename gì) + 2 cột mới trên `transaction_rows`
   /// (`obligation_id`, `settlement_group_id`) — cùng pattern rename →
   /// recreate → copy → drop như v4→v5 (bảng đã có FK/unique index từ v4).
+  /// Version 8 (P2 — Local Wallet Identity): thêm 2 bảng THUẦN CỘNG THÊM
+  /// (`wallet_meta`, `financial_member_rows`), không đụng dòng/cột nào của dữ liệu cũ.
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -247,6 +287,11 @@ class AppDatabase extends _$AppDatabase {
         // tiêu) — không UPDATE theo tên/Ghi chú, không viết lại giao dịch.
         await m.addColumn(categoryRows, categoryRows.groupKey);
       }
+      if (from < 8) {
+        // v7 → v8: 2 bảng mới + danh tính Wallet di sản. ATOMIC: lỗi ở bất kỳ bước
+        // nào ⇒ rollback toàn bộ, DB vẫn là v7 hợp lệ (không có Wallet nửa vời).
+        await transaction(() => _migrateToV8(m));
+      }
     },
     beforeOpen: (details) async {
       // sqlite3 tắt FK enforcement theo mặc định mỗi connection — phải bật
@@ -254,6 +299,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       if (details.wasCreated) {
         await seedDefaults(this, seedProfile);
+        await _ensureWalletIdentity();
       }
     },
   );
@@ -272,6 +318,40 @@ class AppDatabase extends _$AppDatabase {
   ///
   /// Thứ tự copy (status_rows trước, rồi mới transaction_rows) đã đảm bảo
   /// FK hợp lệ theo đúng dữ liệu gốc mà không cần tắt enforcement.
+  /// Tạo (idempotent) danh tính Wallet của DB này: đúng 1 dòng `wallet_meta` + 2
+  /// thành viên tài chính di sản `vo`/`chong`. Chạy lại KHÔNG tạo bản sao (singleton +
+  /// khóa chính + `insertOrIgnore`). Cả DB di sản nâng cấp lẫn DB mới hiện dùng
+  /// chuỗi `vo`/`chong` vì mã hiện tại còn ghi đúng các chuỗi đó vào cột ref; ID mờ
+  /// cho thành viên của Wallet MỚI đến cùng phase "thành viên là dữ liệu".
+  Future<void> _ensureWalletIdentity() async {
+    final now = DateTime.now();
+    await into(walletMeta).insert(
+      WalletMetaCompanion.insert(
+        walletId: OpaqueId.generate(),
+        kind: WalletKind.local.name,
+        createdAt: now,
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+    for (final (index, member) in const [('vo', 'Vợ'), ('chong', 'Chồng')].indexed) {
+      await into(financialMemberRows).insert(
+        FinancialMemberRowsCompanion.insert(
+          memberId: member.$1,
+          label: member.$2,
+          displayOrder: index,
+          createdAt: now,
+        ),
+        mode: InsertMode.insertOrIgnore,
+      );
+    }
+  }
+
+  Future<void> _migrateToV8(Migrator m) async {
+    await m.createTable(walletMeta);
+    await m.createTable(financialMemberRows);
+    await _ensureWalletIdentity();
+  }
+
   Future<void> _migrateToV4(Migrator m) async {
     await customStatement('ALTER TABLE status_rows RENAME TO status_rows_v3');
     await m.createTable(statusRows);
@@ -391,11 +471,11 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-QueryExecutor _openConnection() {
+QueryExecutor _openWalletConnection(WalletDescriptor wallet) {
   return LazyDatabase(() async {
     await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'vi_nha_minh.sqlite'));
+    final file = File(p.join(dbFolder.path, wallet.dbFileName));
     return NativeDatabase.createInBackground(file);
   });
 }
