@@ -4,16 +4,22 @@
 > Đọc kèm: `CLAUDE.md`, `docs/account-wallet-security-foundation.md` (kiến trúc Account/Wallet, §31 lộ trình), `docs/financial-core-v2.md` (nguồn sự thật tài chính).
 
 ## Product
-**Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Chưa có Account/Auth/Firebase/cloud.
+**Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P4 — FinancialMember là dữ liệu — PASS** (nghiệm thu Pixel 2026-09-21). Phase kế tiếp (chưa bắt đầu, chờ duyệt): **P5 — Nền Auth & môi trường**.
+**P5 — Auth & môi trường — code + test xong; nghiệm thu Pixel đăng nhập Google CHỜ cấu hình Firebase thật của chủ dự án** (xem mục Auth & Environments). Phase kế tiếp (chưa bắt đầu): P6 cách ly Wallet/Account.
 
 ## Last Completed Phase
 P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
 **v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 và P4 KHÔNG đổi schema.
+
+## Auth & Environments (P5)
+- 3 môi trường qua Android flavor + `AppEnvironment.current` (nguồn duy nhất, từ `appFlavor`): dev=`com.vinhamimh.vi_nha_minh.dev`, pilot=`...pilot`, prod=`com.vinhamimh.vi_nha_minh` (không đổi). Mỗi môi trường 1 dự án Firebase riêng; cấu hình client công khai qua `--dart-define-from-file=env/<env>.json` (mẫu `env/*.example.json`; file thật gitignored; `FirebaseEnvConfig.isUsableFor(env)` từ chối cấu hình khác môi trường/giá trị mẫu). Không có google-services.json/service account trong repo.
+- `AuthRepository` (domain, độc lập nhà cung cấp) → `FirebaseAuthRepository` (Firebase Auth + `google_sign_in` 7.x) / `UnavailableAuthRepository` khi chưa cấu hình. `bootstrapAuth()` không bao giờ ném; app local khởi động không phụ thuộc mạng. `AccountIdentity` chỉ uid/email/tên/ảnh/provider — KHÔNG walletId/memberId/vai trò.
+- UI: thẻ Tài khoản đầu Cài đặt (`AccountSettingsCard`), đăng nhập TUỲ CHỌN, không claim/upload. Đăng xuất chỉ xoá phiên; Wallet cục bộ + App Lock giữ nguyên.
+- **Mạng (thay đổi quyền riêng tư):** từ P5 manifest có `INTERNET`, chỉ lưu lượng xác thực. Không import Firestore/Storage ở đâu trong `lib/` (test tĩnh). Financial data vẫn 100% local.
 
 ## Local Wallet Architecture
 - 1 Wallet cục bộ hiện tại = 1 file SQLite `vi_nha_minh.sqlite` (không di chuyển).
@@ -68,8 +74,9 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Mã hoá DB cục bộ trước cloud pilot/Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
-## Testing (kết quả P4 — gate mới nhất)
-`flutter test --concurrency=1`: 977 pass, 3 skip (gồm Golden); `flutter analyze` 15 issue có sẵn, 0 lỗi; không đổi schema. Test P4: `test/domain/financial_member_as_data_test.dart` (ID mờ + nhãn "Vợ", repo, directory), thêm ca P4 ở home/add/summary widget test; fixture `test/support/legacy_members.dart`.
+## Testing (gate mới nhất — P5)
+P5: `flutter test --concurrency=1` 1005 pass, 3 skip; `flutter analyze` 15 info có sẵn, 0 lỗi; không đổi schema. Test P5: `test/auth/*`.
+P4 (tham chiếu): 977 pass. Test P4: `test/domain/financial_member_as_data_test.dart` (ID mờ + nhãn "Vợ", repo, directory), thêm ca P4 ở home/add/summary widget test; fixture `test/support/legacy_members.dart`.
 Pixel: DB trước/sau P4 giống byte-for-byte (1.809 giao dịch); walletId + `financial_member_rows` không đổi; integrity ok.
 Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối phase; Golden chỉ khi UI ảnh hưởng.
 

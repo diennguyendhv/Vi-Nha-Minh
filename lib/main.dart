@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'data/auth/firebase_bootstrap.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/lock_gate.dart';
 import 'presentation/providers/app_lock_provider.dart';
+import 'presentation/providers/auth_providers.dart';
 import 'presentation/providers/explorer_sort_provider.dart';
 import 'presentation/providers/primary_fund_provider.dart';
 import 'presentation/widgets/tap_guard.dart';
@@ -14,10 +16,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
-// Firebase.initializeApp() sẽ được bật ở đây khi có project Firebase thật
-// (chạy `flutterfire configure` để sinh firebase_options.dart) — xem spec.md
-// Giai đoạn B. Hiện tại (Giai đoạn A) app chạy hoàn toàn local-first qua
-// LocalTransactionRepository/LocalFundRepository (SQLite), không cần mạng.
+// P5: Firebase CHỈ dùng cho Authentication (danh tính). Dữ liệu tài chính vẫn
+// hoàn toàn local-first (SQLite); không có đường tải dữ liệu tài chính lên cloud.
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,9 +38,13 @@ Future<void> main() async {
   final lockPlatform = MethodChannelAppLockPlatform();
   final lockStatus = await lockPlatform.status();
 
+  // Không bao giờ ném: thiếu/sai cấu hình ⇒ Auth tắt, app local vẫn chạy.
+  final authRepository = await bootstrapAuth();
+
   runApp(
     ProviderScope(
       overrides: [
+        authRepositoryProvider.overrideWithValue(authRepository),
         appLockPlatformProvider.overrideWithValue(lockPlatform),
         deviceAuthenticatorProvider.overrideWithValue(
           LocalAuthDeviceAuthenticator(),

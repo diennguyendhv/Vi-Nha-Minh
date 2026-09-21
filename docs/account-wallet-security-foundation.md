@@ -16,7 +16,7 @@
 - 7 bảng Drift: `transaction_rows`, `category_rows`, `status_rows`, `fund_rows`, `savings_asset_type_rows`, `counterparty_rows`, `obligation_rows`.
 - Cài đặt cục bộ: `SharedPreferences` chỉ có **2 khóa**: `primary_fund_id` và `explorer_sort`. Mọi thứ khác (bộ lọc Tổng hợp, tab hiện tại, `biometricLockProvider`, `syncModeProvider`, `advancedFeaturesEnabledProvider`) chỉ nằm trong bộ nhớ hoặc là hằng số.
 - Firebase: `firebase_core`, `firebase_auth`, `cloud_firestore` **đã khai báo trong `pubspec.yaml` nhưng chưa được khởi tạo/import ở đâu** (chỉ có 1 dòng comment trong `main.dart`); **không có `google-services.json`**. `local_auth` cũng đã khai báo nhưng **không được gọi**.
-- Manifest chính (`android/app/src/main/AndroidManifest.xml`): **không có quyền `INTERNET`** (chỉ có ở debug/profile) và **không đặt `android:allowBackup`** ⇒ mặc định `true` (thiết bị báo cờ `ALLOW_BACKUP`).
+- *(Trạng thái P1, đã lỗi thời từ P3/P5 — nay có `INTERNET` và `allowBackup=false`.)* Manifest chính (`android/app/src/main/AndroidManifest.xml`): **không có quyền `INTERNET`** (chỉ có ở debug/profile) và **không đặt `android:allowBackup`** ⇒ mặc định `true` (thiết bị báo cờ `ALLOW_BACKUP`).
 
 ### 1.2 Danh tính thành viên hiện tại
 - `FamilyMember { vo, chong }` (`lib/domain/entities/family_member.dart`) — enum cứng, dùng ở **23 file** trong `lib/`.

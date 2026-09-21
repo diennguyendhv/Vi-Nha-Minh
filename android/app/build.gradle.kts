@@ -29,6 +29,23 @@ android {
         versionName = flutter.versionName
     }
 
+    // P5: mỗi môi trường = applicationId riêng (sandbox riêng). PROD giữ nguyên id
+    // đã phát hành/đang cài trên máy thật; KHÔNG đổi.
+    flavorDimensions += "env"
+    productFlavors {
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+        }
+        create("pilot") {
+            dimension = "env"
+            applicationIdSuffix = ".pilot"
+        }
+        create("prod") {
+            dimension = "env"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.

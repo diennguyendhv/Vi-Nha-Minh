@@ -52,3 +52,10 @@ app.*.map.json
 # never committed — see test/golden_data/README.md).
 test/golden_data/*.json
 test/golden_data/*.csv
+
+# P5: cấu hình Firebase client thật theo môi trường (giữ file *.example.json)
+env/*.json
+!env/*.example.json
+**/google-services.json
+**/GoogleService-Info.plist
+*service-account*.json

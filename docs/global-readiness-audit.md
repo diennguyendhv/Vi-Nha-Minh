@@ -286,9 +286,9 @@ Nếu người dùng **không** bấm chọn ngày (giữ mặc định "Hôm na
 
 | Thành phần | Trạng thái hiện tại |
 |---|---|
-| Local-only | **Có** — Giai đoạn A hoàn toàn local SQLite, chưa có network call nào |
+| Local-only | **Dữ liệu tài chính: Có** — hoàn toàn local SQLite, không upload. **Từ P5 app có quyền INTERNET** chỉ để đăng nhập (Firebase Auth/Google); lưu lượng mạng = xác thực, không chứa dữ liệu ví |
 | Cloud sync | Chưa có — `main.dart` comment rõ "Firebase.initializeApp() sẽ được bật... khi có project Firebase thật" ([main.dart:8-9](lib/main.dart#L8)) |
-| Account/đăng nhập | Chưa có |
+| Account/đăng nhập | P5: Google Sign-In tuỳ chọn qua Firebase Auth (chỉ danh tính; chưa gắn Wallet, chưa sao lưu/đồng bộ) |
 | Analytics | Không có bất kỳ package/call nào |
 | Crash reporting | Không có |
 | Tracking | Không có |
