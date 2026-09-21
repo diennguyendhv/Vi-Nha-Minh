@@ -17,6 +17,8 @@ import 'package:vi_nha_minh/presentation/features/summary/summary_screen.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/counterparty_providers.dart';
+import 'package:vi_nha_minh/presentation/providers/explorer_sort_provider.dart';
+import 'package:vi_nha_minh/domain/usecases/explore_transactions.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
@@ -443,7 +445,7 @@ void main() {
     }
   });
 
-  group('Sắp xếp 2 tầng: Ngày rồi Số tiền (áp dụng bằng OK)', () {
+  group('Sắp xếp linh hoạt: Ngày và/hoặc Số tiền, kéo đổi ưu tiên (áp dụng bằng OK)', () {
     // 19/09: 50.000, 800.000 — 20/09: 20.000, 100.000, 600.000 (cùng tháng hiện tại).
     List<Transaction> data() => [
       _out('sinh_hoat', 50000, id: 'd19-50', date: DateTime(_today.year, _today.month, 19, 9)),
@@ -463,110 +465,202 @@ void main() {
 
     Future<void> openSort(WidgetTester tester) => _tapKey(tester, 'summary_sort_button');
     bool showsArrow(String name) => find.byKey(Key(name)).evaluate().length == 1;
-
-    testWidgets('Mặc định Ngày ↓ · Số tiền ↓; nhãn nút phản ánh; sheet có đúng 2 dòng, MỖI dòng ĐÚNG 1 mũi tên', (tester) async {
-      await _pump(tester, data());
-      expect(find.text('Ngày ↓ · Số tiền ↓'), findsOneWidget);
-      expect(ids(tester), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
-
-      await openSort(tester);
-      expect(find.byKey(const Key('sort_date_row')), findsOneWidget);
-      expect(find.byKey(const Key('sort_amount_row')), findsOneWidget);
-      expect(find.byKey(const Key('sort_cancel')), findsOneWidget);
-      expect(find.byKey(const Key('sort_ok')), findsOneWidget);
-      expect(showsArrow('sort_date_down'), isTrue);
-      expect(showsArrow('sort_date_up'), isFalse);
-      expect(showsArrow('sort_amount_down'), isTrue);
-      expect(showsArrow('sort_amount_up'), isFalse);
-      expect(find.byIcon(Icons.arrow_downward_rounded), findsNWidgets(2));
-      expect(find.byIcon(Icons.arrow_upward_rounded), findsNothing);
-      expect(find.text('Rồi theo'), findsNothing);
-      expect(find.text('Danh mục'), findsNothing);
-    });
-
-    testWidgets('Chạm dòng đảo ↑↔↓ NGAY trong sheet nhưng danh sách CHƯA đổi cho tới khi OK', (tester) async {
-      await _pump(tester, data());
-      await openSort(tester);
-      await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.pumpAndSettle();
-      expect(showsArrow('sort_date_up'), isTrue);
-      expect(showsArrow('sort_date_down'), isFalse);
-      await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.pumpAndSettle();
-      expect(showsArrow('sort_date_down'), isTrue);
-      await tester.tap(find.byKey(const Key('sort_amount_row')));
-      await tester.pumpAndSettle();
-      expect(showsArrow('sort_amount_up'), isTrue);
-      expect(showsArrow('sort_amount_down'), isFalse);
-      expect(find.text('Ngày ↓ · Số tiền ↓'), findsOneWidget);
-      expect(ids(tester), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
-    });
-
-    Future<void> applyCombo(WidgetTester tester, {required bool dateUp, required bool amountUp}) async {
-      await openSort(tester);
-      if (showsArrow('sort_date_up') != dateUp) await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.pumpAndSettle();
-      if (showsArrow('sort_amount_up') != amountUp) await tester.tap(find.byKey(const Key('sort_amount_row')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('sort_ok')));
+    bool checked(WidgetTester tester, String key) => tester.widget<Checkbox>(find.byKey(Key(key))).value ?? false;
+    Future<void> tapK(WidgetTester tester, String key) async {
+      await tester.tap(find.byKey(Key(key)));
       await tester.pumpAndSettle();
     }
 
-    testWidgets('4 tổ hợp áp dụng bằng OK cho đúng thứ tự (A–D) và nhãn nút', (tester) async {
+    /// Kéo dòng Số tiền lên trên dòng Ngày bằng tay kéo.
+    Future<void> dragAmountAboveDate(WidgetTester tester) async {
+      final g = await tester.startGesture(tester.getCenter(find.byKey(const Key('sort_amount_drag'))));
+      await tester.pump(const Duration(milliseconds: 100));
+      await g.moveBy(const Offset(0, -120));
+      await tester.pump(const Duration(milliseconds: 100));
+      await g.up();
+      await tester.pumpAndSettle();
+    }
+
+    const dateDesc = ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800']; // tie-break cố định trong ngày
+    const amountDesc = ['d19-800', 'd20-600', 'd20-100', 'd19-50', 'd20-20'];
+
+    testWidgets('Mặc định CHỈ Ngày ↓; bảng có 2 dòng, mỗi dòng có ô chọn + tay kéo + ĐÚNG 1 mũi tên', (tester) async {
       await _pump(tester, data());
-      await applyCombo(tester, dateUp: false, amountUp: false);
-      expect(ids(tester), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']);
-      await applyCombo(tester, dateUp: false, amountUp: true);
-      expect(find.text('Ngày ↓ · Số tiền ↑'), findsOneWidget);
-      expect(ids(tester), ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800']);
-      await applyCombo(tester, dateUp: true, amountUp: false);
-      expect(find.text('Ngày ↑ · Số tiền ↓'), findsOneWidget);
-      expect(ids(tester), ['d19-800', 'd19-50', 'd20-600', 'd20-100', 'd20-20']);
-      await applyCombo(tester, dateUp: true, amountUp: true);
-      expect(find.text('Ngày ↑ · Số tiền ↑'), findsOneWidget);
-      expect(ids(tester), ['d19-50', 'd19-800', 'd20-20', 'd20-100', 'd20-600']);
+      expect(find.text('Ngày ↓'), findsOneWidget);
+      expect(find.textContaining('Số tiền ↓'), findsNothing);
+      expect(ids(tester), dateDesc);
+      await openSort(tester);
+      for (final k in ['date', 'amount']) {
+        expect(find.byKey(Key('sort_${k}_row')), findsOneWidget);
+        expect(find.byKey(Key('sort_${k}_check')), findsOneWidget);
+        expect(find.byKey(Key('sort_${k}_drag')), findsOneWidget);
+        expect(showsArrow('sort_${k}_up') != showsArrow('sort_${k}_down'), isTrue, reason: 'đúng 1 mũi tên');
+      }
+      expect(checked(tester, 'sort_date_check'), isTrue);
+      expect(checked(tester, 'sort_amount_check'), isFalse);
+      expect(find.byKey(const Key('sort_cancel')), findsOneWidget);
+      expect(find.byKey(const Key('sort_ok')), findsOneWidget);
     });
 
-    testWidgets('Hủy / Back bỏ thay đổi đang chờ; mở lại thấy cấu hình ĐÃ ÁP DỤNG (không reset); OK mới áp dụng', (tester) async {
+    testWidgets('Mọi thay đổi trong bảng chỉ là CHỜ: danh sách/nhãn chỉ đổi khi bấm OK', (tester) async {
       await _pump(tester, data());
-      await applyCombo(tester, dateUp: false, amountUp: true);
-      final applied = ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800'];
-      expect(ids(tester), applied);
-
       await openSort(tester);
-      await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.tap(find.byKey(const Key('sort_amount_row')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('sort_cancel')));
-      await tester.pumpAndSettle();
-      expect(ids(tester), applied);
-      expect(find.text('Ngày ↓ · Số tiền ↑'), findsOneWidget);
+      await tapK(tester, 'sort_date_toggle'); // Ngày ↑
+      await tapK(tester, 'sort_amount_check'); // bật Số tiền
+      expect(showsArrow('sort_date_up'), isTrue);
+      expect(checked(tester, 'sort_amount_check'), isTrue);
+      expect(find.text('Ngày ↓'), findsOneWidget, reason: 'nhãn nút chưa đổi');
+      expect(ids(tester), dateDesc, reason: 'danh sách chưa đổi');
 
-      await openSort(tester);
-      expect(showsArrow('sort_date_down'), isTrue);
-      expect(showsArrow('sort_amount_up'), isTrue);
-
-      await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute(); // Back hệ thống
-      await tester.pumpAndSettle();
-      expect(ids(tester), applied);
-      await openSort(tester);
-      expect(showsArrow('sort_date_down'), isTrue);
-      expect(showsArrow('sort_amount_up'), isTrue);
-
-      await tester.tap(find.byKey(const Key('sort_date_row')));
-      await tester.tap(find.byKey(const Key('sort_amount_row')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('sort_ok')));
-      await tester.pumpAndSettle();
-      // Từ (Ngày ↓, Số tiền ↑) đảo cả hai → (Ngày ↑, Số tiền ↓).
+      await tapK(tester, 'sort_ok');
+      expect(find.text('Ngày ↑ · Số tiền ↓'), findsOneWidget);
       expect(ids(tester), ['d19-800', 'd19-50', 'd20-600', 'd20-100', 'd20-20']);
+    });
+
+    testWidgets('Chỉ Số tiền: bỏ chọn Ngày → sắp xếp theo số tiền TOÀN CỤC; Ngày không là khóa ẩn', (tester) async {
+      await _pump(tester, data());
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await tapK(tester, 'sort_date_check');
+      expect(checked(tester, 'sort_date_check'), isFalse);
+      await tapK(tester, 'sort_ok');
+      expect(find.text('Số tiền ↓'), findsOneWidget);
+      expect(ids(tester), amountDesc);
+
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_toggle'); // ↑
+      await tapK(tester, 'sort_ok');
+      expect(find.text('Số tiền ↑'), findsOneWidget);
+      expect(ids(tester), amountDesc.reversed.toList());
+    });
+
+    testWidgets('Kéo Số tiền lên trên Ngày (cả hai bật) → ưu tiên đổi: nhãn "Số tiền ↓ · Ngày ↓" và thứ tự theo số tiền', (tester) async {
+      await _pump(tester, data());
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await dragAmountAboveDate(tester);
+      await tapK(tester, 'sort_ok');
+      expect(find.text('Số tiền ↓ · Ngày ↓'), findsOneWidget);
+      expect(ids(tester), amountDesc, reason: 'số tiền khác nhau → Ngày chỉ phụ');
+
+      // Mở lại: bảng hiện đúng cấu hình đã áp dụng (Số tiền ở trên Ngày).
+      await openSort(tester);
+      final amountTop = tester.getTopLeft(find.byKey(const Key('sort_amount_row'))).dy;
+      final dateTop = tester.getTopLeft(find.byKey(const Key('sort_date_row'))).dy;
+      expect(amountTop < dateTop, isTrue);
+    });
+
+    testWidgets('Không cho tắt khóa cuối cùng: hiện báo, khóa vẫn bật (cả khi chỉ còn Số tiền)', (tester) async {
+      await _pump(tester, data());
+      await openSort(tester);
+      await tapK(tester, 'sort_date_check'); // thử tắt khóa duy nhất
+      expect(checked(tester, 'sort_date_check'), isTrue);
+      expect(find.byKey(const Key('sort_min_notice')), findsOneWidget);
+
+      await tapK(tester, 'sort_amount_check');
+      await tapK(tester, 'sort_date_check'); // giờ tắt Ngày được
+      expect(checked(tester, 'sort_date_check'), isFalse);
+      expect(find.byKey(const Key('sort_min_notice')), findsNothing);
+      await tapK(tester, 'sort_amount_check'); // thử tắt Số tiền (khóa cuối)
+      expect(checked(tester, 'sort_amount_check'), isTrue);
+      expect(find.byKey(const Key('sort_min_notice')), findsOneWidget);
+    });
+
+    testWidgets('Hủy / vuốt đóng: bỏ MỌI thay đổi chờ; mở lại vẫn thấy cấu hình đã áp dụng', (tester) async {
+      await _pump(tester, data());
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await tapK(tester, 'sort_date_toggle');
+      await tapK(tester, 'sort_cancel');
+      expect(find.text('Ngày ↓'), findsOneWidget);
+      expect(ids(tester), dateDesc);
+
+      await openSort(tester);
+      expect(checked(tester, 'sort_date_check'), isTrue);
+      expect(checked(tester, 'sort_amount_check'), isFalse);
+      expect(showsArrow('sort_date_down'), isTrue);
+      await tapK(tester, 'sort_amount_check');
+      await tester.tapAt(const Offset(20, 20)); // chạm nền mờ = vuốt/đóng
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sort_ok')), findsNothing);
+      expect(find.text('Ngày ↓'), findsOneWidget);
+      expect(ids(tester), dateDesc);
+    });
+
+    testWidgets('Back hệ thống khi bảng mở: bỏ thay đổi chờ', (tester) async {
+      await _pump(tester, data());
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('sort_ok')), findsNothing);
+      expect(find.text('Ngày ↓'), findsOneWidget);
+      expect(ids(tester), dateDesc);
+    });
+
+    testWidgets('Cấu hình đã lưu bền (Số tiền ↑ → Ngày ↓) được nạp lại khi mở màn mới', (tester) async {
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            transactionsStreamProvider.overrideWith((ref) => Stream.value(data())),
+            categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
+            obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
+            savingsAssetTypesStreamProvider.overrideWith((ref) => Stream.value(DefaultSavingsAssetTypes.all)),
+            counterpartiesStreamProvider.overrideWith((ref) => Stream.value(const [])),
+            explorerSortProvider.overrideWith(
+              (ref) => ExplorerSortController(
+                initial: ExplorerSort.decode('amount:asc,date:desc'),
+              ),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Số tiền ↑ · Ngày ↓'), findsOneWidget);
+      expect(ids(tester), amountDesc.reversed.toList());
+    });
+
+    testWidgets('OK ghi cấu hình vào bộ lưu bền (explorerSortProvider)', (tester) async {
+      final saved = <ExplorerSort>[];
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            transactionsStreamProvider.overrideWith((ref) => Stream.value(data())),
+            categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
+            obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
+            savingsAssetTypesStreamProvider.overrideWith((ref) => Stream.value(DefaultSavingsAssetTypes.all)),
+            counterpartiesStreamProvider.overrideWith((ref) => Stream.value(const [])),
+            explorerSortProvider.overrideWith(
+              (ref) => ExplorerSortController(persist: (s) async => saved.add(s)),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await dragAmountAboveDate(tester);
+      await tapK(tester, 'sort_ok');
+      expect(saved.single.encode(), 'amount:desc,date:desc');
     });
 
     testWidgets('Màn hẹp: nhãn sắp xếp dài + "Xóa bộ lọc" cùng hiện KHÔNG làm tràn hàng', (tester) async {
       await _pump(tester, data());
-      await applyCombo(tester, dateUp: true, amountUp: false);
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await tapK(tester, 'sort_date_toggle');
+      await tapK(tester, 'sort_amount_toggle');
+      await tapK(tester, 'sort_ok');
       expect(find.byKey(const Key('summary_clear_filters')), findsOneWidget);
       tester.view.physicalSize = const Size(411, 3200); // Pixel 7a ≈ 411dp
       await tester.pumpAndSettle();
@@ -582,7 +676,11 @@ void main() {
     testWidgets('Sắp xếp không đổi số dòng/tổng Thu-Chi; sort còn nguyên sau khi đổi bộ lọc', (tester) async {
       await _pump(tester, data());
       final before = _header(tester);
-      await applyCombo(tester, dateUp: true, amountUp: true);
+      await openSort(tester);
+      await tapK(tester, 'sort_amount_check');
+      await tapK(tester, 'sort_date_toggle');
+      await tapK(tester, 'sort_amount_toggle');
+      await tapK(tester, 'sort_ok');
       expect(_header(tester), before, reason: 'chỉ đổi thứ tự, không đổi số dòng/tổng');
       await _tapKey(tester, 'summary_member_vo');
       expect(ids(tester), ['d19-50', 'd19-800', 'd20-20', 'd20-100', 'd20-600'], reason: 'sort giữ nguyên khi đổi bộ lọc');
@@ -799,8 +897,10 @@ void main() {
       _out('sinh_hoat', 30000, note: 'Cà phê', id: 'tx-b', date: DateTime(_today.year, _today.month, 5, 10)),
     ]);
     await _tapKey(tester, 'summary_sort_button');
-    await tester.tap(find.byKey(const Key('sort_date_row')));
-    await tester.tap(find.byKey(const Key('sort_amount_row')));
+    await tester.tap(find.byKey(const Key('sort_date_toggle')));
+    await tester.tap(find.byKey(const Key('sort_amount_check')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sort_amount_toggle')));
     await tester.tap(find.byKey(const Key('sort_ok')));
     await tester.pumpAndSettle();
     expect(find.text('Ngày ↑ · Số tiền ↑'), findsOneWidget);
@@ -833,7 +933,7 @@ void main() {
     await _pickCategories(tester, ['sinh_hoat', 'luong_gv']);
     expect(_header(tester), isNot(contains('1800 giao dịch')));
     await _tapKey(tester, 'summary_sort_button');
-    await tester.tap(find.byKey(const Key('sort_amount_row')));
+    await tester.tap(find.byKey(const Key('sort_amount_check')));
     await tester.tap(find.byKey(const Key('sort_ok')));
     await tester.pumpAndSettle();
 

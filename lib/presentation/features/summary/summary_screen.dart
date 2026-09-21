@@ -12,6 +12,7 @@ import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/explore_transactions.dart';
 import '../../../domain/usecases/time_selection.dart';
+import '../../providers/explorer_sort_provider.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
@@ -40,10 +41,9 @@ class SummaryScreen extends ConsumerStatefulWidget {
 class _SummaryScreenState extends ConsumerState<SummaryScreen> {
   final _searchController = TextEditingController();
   late TimeSelection _time = TimeSelection.month(DateTime.now());
-  late TransactionFilter _filter = const TransactionFilter().withRange(
-    _time.from,
-    _time.to,
-  );
+  late TransactionFilter _filter = const TransactionFilter()
+      .withRange(_time.from, _time.to)
+      .withSort(ref.read(explorerSortProvider));
   bool _showFilters = false;
 
   static final _hidden = AdvancedSystemCategories.ids;
@@ -68,6 +68,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
   void _clearAll() {
     _searchController.clear();
     final defaultTime = TimeSelection.month(DateTime.now());
+    ref.read(explorerSortProvider.notifier).select(ExplorerSort.defaultSort);
     setState(() {
       _time = defaultTime;
       _filter = const TransactionFilter().withRange(
@@ -328,9 +329,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     );
   }
 
-  static String _sortLabel(ExplorerSort sort) =>
-      'Ngày ${sort.dateAscending ? '↑' : '↓'} · '
-      'Số tiền ${sort.amountAscending ? '↑' : '↓'}';
+  static String _sortLabel(ExplorerSort sort) => [
+    for (final r in sort.rules) '${r.key.label} ${r.ascending ? '↑' : '↓'}',
+  ].join(' · ');
 
   /// Mở bảng Sắp xếp. Chỉ khi bấm OK (trả về cấu hình mới) mới áp dụng; Hủy / Back /
   /// vuốt đóng đều bỏ thay đổi đang chờ và giữ cấu hình đã áp dụng.
@@ -342,6 +343,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
       builder: (sheetContext) => _SortSheet(applied: _filter.sort),
     );
     if (result != null && mounted) {
+      ref.read(explorerSortProvider.notifier).select(result);
       setState(() => _filter = _filter.withSort(result));
     }
   }
@@ -900,9 +902,10 @@ class _MultiSelectSheetState extends State<_MultiSelectSheet> {
   }
 }
 
-/// Sắp xếp 2 tầng cố định: **Ngày** (ưu tiên 1) rồi **Số tiền** (ưu tiên 2, chỉ xếp
-/// trong cùng ngày). Mỗi dòng có ĐÚNG 1 mũi tên (↑ hoặc ↓); chạm dòng là đảo chiều
-/// ngay trong bảng nhưng danh sách chỉ đổi khi bấm OK.
+/// Bảng Sắp xếp kiểu Excel: 2 dòng (Ngày, Số tiền), mỗi dòng có ô bật/tắt, tay kéo
+/// đổi ưu tiên và ĐÚNG 1 mũi tên (↑/↓). Dòng trên = ưu tiên 1 (khi cả hai bật). Mọi
+/// thay đổi chỉ là CHỜ trong bảng; danh sách chỉ đổi khi bấm OK (Hủy / Back / vuốt
+/// đóng bỏ hết). Luôn phải còn ít nhất 1 khóa bật.
 class _SortSheet extends StatefulWidget {
   const _SortSheet({required this.applied});
 
@@ -913,38 +916,94 @@ class _SortSheet extends StatefulWidget {
   State<_SortSheet> createState() => _SortSheetState();
 }
 
-class _SortSheetState extends State<_SortSheet> {
-  late ExplorerSort _pending = widget.applied;
+class _SortRow {
+  _SortRow(this.key, {required this.enabled, required this.ascending});
 
-  Widget _row({
-    required String label,
-    required Key key,
-    required Key arrowKey,
-    required bool ascending,
-    required VoidCallback onToggle,
-  }) {
-    return InkWell(
-      key: key,
-      onTap: onToggle,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+  final SortKey key;
+  bool enabled;
+  bool ascending;
+}
+
+class _SortSheetState extends State<_SortSheet> {
+  late final List<_SortRow> _rows = _fromApplied(widget.applied);
+  bool _showMinNotice = false;
+
+  /// Khóa đang bật đứng trước theo đúng thứ tự ưu tiên; khóa tắt xuống dưới.
+  static List<_SortRow> _fromApplied(ExplorerSort applied) => [
+    for (final r in applied.rules)
+      _SortRow(r.key, enabled: true, ascending: r.ascending),
+    for (final k in SortKey.values)
+      if (!applied.uses(k)) _SortRow(k, enabled: false, ascending: false),
+  ];
+
+  ExplorerSort get _pending => ExplorerSort([
+    for (final r in _rows)
+      if (r.enabled) SortRule(r.key, ascending: r.ascending),
+  ]);
+
+  void _toggleEnabled(_SortRow row) {
+    setState(() {
+      if (row.enabled && _rows.where((r) => r.enabled).length == 1) {
+        _showMinNotice = true; // không cho tắt khóa cuối cùng
+        return;
+      }
+      _showMinNotice = false;
+      row.enabled = !row.enabled;
+    });
+  }
+
+  void _onReorder(int oldIndex, int newIndex) {
+    setState(() {
+      _rows.insert(newIndex, _rows.removeAt(oldIndex));
+    });
+  }
+
+  Widget _rowTile(int index, _SortRow row) {
+    final name = row.key.name;
+    final dim = row.enabled ? null : AppColors.textMuted;
+    return Padding(
+      key: Key('sort_${name}_row'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Row(
+        children: [
+          Checkbox(
+            key: Key('sort_${name}_check'),
+            value: row.enabled,
+            onChanged: (_) => _toggleEnabled(row),
+          ),
+          ReorderableDragStartListener(
+            index: index,
+            child: Padding(
+              key: Key('sort_${name}_drag'),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+              child: const Icon(
+                Icons.drag_handle_rounded,
+                color: AppColors.textMuted,
               ),
             ),
-            Icon(
-              ascending
+          ),
+          Expanded(
+            child: Text(
+              row.key.label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: dim,
+              ),
+            ),
+          ),
+          IconButton(
+            key: Key('sort_${name}_toggle'),
+            onPressed: () => setState(() => row.ascending = !row.ascending),
+            icon: Icon(
+              row.ascending
                   ? Icons.arrow_upward_rounded
                   : Icons.arrow_downward_rounded,
-              key: arrowKey,
-              color: AppColors.accent,
+              key: Key('sort_${name}_${row.ascending ? 'up' : 'down'}'),
+              color: row.enabled ? AppColors.accent : AppColors.textMuted,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -963,32 +1022,25 @@ class _SortSheetState extends State<_SortSheet> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
             ),
           ),
-          _row(
-            label: 'Ngày',
-            key: const Key('sort_date_row'),
-            arrowKey: Key(
-              _pending.dateAscending ? 'sort_date_up' : 'sort_date_down',
-            ),
-            ascending: _pending.dateAscending,
-            onToggle: () => setState(
-              () => _pending = _pending.copyWith(
-                dateAscending: !_pending.dateAscending,
+          ReorderableListView(
+            key: const Key('sort_reorder_list'),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            onReorderItem: _onReorder,
+            children: [
+              for (var i = 0; i < _rows.length; i++) _rowTile(i, _rows[i]),
+            ],
+          ),
+          if (_showMinNotice)
+            const Padding(
+              key: Key('sort_min_notice'),
+              padding: EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: Text(
+                'Cần giữ ít nhất một khóa sắp xếp.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.expenseAmount),
               ),
             ),
-          ),
-          _row(
-            label: 'Số tiền',
-            key: const Key('sort_amount_row'),
-            arrowKey: Key(
-              _pending.amountAscending ? 'sort_amount_up' : 'sort_amount_down',
-            ),
-            ascending: _pending.amountAscending,
-            onToggle: () => setState(
-              () => _pending = _pending.copyWith(
-                amountAscending: !_pending.amountAscending,
-              ),
-            ),
-          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
             child: Row(

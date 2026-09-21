@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'presentation/providers/explorer_sort_provider.dart';
 import 'presentation/providers/primary_fund_provider.dart';
 import 'presentation/widgets/tap_guard.dart';
 
@@ -32,6 +33,9 @@ Future<void> main() async {
       overrides: [
         primaryFundIdProvider.overrideWith(
           (ref) => createPersistentPrimaryFundController(prefs),
+        ),
+        explorerSortProvider.overrideWith(
+          (ref) => createPersistentExplorerSortController(prefs),
         ),
       ],
       child: const ViNhaMinhApp(),

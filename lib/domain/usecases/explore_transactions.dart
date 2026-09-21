@@ -43,34 +43,88 @@ MainGroup? mainGroupOf(
   }
 }
 
-/// Sắp xếp của Transaction Explorer — 2 TẦNG cố định, kiểu Excel:
-/// **ưu tiên 1 = Ngày** (theo ngày LỊCH), **ưu tiên 2 = Số tiền** (chỉ để xếp các
-/// giao dịch CÙNG ngày). Số tiền không bao giờ được xếp trước Ngày, không có tầng
-/// thứ 3, không đổi thứ tự ưu tiên.
-///
-/// Mặc định: Ngày ↓ (mới nhất trước), Số tiền ↓ (lớn trước trong từng ngày).
-class ExplorerSort {
-  const ExplorerSort({this.dateAscending = false, this.amountAscending = false});
+/// Khóa sắp xếp của Transaction Explorer (chỉ có 2).
+enum SortKey {
+  date('Ngày'),
+  amount('Số tiền');
 
-  final bool dateAscending;
-  final bool amountAscending;
+  const SortKey(this.label);
+  final String label;
+}
 
-  bool get isDefault => !dateAscending && !amountAscending;
+/// 1 điều kiện sắp xếp: khóa + đúng 1 chiều.
+class SortRule {
+  const SortRule(this.key, {this.ascending = false});
 
-  ExplorerSort copyWith({bool? dateAscending, bool? amountAscending}) =>
-      ExplorerSort(
-        dateAscending: dateAscending ?? this.dateAscending,
-        amountAscending: amountAscending ?? this.amountAscending,
-      );
+  final SortKey key;
+  final bool ascending;
+
+  SortRule flipped() => SortRule(key, ascending: !ascending);
 
   @override
   bool operator ==(Object other) =>
-      other is ExplorerSort &&
-      other.dateAscending == dateAscending &&
-      other.amountAscending == amountAscending;
+      other is SortRule && other.key == key && other.ascending == ascending;
 
   @override
-  int get hashCode => Object.hash(dateAscending, amountAscending);
+  int get hashCode => Object.hash(key, ascending);
+}
+
+/// Sắp xếp của Transaction Explorer, kiểu Excel "Sort by / Then by": danh sách
+/// [rules] theo THỨ TỰ ƯU TIÊN (phần tử đầu = ưu tiên 1). Người dùng chọn Ngày
+/// và/hoặc Số tiền — **luôn có ít nhất 1 khóa**, mỗi khóa tối đa 1 lần, mỗi khóa
+/// đúng 1 chiều (↑/↓). Khóa không bật KHÔNG được ngầm làm khóa phụ.
+///
+/// Khóa Ngày so theo NGÀY LỊCH (giờ trong ngày không lấn khóa sau). Khi mọi khóa
+/// bật đều bằng nhau dùng tie-break cố định, ẩn, xác định (giờ ↑, giờ tạo ↑, id).
+///
+/// Mặc định: chỉ Ngày ↓ (mới nhất trước).
+class ExplorerSort {
+  const ExplorerSort(this.rules);
+
+  /// Mặc định: chỉ Ngày ↓.
+  static const defaultSort = ExplorerSort([SortRule(SortKey.date)]);
+
+  final List<SortRule> rules;
+
+  bool get isDefault => this == defaultSort;
+
+  /// Có khóa [key] đang bật không.
+  bool uses(SortKey key) => rules.any((r) => r.key == key);
+
+  /// Chiều của khóa [key] nếu đang bật.
+  bool? ascendingOf(SortKey key) {
+    for (final r in rules) {
+      if (r.key == key) return r.ascending;
+    }
+    return null;
+  }
+
+  /// Dạng lưu bền: "date:desc,amount:asc" (theo thứ tự ưu tiên).
+  String encode() => [
+    for (final r in rules) '${r.key.name}:${r.ascending ? 'asc' : 'desc'}',
+  ].join(',');
+
+  /// Đọc lại [encode]. Sai định dạng / rỗng / trùng khóa → [defaultSort].
+  static ExplorerSort decode(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return defaultSort;
+    final rules = <SortRule>[];
+    for (final part in raw.split(',')) {
+      final kv = part.split(':');
+      if (kv.length != 2) return defaultSort;
+      final key = SortKey.values.where((k) => k.name == kv[0]).firstOrNull;
+      if (key == null || (kv[1] != 'asc' && kv[1] != 'desc')) return defaultSort;
+      if (rules.any((r) => r.key == key)) return defaultSort;
+      rules.add(SortRule(key, ascending: kv[1] == 'asc'));
+    }
+    return rules.isEmpty ? defaultSort : ExplorerSort(rules);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExplorerSort && encode() == other.encode();
+
+  @override
+  int get hashCode => encode().hashCode;
 }
 
 /// Bộ lọc của Transaction Explorer, kiểu Excel.
@@ -90,7 +144,7 @@ class TransactionFilter {
     this.statusIds = const {},
     this.includeNoStatus = false,
     this.query = '',
-    this.sort = const ExplorerSort(),
+    this.sort = ExplorerSort.defaultSort,
   });
 
   /// Khoảng ngày (bao gồm 2 đầu, so theo NGÀY). `null` = không giới hạn.
@@ -104,7 +158,7 @@ class TransactionFilter {
   final bool includeNoStatus;
   final String query;
 
-  /// Thứ tự sắp xếp 2 tầng (Ngày rồi Số tiền); mặc định Ngày ↓ · Số tiền ↓.
+  /// Sắp xếp (Ngày và/hoặc Số tiền, theo thứ tự ưu tiên); mặc định chỉ Ngày ↓.
   final ExplorerSort sort;
 
   static DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -258,10 +312,9 @@ ExplorerResult exploreTransactions(
   return ExplorerResult(rows: rows, inflow: inflow, outflow: outflow);
 }
 
-/// Sắp xếp 2 tầng: (1) NGÀY LỊCH theo chiều Ngày; (2) trong CÙNG ngày, Số tiền theo
-/// chiều Số tiền. Số tiền không bao giờ trộn lẫn các ngày. Khi Ngày và Số tiền
-/// đều bằng nhau dùng tie-break CỐ ĐỊNH (giờ trong ngày ↑, giờ tạo ↑, id) — không
-/// phụ thuộc chiều Ngày — nên cùng dữ liệu + cùng cấu hình luôn cho cùng thứ tự.
+/// Sắp xếp theo [ExplorerSort.rules] theo đúng thứ tự ưu tiên. Chỉ các khóa ĐANG BẬT
+/// tham gia; khi tất cả bằng nhau dùng tie-break cố định (giờ ↑, giờ tạo ↑, id),
+/// không phụ thuộc chiều Ngày/Số tiền nên kết quả luôn xác định.
 void _sortRows(List<Transaction> rows, ExplorerSort sort) {
   DateTime dayOf(Transaction t) => DateTime(
     t.transactionDate.year,
@@ -270,10 +323,13 @@ void _sortRows(List<Transaction> rows, ExplorerSort sort) {
   );
 
   rows.sort((a, b) {
-    final byDay = dayOf(a).compareTo(dayOf(b));
-    if (byDay != 0) return sort.dateAscending ? byDay : -byDay;
-    final byAmount = a.amountMinor.compareTo(b.amountMinor);
-    if (byAmount != 0) return sort.amountAscending ? byAmount : -byAmount;
+    for (final rule in sort.rules) {
+      final c = switch (rule.key) {
+        SortKey.date => dayOf(a).compareTo(dayOf(b)),
+        SortKey.amount => a.amountMinor.compareTo(b.amountMinor),
+      };
+      if (c != 0) return rule.ascending ? c : -c;
+    }
     final byTime = a.transactionDate.compareTo(b.transactionDate);
     if (byTime != 0) return byTime;
     final byCreated = a.createdAt.compareTo(b.createdAt);
