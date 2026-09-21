@@ -56,7 +56,7 @@ Danh sách hạng mục seed mặc định (Phase 1, đúng theo dropdown thật
 
 Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nhất cho mọi loại**: nếu `sourceKind ≠ EXTERNAL` thì trừ `amountMinor` khỏi pool nguồn; nếu `destinationKind ≠ EXTERNAL` thì cộng `amountMinor` vào pool đích. Không có nhánh if/else riêng theo category — xem code mẫu ở `docs/financial-core-v2.md` mục 6.
 
-**Trạng thái (`statuses`) là bảng con CRUD được, áp dụng cho mọi danh mục, không riêng Cho đi/Dâng hiến:** `families/{familyId}/categories/{categoryId}/statuses/{statusId}` gồm `name` (tự đặt) và `sortOrder` (tự sắp xếp) — thay cho mảng cứng `statuses: string[]` ở bản nháp đầu, để người dùng xem/thêm/sửa/xoá/sắp xếp từng bước qua UI (màn "Danh mục — Chỉnh sửa"). Giao dịch tham chiếu `statusId` (không phải chuỗi tự do), sửa được sau khi tạo (`statusUpdatedAt` ghi lại lần đổi gần nhất) — ví dụ Dâng hiến hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", không cố định lúc ghi.
+**Trạng thái (`statuses`) là bảng con CRUD được, áp dụng cho mọi danh mục, không riêng Cho đi/Dâng hiến:** `wallets/{walletId}/categories/{categoryId}/statuses/{statusId}` gồm `name` (tự đặt) và `sortOrder` (tự sắp xếp) — thay cho mảng cứng `statuses: string[]` ở bản nháp đầu, để người dùng xem/thêm/sửa/xoá/sắp xếp từng bước qua UI (màn "Danh mục — Chỉnh sửa"). Giao dịch tham chiếu `statusId` (không phải chuỗi tự do), sửa được sau khi tạo (`statusUpdatedAt` ghi lại lần đổi gần nhất) — ví dụ Dâng hiến hôm nay "Chưa chuẩn bị", mai đổi "Đã chuẩn bị", không cố định lúc ghi.
 
 **`statsEnabled` (bool) trên từng `category`:** bật/tắt việc danh mục đó có hiện ở màn Tổng hợp trạng thái hay không. Nhiều danh mục có `statuses` nhưng người dùng chỉ cần xem tổng hợp 1-2 lần/tháng cho một số danh mục nhất định (vd Cho đi, Dâng hiến) — tắt cho danh mục không cần theo dõi thường xuyên để đỡ rối màn Tổng hợp.
 
@@ -64,30 +64,37 @@ Cách 1 giao dịch ảnh hưởng số dư — **1 hàm Financial Engine duy nh
 
 **Tiết kiệm chia nhiều "loại tài sản" tự do, không cố định 2 loại (đã tổng quát hoá):** ban đầu chỉ tính tiền mặt/ngân hàng, nhưng thực tế có thể tiết kiệm dưới nhiều hình thức khác (chứng khoán, bất động sản, vàng...) — nên **loại tài sản tiết kiệm là dữ liệu gia đình tự tạo** (`SavingsAssetType`: id/tên/màu, giống hệt cách `Fund` là dữ liệu, chỉ khác là mỗi loại tách riêng CHO TỪNG thành viên). Seed sẵn 4 loại mặc định "Gửi ngân hàng"/"Vàng"/"Chứng khoán"/"Khác" (tiền mặt và tiền tài khoản ngân hàng dùng hằng ngày là tiền khả dụng, KHÔNG phải loại tiết kiệm), nhưng xoá/thêm được như bất kỳ dữ liệu nào khác qua màn "Tiết kiệm" (Cài đặt) — xoá được khi cả 2 thành viên đều về 0 ở loại đó. Xem `docs/financial-core-v2.md` mục 9.
 
-**Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `families/{familyId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn B bên dưới (làm cùng lúc với phần mời/tham gia thật), **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
+> **⚠️ KIẾN TRÚC TÀI KHOẢN/VÍ ĐÃ ĐƯỢC THAY THẾ (duyệt sau P1, 2026-09-21).** Nguồn duy nhất: `docs/account-wallet-security-foundation.md`.
+> Ánh xạ từ mô hình cũ (chỉ ghi ở đây để đọc lịch sử): `families/{familyId}` → **`wallets/{walletId}`**; `memberIds:[uid]` → **Membership** (`accountId` ↔ `memberId`, `accessRole` OWNER|MEMBER, `state`); `members/{uid}` → **`members/{memberId}`** (FinancialMember — danh tính tài chính ổn định, KHÔNG phải tài khoản); mọi `uid` chỉ người chịu tác động tài chính (`spenderUid`, `memberBalances/{memberId}`, `memberTotals`, ref `assetTypeId|uid`) → **`memberId`**; `createdBy` → **`createdByAccountId`** (tác nhân, metadata đồng bộ); `ownerUid` → **`wallet.ownerAccountId`** (nguồn sự thật Owner). **Email/uid KHÔNG phải danh tính tài chính.** Personal Free = ví cục bộ không đăng nhập; Firestore chỉ dùng cho Personal Pro/Family.
+> Các đoạn bên dưới giữ chữ cũ để đọc lịch sử, nhưng đã đổi tên trường theo ánh xạ trên.
+
+**Cá nhân hay Gia đình — không phải hai schema khác nhau, mà là cùng một mô hình.** "Cá nhân" thực chất là một `wallets/{walletId}` chỉ có 1 thành viên (`accountType: "personal"`); mời thêm người vào là chuyển tự nhiên sang gia đình, không cần màn hình "nâng cấp" riêng. **Vai trò (`roleLabel`) là chuỗi tự do do chính gia đình đặt** (Vợ/Chồng/Bố/Mẹ/Con/bất kỳ) — đúng nguyên tắc "dữ liệu, không hardcode" đã áp dụng cho hạng mục và trạng thái (xem `CLAUDE.md` mục 9); code Flutter hiện tại (Phase 1, dựng cho vợ chồng chủ dự án) đang dùng enum cứng `FamilyMember{vo, chong}` — việc thay bằng model vai trò tự do là một đợt refactor riêng, đã đưa vào Giai đoạn B bên dưới (làm cùng lúc với phần mời/tham gia thật), **chưa làm ngay** để tránh phá vỡ bản demo hiện tại.
 
 **Mời qua mã hoặc đường link:** mỗi lời mời có mã ngẫu nhiên 6-8 ký tự (đủ khó đoán để không ai lẻn vào gia đình người khác), **có hạn dùng** (mặc định 7 ngày) và giới hạn số lần dùng. Link mời dùng **Android App Links** — không dùng Firebase Dynamic Links vì Google đã thông báo ngừng dịch vụ này, thiết kế đúng từ đầu để khỏi phải làm lại.
 
 **Local-first: mặc định lưu trên máy, chỉ lên Firestore khi thật sự có người thứ 2 tham gia.** Firestore chỉ thật sự cần thiết để đồng bộ realtime giữa nhiều thiết bị — nếu chỉ 1 người dùng (kể cả đã chọn "Gia đình" lúc onboarding nhưng chưa mời ai), không có lý do gì phải trả phí/độ trễ mạng cho việc đó. Vì vậy:
 
 - Mọi tài khoản mới **luôn bắt đầu ở `syncMode: "local"`** — dữ liệu lưu bằng database cục bộ trên máy (SQLite/Hive qua `drift`/`hive`), không cần đăng nhập, không cần mạng, không đụng tới Firebase.
-- `families/{familyId}` trên Firestore **chỉ thật sự được tạo tại thời điểm lời mời đầu tiên được người khác chấp nhận.** Trước đó, "gia đình" chỉ tồn tại cục bộ trên máy người tạo.
+- `wallets/{walletId}` trên Firestore **chỉ thật sự được tạo tại thời điểm lời mời đầu tiên được người khác chấp nhận.** Trước đó, "gia đình" chỉ tồn tại cục bộ trên máy người tạo.
 - Khi người thứ 2 chấp nhận lời mời: toàn bộ dữ liệu local (giao dịch, Quỹ) được **migrate lên Firestore** đúng schema bên dưới, `syncMode` đổi thành `"cloud"`, và từ đó app dùng `FirestoreTransactionRepository` thay vì repository local — cả 2 máy đọc chung 1 nguồn.
 - `TransactionRepository`/`FundRepository` là interface trừu tượng (đã thiết kế theo Clean Architecture ngay từ đầu) nên việc có 2 cách triển khai song song (local/cloud) không phá vỡ `domain/` hay `presentation/` — chỉ đổi implementation nào được inject lúc runtime dựa vào `syncMode`.
 
 ```
-families/{familyId}
+wallets/{walletId}
   name, accountType ("personal" | "family"), syncMode ("local" | "cloud"),
-  ownerUid, createdAt, memberIds: [uid1, uid2, ...]
+  ownerAccountId (NGUỒN SỰ THẬT Owner), createdAt, systemCatalogVersion, entitlement (chỉ máy chủ ghi)
 
-families/{familyId}/members/{uid}
-  displayName, roleLabel (chuỗi tự do, gia đình tự đặt), joinedAt, isOwner, isActive (soft delete)
+wallets/{walletId}/members/{memberId}      // FinancialMember (danh tính tài chính ổn định)
+  label (Vợ/Chồng/tên tuỳ chọn), displayOrder, createdAt, linkedAccountId (nullable, chỉ máy chủ ghi)
 
-families/{familyId}/invites/{inviteId}
-  code (6-8 ký tự ngẫu nhiên), suggestedRoleLabel,
-  createdBy, createdAt, expiresAt, maxUses, usedCount
+wallets/{walletId}/memberships/{accountId}  // quyền truy cập (chỉ máy chủ ghi)
+  memberId, accessRole ("OWNER"|"MEMBER"), state ("INVITED"|"ACTIVE"|"REVOKED"), since, revokedAt?
 
-families/{familyId}/categories/{categoryId}
+wallets/{walletId}/invites/{inviteId}
+  memberId (slot đích ĐÃ TỒN TẠI), targetEmailNormalized, tokenHash (chỉ lưu băm, dùng 1 lần),
+  kind (INITIAL|REPLACEMENT), state (PENDING|ACCEPTED|CANCELLED|EXPIRED), createdBy, createdAt, expiresAt
+
+wallets/{walletId}/categories/{categoryId}
   name, color, type ("INCOME" | "EXPENSE" | "TRANSFER"),
   statsEnabled (bool, hien o Tong hop trang thai),
   excludeFromTotals (bool, bo qua khi tinh totalIncome/totalExpense o rollup, mac dinh false),
@@ -95,40 +102,40 @@ families/{familyId}/categories/{categoryId}
                             de tinh "Thu nhap rong" hien thi, khong doi Tong thu/Tong chi),
   isDefault, isActive (soft delete)
 
-families/{familyId}/categories/{categoryId}/statuses/{statusId}
+wallets/{walletId}/categories/{categoryId}/statuses/{statusId}
   name (tu dat), sortOrder (int), isActive (soft delete)
 
-families/{familyId}/funds/{fundId}
+wallets/{walletId}/funds/{fundId}
   name, color, isActive (soft delete),
   balance   // derived, cache boi Cloud Function
 
-families/{familyId}/savingsAssetTypes/{assetTypeId}
+wallets/{walletId}/savingsAssetTypes/{assetTypeId}
   name (tu dat, vd "Tien mat"/"Ngan hang"/"Chung khoan"...), color, isActive (soft delete)
   // Mo hinh Tiet kiem DUY NHAT (khong con 2 loai co dinh cash/bank) — xem
   // docs/financial-core-v2.md muc 9. Xoa duoc khi moi thanh vien deu ve 0 o loai do.
 
-families/{familyId}/transactions/{txId}
+wallets/{walletId}/transactions/{txId}
   type ("INCOME" | "EXPENSE" | "TRANSFER")
   transferKind (null tru khi type=TRANSFER: "MEMBER_TO_MEMBER" | "FUND_TOPUP" |
                 "FUND_WITHDRAW" | "SAVINGS_TOPUP" | "SAVINGS_WITHDRAW" | "SAVINGS_CONVERT")
   categoryId, statusId (FK, null neu danh muc khong co statuses), statusUpdatedAt,
   sourceKind / sourceRefId          ("MEMBER_AVAILABLE"|"MEMBER_SAVINGS_ASSET"|
-                                      "FUND"|"EXTERNAL", + uid / "assetTypeId|uid" / fundId)
+                                      "FUND"|"EXTERNAL", + memberId / "assetTypeId|memberId" / fundId)
   destinationKind / destinationRefId (cung enum voi sourceKind)
   amountMinor (int, luon duong), currency ("VND"),
-  note, transactionDate (ngay nghiep vu), spenderUid,
-  createdAt, createdBy, clientTxId (chong double-submit, UNIQUE per family — enforce
+  note, transactionDate (ngay nghiep vu), memberId (nguoi chiu tac dong tai chinh),
+  createdAt, createdByAccountId (tac nhan, metadata dong bo), clientTxId (chong double-submit, UNIQUE per family — enforce
                                      ca o tang local truoc khi co Firestore), version,
   reversalOfTxId / correctsTxId / reversedByTxId (null neu con hieu luc — xem Financial Engine)
 
-families/{familyId}/memberBalances/{uid}
+wallets/{walletId}/memberBalances/{memberId}
   availableBalance,               // Tien co the chi cua nguoi nay (khong duoc am)
   savingsByAssetType: { assetTypeId: amountMinor }
                                    // map dong theo tung SavingsAssetType gia dinh da tao
                                    // (KHONG con 2 field co dinh savingsCash/savingsBank);
                                    // moi gia tri trong map deu khong duoc am
 
-families/{familyId}/budgets/{yearMonth}
+wallets/{walletId}/budgets/{yearMonth}
   categoryLimits: { categoryId: amountMinor }   // chi cong don giao dich type=EXPENSE
 ```
 
@@ -156,24 +163,24 @@ Vì `Total External Expense` giờ không còn lẫn Tiết kiệm/Quỹ/chuyể
 Một collection `transactions` phẳng, cộng dồn mãi mãi, có hai vấn đề khi scale: (1) mỗi lần mở app phải nghe realtime toàn bộ lịch sử để tính lại số dư/báo cáo — càng dùng lâu càng chậm và càng tốn phí đọc; (2) không có ranh giới tự nhiên để phân trang theo tháng/năm như cách người dùng thực sự xem dữ liệu (sheet thật cũng tự chia theo "Tháng 1"…"Tháng 9"). Giải pháp:
 
 ```
-families/{familyId}/months/{yearMonth}              // yearMonth dạng "2026-09"
+wallets/{walletId}/months/{yearMonth}              // yearMonth dạng "2026-09"
   totalIncome,           // Sigma type=INCOME, bo qua category co excludeFromTotals=true (vd So du ban dau)
   totalExpense,          // Sigma type=EXPENSE (KHONG con lan Tiet kiem/Quy/chuyen khoan), cung bo qua excludeFromTotals
   totalTransfer,         // Sigma type=TRANSFER, chi de hien thi dong tien, khong cong vao Thu/Chi
   categoryTotals: { categoryId: amount },
-  memberTotals: { uid: { income, expense } },
+  memberTotals: { memberId: { income, expense } },
   statusTotals: { statusId: amount, ... }   // khoa theo statusId thuc te cua tung category, khong hardcode ten buoc
 
-families/{familyId}/months/{yearMonth}/transactions/{txId}
-  // giong het shape families/{familyId}/transactions/{txId} o tren, chi khac vi tri luu
+wallets/{walletId}/months/{yearMonth}/transactions/{txId}
+  // giong het shape wallets/{walletId}/transactions/{txId} o tren, chi khac vi tri luu
   // (phan trang theo thang de realtime listener luon nho, xem giai thich ben duoi)
 ```
 
 - **Realtime listener chỉ mở cho tháng đang xem** (`months/{currentYearMonth}/transactions`) — dữ liệu luôn nhỏ và nhanh dù sổ đã dùng 5 năm, vì tháng cũ không còn bị "nghe" nữa.
 - **`months/{yearMonth}` là document tổng hợp tính sẵn** (giống hệt các con số trong sheet Tổng hợp — Thu nhập, Sinh hoạt, Đầu tư... theo %, và khối Chưa chuẩn bị/Đã chuẩn bị/Đã dâng/Đã gửi), cập nhật bằng Cloud Function `onWrite` trên `transactions` dùng `FieldValue.increment()`. Mở màn hình Tổng hợp chỉ cần đọc **1 document** thay vì cộng hàng trăm/nghìn giao dịch ở client.
 - **Xem theo năm** = cộng 12 document `months/{yearMonth}` (12 lần đọc, rẻ) thay vì đọc lại toàn bộ giao dịch trong năm.
-- `memberBalances/{uid}` (số dư/tiết kiệm trọn đời) cũng được Cloud Function này cập nhật cùng lúc, cùng cơ chế increment.
-- Cấu trúc này scale tốt cho nhiều gia đình cùng lúc vì `familyId` đã là ranh giới tenant tự nhiên — chi phí/tốc độ của gia đình A không phụ thuộc gia đình B dùng bao lâu hay bao nhiêu dữ liệu.
+- `memberBalances/{memberId}` (số dư/tiết kiệm trọn đời) cũng được Cloud Function này cập nhật cùng lúc, cùng cơ chế increment.
+- Cấu trúc này scale tốt cho nhiều gia đình cùng lúc vì `walletId` đã là ranh giới tenant tự nhiên — chi phí/tốc độ của gia đình A không phụ thuộc gia đình B dùng bao lâu hay bao nhiêu dữ liệu.
 
 **Quỹ (envelope budgeting) — tạo được nhiều cái, không còn cố định 1 "Quỹ tiền ăn" duy nhất.** Gia đình tự đặt tên tuỳ ý (Quỹ tiền ăn, Quỹ sinh hoạt, quỹ du lịch...), không giới hạn số lượng. Quỹ là 1 "pool" tiền như bất kỳ pool nào khác (`sourceKind`/`destinationKind = FUND`) — **không có subcollection `entries` riêng nữa**: lịch sử 1 quỹ = truy vấn `transactions` where `sourceRefId = fundId OR destinationRefId = fundId` (xem index cần tạo ở `docs/financial-core-v2.md` mục 14).
 
@@ -199,8 +206,12 @@ Cả 3 đều **không đổi Tổng tài sản**, chỉ đổi chỗ tiền đa
 **Quy tắc bảo mật Firestore (rút gọn):**
 
 ```
-match /families/{familyId}/{document=**} {
-  allow read, write: if request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.memberIds;
+// Membership KHÔNG nằm trong custom claim: Rules đọc tài liệu Membership nên thu hồi/thay có hiệu lực ngay.
+match /wallets/{walletId}/{document=**} {
+  allow read:  if isActiveMember(walletId);
+  allow write: if isActiveMember(walletId) && validSession()   // sessionGen/deviceId khớp phiên máy chủ
+               && !touchesMembershipOrOwnerFields();            // members.linkedAccountId, memberships, invites,
+                                                                // ownerAccountId, entitlement: CHỈ Cloud Function
 }
 ```
 
@@ -266,8 +277,8 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 21. **`flutterfire configure` + `Firebase.initializeApp()` (chỉ init khi thật sự cần)** — Code: sinh `firebase_options.dart`, chỉ gọi init khi người dùng bấm "Mời người khác" lần đầu, không init ngay lúc mở app ở chế độ local. Chạy: bấm nút Mời. Test: Firebase khởi tạo đúng lúc cần, không tải SDK không cần thiết khi đang dùng local.
 22. **Bật Cloud Firestore (Native mode)** — thao tác Console. Chạy: mở tab Firestore. Test: database trống đã tồn tại, đúng khu vực.
 23. **Bật Firebase Authentication (Google Sign-In), kích hoạt khi cần mời** — Code: cấu hình OAuth client ID Android (SHA-1); màn hình đăng nhập (`docs/design.html` màn 02) chỉ hiện khi bấm "Mời người khác" hoặc "Chuyển sang Gia đình". Chạy: bấm Mời lần đầu trên máy thật. Test: được yêu cầu đăng nhập đúng lúc, `FirebaseAuth.instance.currentUser` đúng sau đó.
-24. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`uid`, `roleLabel` tự do), cập nhật use case tính `availableBalance`/`savingsCash`/`savingsBank` và picker "người nhận" ở luồng Chuyển tiền cho thành viên khác. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát.
-25. **Viết Security Rules bản đầu** (`families/{familyId}` chỉ `memberIds` đọc/ghi) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
+24. **Refactor `FamilyMember` → model vai trò tự do** — Code: thay enum cứng `{vo, chong}` bằng danh sách thành viên (`memberId` ổn định + `label` tự do; Wallet di sản giữ `vo`/`chong` làm memberId, Wallet mới dùng ID mờ), cập nhật use case tính `availableBalance`/`savingsCash`/`savingsBank` và picker "người nhận" ở luồng Chuyển tiền cho thành viên khác. Chạy: `flutter test`. Test: toàn bộ test cũ pass lại với model tổng quát.
+25. **Viết Security Rules bản đầu** (`wallets/{walletId}`: chỉ Membership ACTIVE + phiên hợp lệ đọc/ghi; membership/owner chỉ Cloud Function) — Code: `firestore.rules`. Chạy: `firebase deploy --only firestore:rules`. Test: deploy không lỗi cú pháp.
 26. **Test rule bằng Firebase Emulator Suite** — Code: test rule (`@firebase/rules-unit-testing`). Chạy: `firebase emulators:exec`. Test: tài khoản ngoài family bị chặn đọc/ghi — rủi ro nghiêm trọng nhất của app, không được bỏ qua.
 27. **Sinh mã mời có hạn dùng** — Code: `GenerateInvite` use case (mã ngẫu nhiên 6-8 ký tự, `expiresAt`, `maxUses`). Chạy: tạo thử 1 mã. Test: document `invites/{id}` đúng, mã không đoán được theo mẫu tuần tự.
 28. **Màn hình chia sẻ mã/link mời (Android App Links)** — Code: UI hiển thị mã + nút chia sẻ link (không dùng Firebase Dynamic Links vì đã bị ngừng hỗ trợ). Chạy: chia sẻ thử qua tin nhắn. Test: bấm link trên máy khác mở đúng màn hình tham gia.
@@ -281,11 +292,11 @@ Chỉ bắt đầu giai đoạn này khi thật sự cần chia sẻ sổ với 
 
 ### Giai đoạn C — Tài khoản riêng từng thành viên, Danh mục/Quỹ trên Cloud & Tiết kiệm (12 phase, đánh số 36-47)
 
-36. **Cloud Function `applyEffect` cập nhật `memberBalances`/`funds.balance`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()` theo đúng `sourceKind/RefId` và `destinationKind/RefId` của giao dịch (1 hàm chung cho cả Income/Expense/Transfer, xem `docs/financial-core-v2.md` mục 6). Chạy: `firebase deploy --only functions`, thêm giao dịch thử đủ 3 loại. Test: `memberBalances/{uid}` đúng sau Income/Expense/Transfer, không pool nào bị âm.
+36. **Cloud Function `applyEffect` cập nhật `memberBalances`/`funds.balance`** — Code: trigger `onWrite` trên `transactions`, dùng `FieldValue.increment()` theo đúng `sourceKind/RefId` và `destinationKind/RefId` của giao dịch (1 hàm chung cho cả Income/Expense/Transfer, xem `docs/financial-core-v2.md` mục 6). Chạy: `firebase deploy --only functions`, thêm giao dịch thử đủ 3 loại. Test: `memberBalances/{memberId}` đúng sau Income/Expense/Transfer, không pool nào bị âm.
 37. **Nối 2 thẻ thành viên đọc `memberBalances` thật** — Code: đổi nguồn dữ liệu Trang chủ. Chạy: `flutter run`. Test: số hiển thị khớp Cloud Function tính.
 38. **Unit test Cloud Function xử lý chuyển tiền cho thành viên khác** — Code: test bằng `firebase-functions-test`, dựa trên `sourceRefId`/`destinationRefId` tự do (không hardcode "Chồng đưa vợ"). Chạy: `npm test`. Test: chuyển giữa bất kỳ cặp thành viên nào đổi đúng dấu ở cả 2 phía, Tổng tài sản không đổi.
-39. **`FirestoreCategoryRepository` + `FirestoreStatusRepository`** — Code: implement, thay `LocalCategoryRepository`/`LocalStatusRepository` khi `syncMode: "cloud"`, ghi vào `families/{id}/categories` và `categories/{id}/statuses`. Chạy: thêm/sửa/xoá 1 danh mục trên máy A. Test: máy B thấy thay đổi realtime, đúng schema.
-40. **`FirestoreFundRepository`, hỗ trợ nhiều quỹ trên Cloud** — Code: implement, tạo/đọc `families/{id}/funds/{fundId}`. Chạy: tạo 2 quỹ. Test: document đúng path, không lẫn quỹ.
+39. **`FirestoreCategoryRepository` + `FirestoreStatusRepository`** — Code: implement, thay `LocalCategoryRepository`/`LocalStatusRepository` khi `syncMode: "cloud"`, ghi vào `wallets/{id}/categories` và `categories/{id}/statuses`. Chạy: thêm/sửa/xoá 1 danh mục trên máy A. Test: máy B thấy thay đổi realtime, đúng schema.
+40. **`FirestoreFundRepository`, hỗ trợ nhiều quỹ trên Cloud** — Code: implement, tạo/đọc `wallets/{id}/funds/{fundId}`. Chạy: tạo 2 quỹ. Test: document đúng path, không lẫn quỹ.
 41. **Giao dịch nguồn/đích là Quỹ trên Firestore + Cloud Function chặn quỹ âm phía server** — Code: Cloud Function kiểm tra lại `balance` quỹ (và `availableBalance` người mua) trong cùng 1 Firestore Transaction trước khi `applyEffect`, từ chối nếu sẽ làm bất kỳ pool nào âm — không chỉ tin validate ở client vì 2 máy có thể ghi đồng thời. Chạy: giả lập 2 giao dịch cùng lúc từ 2 máy làm quỹ âm. Test: 1 trong 2 bị từ chối đúng, không pool nào bao giờ âm.
 42. **Màn hình Danh sách Quỹ + Chi tiết quỹ với dữ liệu thật** — Code: `presentation/features/fund/`, hiển thị số dư + lịch sử (lọc `transactions` theo `sourceRefId`/`destinationRefId = fundId`) cho từng quỹ. Chạy: mở màn hình trên máy thật. Test: số dư = tổng nạp − tổng chi từ quỹ, khớp `computeFundBalance` đã unit test.
 43. **Form nạp tiền vào quỹ (Firestore thật)** — Code: UI tạo 1 giao dịch `TRANSFER(FUND_TOPUP)`: `source = MEMBER_AVAILABLE` → `destination = FUND`. Chạy: nạp thử 500.000đ. Test: số dư quỹ tăng đúng, số dư người nạp giảm đúng, Tổng tài sản không đổi.

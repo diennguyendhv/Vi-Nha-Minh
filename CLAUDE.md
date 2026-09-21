@@ -44,7 +44,7 @@ Logic nghiệp vụ (tính tổng theo hạng mục, kiểm tra vượt ngân s�
 
 ## 7. Bảo mật — luôn ghi nhớ
 
-Không bao giờ hardcode API key/secret trong code (dùng `.env` + `flutter_dotenv` hoặc Firebase config chuẩn, không commit file service account). Mọi thay đổi Firestore Security Rules phải giữ nguyên tắc: chỉ `memberIds` của một `family` mới đọc/ghi được dữ liệu family đó — xem chi tiết rule mẫu trong `spec.md` mục kiến trúc dữ liệu.
+Không bao giờ hardcode API key/secret trong code (dùng `.env` + `flutter_dotenv` hoặc Firebase config chuẩn, không commit file service account). Mọi thay đổi Firestore Security Rules phải giữ nguyên tắc: chỉ thành viên có Membership `ACTIVE` (kèm phiên thiết bị hợp lệ) của một `wallet` mới đọc/ghi được dữ liệu ví đó; các trường quyền (Owner, Membership, `linkedAccountId`, lời mời, gói) chỉ Cloud Function được ghi, client không bao giờ được tin — xem `docs/account-wallet-security-foundation.md` (kiến trúc Account/Wallet/FinancialMember/Membership đã duyệt; thay thế mô hình cũ `families/memberIds(uid)`).
 
 ## 8. Quốc tế hoá (i18n) & thương hiệu — bắt buộc thiết kế từ đầu, không phải tính sau
 
@@ -136,3 +136,14 @@ Hành động người dùng "Xóa giao dịch" xóa VẬT LÝ dòng + cả họ
 
 ## 19. Release gate — DEBUG REAL-DATA IMPORTER (bắt buộc trước MỌI bản phát hành Play)
 Đường nhập dữ liệu thật (`lib/data/import/*`, `debug_import_screen.dart` + dòng "Nhập dữ liệu 2026 (debug)" trong Cài đặt, chỉ hiện khi `kDebugMode`) **phải được gỡ hẳn hoặc vô hiệu hoá cứng trước khi phát hành lên Play Store**; bản release tuyệt đối không được lộ nó. File Excel thật, `import_plan.json`/`import_manifest.json`, database SQLite, CSV tài chính và các bản sao lưu **không bao giờ** được đóng gói vào APK/AAB, commit vào git, hay đưa vào bản build phát hành. Hiện CHƯA gỡ (giữ để tái lập/kiểm chứng) — chỉ ghi lại yêu cầu.
+
+Mã hoá DB cục bộ (SQLCipher hoặc tương đương + khoá bảo vệ bằng Android Keystore) là **BẮT BUỘC cho bản v1 sản xuất — trước mọi cloud/family pilot dùng dữ liệu thật hoặc phát hành Play.** Hiện CHƯA làm (sandbox Android + FBE + `allowBackup=false` là biện pháp tạm); phải có phase riêng audit di trú/hiệu năng/sao lưu. Đây là release gate ngang hàng với việc gỡ importer debug.
+
+## 20. Kiến trúc Account / Wallet / FinancialMember (ĐÃ DUYỆT — nguồn: `docs/account-wallet-security-foundation.md`)
+- **Wallet** là container dữ liệu tài chính; đúng 1 Owner + tối đa 1 Member (Family v1 ≤ 2 người). Personal và Family dùng CÙNG mô hình Wallet. Personal Free = ví cục bộ, KHÔNG cần đăng nhập; Account chỉ cần cho Personal Pro/Family.
+- **3 danh tính không bao giờ nhầm lẫn:** `walletId` (ví nào sở hữu bản ghi) · `memberId` (danh tính tài chính ổn định — lịch sử thuộc về nó) · `createdByAccountId` (tài khoản nào bấm lưu; metadata đồng bộ, không viết lại khi đổi tài khoản). **Email và uid KHÔNG phải danh tính tài chính.** Owner/Member là QUYỀN, Vợ/Chồng là NGƯỜI — không bao giờ mã hoá "Owner = Chồng".
+- **Ví hiện tại là Wallet cục bộ đầu tiên** (P2, schema v8): `wallet_meta` (singleton, `wallet_id` mờ) + `financial_member_rows` (`vo`/`chong` — chuỗi di sản đã nằm trong `*_ref_id`; Wallet MỚI dùng ID mờ, không được giả định `memberId == 'vo'|'chong'` ngoài lớp tương thích di sản `WalletMemberResolver`). Không dòng tài chính nào bị viết lại.
+- **Cách ly cục bộ đích:** 1 Wallet = 1 file SQLite (mô tả bằng `WalletDescriptor`); registry mỏng ở phase sau; UI v1 chỉ 1 ví hoạt động. File DB hiện tại KHÔNG được di chuyển.
+- Claim ví cục bộ sau này: hỏi rõ "Bạn là ai trong Ví hiện tại?" → gắn Owner Account vào `memberId` ĐÃ CÓ đã chọn; thành viên còn lại là slot Member chưa gắn; người được mời sau này gắn vào `memberId` ĐÃ CÓ, không bao giờ tạo FinancialMember mới. Không suy đoán ngầm.
+- Chỉ Owner quản trị membership (mời, huỷ mời, thay tài khoản Member, thu hồi ngay); Member không được thêm người/đổi Owner/đổi ràng buộc/tự nâng quyền — cưỡng chế phía máy chủ (`wallet.ownerAccountId` là nguồn sự thật Owner). Không hỗ trợ chuyển quyền Owner ở v1. Thu hồi chỉ chặn truy cập cloud tương lai, không xoá hồi tố dữ liệu đã lưu đệm offline.
+- 1 Account = 1 thiết bị hoạt động (phiên phía máy chủ). Quỹ chính (`primary_fund_id`) là **WALLET DATA** (hiện còn ở SharedPreferences, di trú sau); sắp xếp/lọc Explorer là DEVICE-ONLY. Không E2EE ở v1; không mô tả Firebase là E2EE. Auth: Google trước, lớp Auth độc lập nhà cung cấp; lời mời do backend tạo + gửi email (token băm, dùng 1 lần, có hạn).

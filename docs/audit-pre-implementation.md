@@ -1,5 +1,8 @@
 # Audit toàn bộ thiết kế & đặc tả — trước khi code Giai đoạn A trở đi
 
+> **⚠️ Cập nhật P2 (2026-09-21):** phần mô hình `FAMILY`/`MEMBER(uid)`/`familyId` trong tài liệu này đã bị THAY THẾ bởi kiến trúc Wallet/FinancialMember/Membership trong `docs/account-wallet-security-foundation.md`. Đọc `familyId` = `walletId`; `uid` của thành viên tài chính = `memberId` (danh tính tài chính ổn định); tài khoản đăng nhập là `accountId` (Membership riêng). Email/uid KHÔNG phải danh tính tài chính.
+
+
 **Ngày:** 2026-09-16 · **Phạm vi:** `spec.md`, `CLAUDE.md`, `docs/financial-core-v2.md`, `docs/design.html` (ERD + sơ đồ use case + 17 màn mockup + 3 tab "Tài liệu" nhúng), và toàn bộ `lib/` + `test/` hiện có (chỉ đọc để phát hiện xung đột, **không sửa code**).
 
 **Không có dòng code ứng dụng nào bị thay đổi trong audit này** — đây thuần là tài liệu đối chiếu. Mọi đề xuất bên dưới là việc cần làm ở bước tiếp theo (sửa tài liệu trước, sau đó mới chạm code nếu cần).

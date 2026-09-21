@@ -1,5 +1,8 @@
 # Financial Core V2 — Audit & Thiết kế lại
 
+> **⚠️ Cập nhật P2 (2026-09-21):** phần mô hình `FAMILY`/`MEMBER(uid)`/`familyId` trong tài liệu này đã bị THAY THẾ bởi kiến trúc Wallet/FinancialMember/Membership trong `docs/account-wallet-security-foundation.md`. Đọc `familyId` = `walletId`; `uid` của thành viên tài chính = `memberId` (danh tính tài chính ổn định); tài khoản đăng nhập là `accountId` (Membership riêng). Email/uid KHÔNG phải danh tính tài chính.
+
+
 > Phase 8.8 review (2026-09-18), atomic persistence invariant được duyệt:
 > một thao tác Tạo khoản vay phải commit Obligation metadata và opening
 > Transaction trong cùng SQLite transaction hoặc rollback cả hai. Counterparty
@@ -234,7 +237,7 @@ Cả 3 đều KHÔNG đổi Total Assets (tiền chỉ đổi pool, không rời
 
 ## 10. Member Model
 
-Không đổi so với V1 (uid, familyId, displayName, roleLabel tự do, isOwner). Bổ sung: khi 1 thành viên rời gia đình, **soft-delete** (`isActive=false`), không xoá cứng — transaction cũ vẫn cần hiển thị đúng tên người thực hiện. Đề xuất thêm `displayNameSnapshot` trên transaction (denormalize tên tại thời điểm ghi) để lịch sử không đổi ngay cả khi thành viên đổi tên hoặc rời đi sau này.
+ĐÃ THAY THẾ (P2): thành viên tài chính = `memberId` ổn định + `label`; quyền truy cập = Membership (`accountId`, OWNER|MEMBER, state) — xem `docs/account-wallet-security-foundation.md`. (Bản V1 cũ: uid, familyId, displayName, roleLabel tự do, isOwner.) Bổ sung: khi 1 thành viên rời gia đình, **soft-delete** (`isActive=false`), không xoá cứng — transaction cũ vẫn cần hiển thị đúng tên người thực hiện. Đề xuất thêm `displayNameSnapshot` trên transaction (denormalize tên tại thời điểm ghi) để lịch sử không đổi ngay cả khi thành viên đổi tên hoặc rời đi sau này.
 
 ---
 
@@ -296,8 +299,8 @@ BUDGET
 
 | Entity | Vai trò | Khoá | Soft delete | Ghi chú |
 |---|---|---|---|---|
-| `FAMILY` | Gia đình/sổ | familyId PK | không cần | không đổi so với V1 |
-| `MEMBER` | Thành viên | uid PK, familyId FK | `isActive` | thêm `isActive` |
+| `WALLET` (trước: FAMILY) | Ví chứa dữ liệu tài chính | walletId PK | không cần | thay `familyId` bằng `walletId` (P2) |
+| `FINANCIAL_MEMBER` (trước: MEMBER) | Danh tính tài chính ổn định | memberId PK, walletId FK | — | không bao giờ đổi/dùng lại `memberId`; tài khoản gắn qua Membership (P2) |
 | `INVITE` | Lời mời | inviteId PK, familyId FK | tự hết hạn | không đổi |
 | `CATEGORY` | Nhãn phân loại | categoryId PK, familyId FK | `isActive` | bỏ `isSaving`/`transferToUid`, thêm `type` (3 giá trị) |
 | `STATUS` | Bước tiến độ (con của Category) | statusId PK, categoryId FK | `isActive` | không đổi |

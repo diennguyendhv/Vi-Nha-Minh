@@ -1,5 +1,8 @@
 # Account / Wallet / Security Foundation — Audit & Kiến trúc (Phase P1)
 
+> **CẬP NHẬT SAU P1 (2026-09-21, P2):** chủ dự án đã DUYỆT P1 và chốt các quyết định mở (xem "Phụ lục C" cuối tài liệu).
+> Nếu một đoạn phía dưới còn ghi "OPEN"/"đề xuất" trái với Phụ lục C thì **Phụ lục C thắng**.
+
 > Trạng thái: **AUDIT + THIẾT KẾ — chưa triển khai gì.** Không đổi schema, không thêm Firebase, không chạm dữ liệu thật.
 > Tài liệu này KHÔNG chứa số liệu tài chính thật (số tiền, số dư, số giao dịch cụ thể). Mọi con số ở đây là số schema/số file trong mã nguồn.
 > Ngày audit: 2026-09-21. Mã nguồn tham chiếu: nhánh `master`, schema Drift **v7**.
@@ -203,6 +206,10 @@ Owner: **Huỷ lời mời** (Invite → `CANCELLED`, slot → `UNLINKED`) ⇒ n
 
 Trường hợp mất máy/tài khoản bị lộ. Owner xác nhận ⇒ Function `revokeMember` (Firestore transaction): Membership → `REVOKED`; slot → `UNLINKED`; mọi Invite PENDING của slot → `CANCELLED`; sau commit thu hồi refresh token. **`memberId` và lịch sử tài chính giữ nguyên.** Sau đó Owner có thể mời tài khoản mới vào **đúng slot đó**. Khác luồng thay thế ở chỗ: không đợi tài khoản mới, có khoảng slot `UNLINKED`.
 
+**Giới hạn của thu hồi (phải nói thật, không hứa điều không làm được):** thu hồi phía máy chủ chặn NGAY các truy cập/ghi **cloud** trong tương lai, nhưng **không thể xoá hồi tố dữ liệu văn bản thường đã được lưu đệm cục bộ trên thiết bị đang offline**. Vì vậy an toàn về sau dựa vào: khoá ứng dụng, mã hoá DB, sandbox Android, và kiểm tra phiên khi kết nối lại. Không được quảng cáo "xoá từ xa".
+
+**Nguồn sự thật duy nhất của Owner (cloud, tương lai):** `wallet.ownerAccountId` là **chuẩn** cho việc quản trị membership. Có thể có một dòng Membership `OWNER` để kiểm tra quyền đồng nhất, nhưng logic máy chủ **phải cưỡng chế nó khớp** `wallet.ownerAccountId`; không được có hai nguồn thẩm quyền Owner độc lập, mâu thuẫn.
+
 ## 14. Danh tính lịch sử: `createdByAccountId` (mục 13 đề bài)
 
 - Bản ghi giao dịch tương lai mang `walletId` (ngầm qua đường dẫn), `memberId`, `createdByAccountId`.
@@ -346,7 +353,7 @@ Ba khái niệm **khác nhau**, không được nhầm:
 | **SQLCipher** với **khoá DB ngẫu nhiên 256-bit được bọc bởi Keystore** | Chống chép file/backup/đọc offline | Dùng `sqlcipher_flutter_libs` thay `sqlite3_flutter_libs`; di trú DB thô → mã hoá (`sqlcipher_export`) cần sao lưu + kiểm tra; hiệu năng ~5–15% chậm hơn; kích thước app tăng |
 | Khoá DB suy ra từ PIN | Không cần Keystore | Đổi PIN phải mã hoá lại toàn bộ; PIN yếu ⇒ khoá yếu — **không khuyến nghị** |
 
-**Khuyến nghị:** *không* mã hoá DB trong P2–P5. Bật **sandbox + FBE + `allowBackup=false` + khoá ứng dụng + bản release không debuggable**. **Thiết kế trước** cơ chế khoá riêng theo ví (khoá DB độc lập với PIN) và **quyết định bật SQLCipher trước khi phát hành khôi phục cloud (P8)**. Trạng thái: **OPEN — cần chủ dự án duyệt.**
+**ĐÃ CHỐT:** mã hoá DB cục bộ **BẮT BUỘC cho v1 sản xuất, trước mọi cloud/family pilot thật hoặc phát hành Play** (nhiều khả năng SQLCipher hoặc tương đương + vật liệu khoá được bảo vệ bằng Android Keystore, khoá DB độc lập với PIN). **KHÔNG triển khai ở P2**; một phase riêng sẽ audit di trú/hiệu năng/sao lưu. Trong lúc chờ: sandbox + FBE + `allowBackup=false` + khoá ứng dụng + bản release không debuggable. Đã ghi thành release gate trong `CLAUDE.md`.
 
 ### 18.4 Mã hoá cloud (mục 42)
 | Lớp | Có sẵn? |
@@ -419,7 +426,7 @@ Dữ liệu cục bộ trên máy cũ **không bị xoá từ xa**; điều bị
 - **Khuyến nghị khởi điểm:** **Google Sign-In qua Firebase Auth** (người dùng Android, không lưu mật khẩu, email đã xác minh sẵn). Bổ sung **email-link** sau nếu cần (không bắt buộc v1). Email/mật khẩu **không khuyến nghị** (phải quản lý đặt lại mật khẩu, vét cạn). Trạng thái: **OPEN** (nhà cung cấp ban đầu).
 - **Lời mời phải hoạt động cả khi người được mời chưa có tài khoản:** lời mời gắn với **email chuẩn hoá** chứ không gắn `uid`. Khi họ đăng nhập lần đầu bằng email đó (đã xác minh), Function ghép Membership.
 - **Không tiết lộ email đã đăng ký hay chưa:** `createInvite` luôn trả cùng một phản hồi; không có endpoint "kiểm tra email tồn tại"; không hiện lỗi khác nhau.
-- **Cách gửi lời mời (OPEN):** v1 đề xuất Owner **chia sẻ liên kết/mã ngắn qua kênh của họ** (Zalo/tin nhắn), vì gửi email từ máy chủ cần thêm nhà cung cấp email. Liên kết dùng Android App Links (Dynamic Links đã ngừng).
+- **Cách gửi lời mời (ĐÃ CHỐT, thay đề xuất P1):** **backend đáng tin cậy tạo lời mời** (token mờ, chỉ lưu băm phía máy chủ, dùng một lần, gắn email đã xác minh, có hạn, thu hồi được) và **backend gửi email mời**. Nhà cung cấp email giao dịch **hoãn tới phase mời Family**; kiến trúc lõi KHÔNG được gắn chặt vào một nhà cung cấp. Liên kết dùng Android App Links (Dynamic Links đã ngừng).
 - Cảnh báo chuẩn hoá: **không** gộp dấu `.`/`+` của Gmail (dễ gây nhận nhầm); so khớp đúng địa chỉ đã xác minh, chữ thường.
 
 ## 23. Đồng bộ, ID, xoá, chỉnh sửa
@@ -436,8 +443,7 @@ Hiện tại "Xóa giao dịch" là **xoá vật lý**. Cloud cần biết dòng
 - **Khuyến nghị:** giữ nguyên ngữ nghĩa cục bộ "xóa hẳn"; ở tầng đồng bộ ghi **tombstone**: cloud giữ `{ id, deleted: true, deletedAt, rev }`; cục bộ, việc xoá sinh **một mục outbox `DELETE`** tồn tại độc lập với dòng đã xoá (outbox không phụ thuộc dòng gốc).
 - Thiết bị khác biết dòng đã xoá nhờ **feed thay đổi theo `rev` tăng đơn điệu của ví** (kèm tombstone).
 - **Khôi phục/thiết bị mới không "hồi sinh" dòng đã xoá:** khôi phục tải **ảnh chụp trạng thái hiện tại** (không gồm dòng đã xoá) + phần feed sau mốc; dòng đã xoá không nằm trong ảnh chụp.
-- **Thời hạn giữ tombstone:** đề xuất 90–180 ngày rồi **compaction**, ghi `minValidRev`; thiết bị có `lastSyncedRev < minValidRev` bắt buộc **đồng bộ lại toàn bộ** (sau xác nhận). Với phiên độc quyền, thiết bị cũ vốn không ghi được nên cửa sổ rủi ro nhỏ.
-- Mô hình xoá cloud chính xác: **OPEN — cần chủ dự án duyệt**.
+- **ĐÃ CHỐT (thay đề xuất 90–180 ngày của P1):** ngữ nghĩa cục bộ vẫn là "Xóa hẳn"; phía cloud/đồng bộ giữ **tombstone/sự kiện xoá tối thiểu**. **v1 KHÔNG tự động compaction tombstone.** Giữ đủ metadata chống hồi sinh: `objectId`, `walletId`, phiên bản/`rev` xoá, `deletedAt`, tác nhân nếu cần. **Compaction an toàn** chỉ được làm ở phase sau, khi mọi mốc đồng bộ (watermark) liên quan đã xác nhận xoá. Không có mã tombstone ở P2.
 
 ### 23.3 Chỉnh sửa (trạng thái hiện tại) + đồng bộ (mục 37)
 - Chỉnh sửa thường = đổi trạng thái hiện tại (đã chốt), không sinh lịch sử hiệu chỉnh tài chính ẩn.
@@ -455,7 +461,7 @@ Khôi phục ví Pro trên máy mới: đăng nhập ⇒ kích hoạt phiên (đ
 ### 24.1 Bảng phân loại
 | Cài đặt | Hiện ở đâu | Phạm vi khuyến nghị | Đồng bộ? |
 |---|---|---|---|
-| `primary_fund_id` (Quỹ chính Trang chủ) | SharedPreferences | **ACCOUNT × WALLET** (đi theo tài khoản khi khôi phục ở máy mới; mỗi người dùng có thể chọn khác nhau trong Family) | Có (nhỏ, trong hồ sơ tài khoản theo ví) |
+| `primary_fund_id` (Quỹ chính Trang chủ) | SharedPreferences (tạm thời) | **WALLET DATA** (ĐÃ CHỐT sau P1: là thuộc tính của trải nghiệm Ví chung; khôi phục/đồng bộ phải giữ) — hiện vẫn ở SharedPreferences, **di trú vào dữ liệu ví ở phase sau** | Có (cùng ví) |
 | `explorer_sort` (sắp xếp Tổng hợp) | SharedPreferences | **DEVICE** (ưu tiên hiển thị, giá trị thấp) | Không |
 | Bộ lọc Tổng hợp, tab hiện tại | Bộ nhớ | DEVICE (không lưu) | Không |
 | Thành viên đang chọn ở bộ lọc | Bộ nhớ | DEVICE (không lưu) | Không |
@@ -469,7 +475,7 @@ Khôi phục ví Pro trên máy mới: đăng nhập ⇒ kích hoạt phiên (đ
 Quy tắc: khoá SharedPreferences phải mang tiền tố phạm vi (`<accountId|LOCAL>.<walletId>.<key>`) từ P6 để tránh rò giữa tài khoản.
 
 ### 24.2 Mặc định quỹ chính khi khôi phục
-Người dùng khôi phục Personal Pro trên máy mới **nên thấy lại đúng Quỹ chính** ⇒ đó là lý do chọn ACCOUNT×WALLET chứ không phải DEVICE. **OPEN**: chủ dự án có thể muốn WALLET dùng chung cho cả hai người thay vì theo từng người.
+Người dùng khôi phục Personal Pro trên máy mới **phải thấy lại đúng Quỹ chính** ⇒ **ĐÃ CHỐT: WALLET DATA** (không phải ACCOUNT×WALLET như đề xuất P1). **Yêu cầu di trú tương lai:** chuyển `primary_fund_id` từ SharedPreferences vào dữ liệu của ví (bảng cài đặt ví hoặc cột trên `wallet_meta`) cùng lúc với phase đồng bộ; P2 KHÔNG di trú nó.
 
 ---
 
@@ -675,17 +681,17 @@ Ghi chú thứ tự: P3 (khoá ứng dụng) **độc lập với cloud** và n�
 | Family v1: cả hai thấy toàn Wallet | **LOCKED** | — | — | Số dư/báo cáo nhất quán | Đã khoá |
 | 1 Account = 1 thiết bị hoạt động | **LOCKED** | — | `sessionGen` + Rules | Yêu cầu sản phẩm | Đã khoá |
 | Personal & Family dùng chung mô hình Wallet | **LOCKED** | — | — | Tránh 2 hệ thống không tương thích | Đã khoá |
-| Personal Free có cần tài khoản không? | **OPEN** | A: cục bộ, không đăng nhập · B: bắt buộc đăng nhập | **A** (nâng cấp qua claim) | Dữ liệu thật đang dùng không đăng nhập; riêng tư; ít ma sát | **CÓ** |
-| 1 SQLite hay DB theo ví? | **OPEN** | A · B · C · D (lai) | **D: mỗi Wallet 1 file + registry mỏng** | Cách ly theo cấu trúc; giữ nguyên schema; không di chuyển dữ liệu thật; hỗ trợ ví chung | **CÓ** |
-| Mã hoá DB ở v1? | **OPEN** | Sandbox · SQLCipher (khoá Keystore) · khoá từ PIN | Không SQLCipher đến P7; **quyết trước P8**; khoá DB độc lập PIN | Cân bằng chi phí/lợi ích; tránh tăng rủi ro di trú sớm | **CÓ** |
-| Mô hình xoá/tombstone cloud chính xác | **OPEN** | Tombstone+rev · deletedAt cờ mềm · sự kiện xoá | Tombstone + feed `rev` + compaction 90–180 ngày | Không hồi sinh; giữ "xóa hẳn" cục bộ | **CÓ** |
-| Quỹ chính: thiết bị hay ví? | **OPEN** | DEVICE · ACCOUNT×WALLET · WALLET | ACCOUNT×WALLET | Đi theo người dùng khi khôi phục; khác nhau giữa hai người | **CÓ** |
-| Nhà cung cấp Auth ban đầu | **OPEN** | Google · email-link · email/mật khẩu | **Google Sign-In**, email-link sau | Không mật khẩu, email đã xác minh | **CÓ** |
-| Cách gửi lời mời (email từ máy chủ hay chia sẻ liên kết) | **OPEN** | Máy chủ gửi email · Owner chia sẻ liên kết/mã | Owner chia sẻ liên kết (App Link) + mã ngắn | Không cần nhà cung cấp email | **CÓ** |
-| Chuyển quyền Owner | **OPEN** | Không hỗ trợ v1 · có xác nhận | **Không hỗ trợ v1** | Giảm bề mặt tấn công | **CÓ** |
-| Nhiều ví trên 1 tài khoản (cấu trúc) | **OPEN** | Chỉ 1 ví · Cấu trúc nhiều ví, UI 1 ví | Cấu trúc nhiều ví, **UI 1 ví** | Không đóng cửa Personal+Family | **CÓ** |
-| E2EE | **OPEN** | Không · mã hoá trường `note` · E2EE đầy đủ | **Không E2EE v1**; nói đúng "mã hoá bởi nhà cung cấp" | E2EE phá Rules/đồng bộ/khôi phục | **CÓ** |
-| Cập nhật `spec.md`/`CLAUDE.md` mục 7 (mô hình `families/memberIds` cũ) | **OPEN** | Giữ · thay theo tài liệu này | Thay khi chủ dự án duyệt tài liệu này | Tránh mâu thuẫn kép | **CÓ** |
+| Personal Free có cần tài khoản không? | **LOCKED (duyệt sau P1)** | A: cục bộ, không đăng nhập | **A** — hoàn toàn cục bộ, không đăng nhập, không thanh toán; Pro sau này mới cần Account | Dữ liệu thật đang dùng không đăng nhập; riêng tư | Đã duyệt |
+| 1 SQLite hay DB theo ví? | **LOCKED (duyệt sau P1)** | D | **Mỗi Wallet 1 file SQLite; registry mỏng ở phase sau; UI v1 1 ví; P2 chỉ thêm trừu tượng `WalletDescriptor`, KHÔNG di chuyển DB** | Cách ly theo cấu trúc; giữ schema | Đã duyệt |
+| Mã hoá DB ở v1? | **LOCKED (duyệt sau P1)** | — | **BẮT BUỘC trước cloud/family pilot thật hoặc Play; không làm ở P2** (SQLCipher hoặc tương đương + Keystore) | Bảo vệ dữ liệu tiền thật lúc nghỉ | Đã duyệt |
+| Mô hình xoá/tombstone cloud chính xác | **LOCKED (duyệt sau P1)** | — | Tombstone/sự kiện xoá tối thiểu; **v1 không tự động compaction**; compaction an toàn sau, dựa trên watermark | Không hồi sinh dòng đã xoá | Đã duyệt |
+| Quỹ chính: thiết bị hay ví? | **LOCKED (duyệt sau P1)** | — | **WALLET DATA** (khác đề xuất ACCOUNT×WALLET của P1); chưa di trú ở P2 | Thuộc trải nghiệm Ví chung; khôi phục/đồng bộ phải giữ | Đã duyệt |
+| Nhà cung cấp Auth ban đầu | **LOCKED (duyệt sau P1)** | — | **Google Sign-In trước; lớp Auth độc lập nhà cung cấp; email-link thêm sau** | Không mật khẩu, email đã xác minh | Đã duyệt |
+| Cách gửi lời mời | **LOCKED (duyệt sau P1)** | — | **Backend tạo + backend gửi email**; nhà cung cấp email hoãn tới phase mời Family; không gắn lõi vào 1 vendor | Bảo mật token phía máy chủ | Đã duyệt |
+| Chuyển quyền Owner | **LOCKED (duyệt sau P1)** | — | **KHÔNG hỗ trợ ở Family v1** (không có UI/mutation MEMBER→OWNER); khôi phục Owner dựa vào khôi phục tài khoản của nhà cung cấp Auth | Giảm bề mặt tấn công | Đã duyệt |
+| Nhiều ví trên 1 tài khoản (cấu trúc) | **LOCKED (duyệt sau P1)** | — | Kiến trúc cho phép nhiều Wallet; **UI v1 chỉ 1 ví hoạt động**; không có UI chuyển ví ở P2 | Không đóng cửa tương lai | Đã duyệt |
+| E2EE | **LOCKED (duyệt sau P1)** | — | **Không E2EE ở v1.** Ngăn xếp: TLS + mã hoá lúc nghỉ của nhà cung cấp + Auth/Rules/server chặt + App Check + DB cục bộ mã hoá. Không được mô tả Firebase là E2EE | E2EE phá Rules/sync/khôi phục | Đã duyệt |
+| Cập nhật `spec.md`/`CLAUDE.md` §7 (mô hình `families/memberIds` cũ) | **DONE ở P2** | — | Đã thay bằng Account/Wallet/FinancialMember/Membership (xem Phụ lục C) | Tránh hai mô hình mâu thuẫn | Đã làm |
 
 ---
 
@@ -694,3 +700,20 @@ Ghi chú thứ tự: P3 (khoá ứng dụng) **độc lập với cloud** và n�
 
 ## Phụ lục B — Điều KHÔNG làm trong phase này
 Không thêm gói Firebase mới (các gói `firebase_*` đã có trong `pubspec.yaml` từ trước, chưa khởi tạo), không tạo dự án Firebase, không Auth, không đổi schema Drift, không di trú Pixel, không tải dữ liệu, không màn hình Account, không đổi ngữ nghĩa giao dịch.
+
+## Phụ lục C — Quyết định đã duyệt sau P1 & thay đổi thực hiện ở P2
+
+**Quyết định chốt (P2, 2026-09-21):** Personal Free hoàn toàn cục bộ, không đăng nhập; Personal Pro sau này: Account + sao lưu/đồng bộ/khôi phục + 1 Account 1 thiết bị; Family sau này: 1 Wallet, đúng 1 Owner, 0–1 Member, Owner mời bằng email, `memberId` ổn định sở hữu danh tính tài chính, thay tài khoản KHÔNG di trú lịch sử; 1 Wallet = 1 SQLite, registry mỏng ở phase sau, UI v1 1 ví; mã hoá DB bắt buộc trước cloud/pilot/Play (không ở P2); Quỹ chính = WALLET DATA; sắp xếp/lọc Explorer = DEVICE-ONLY; Auth = Google trước, độc lập nhà cung cấp; không chuyển quyền Owner ở v1; cả hai thấy toàn Wallet ở v1; không E2EE ở v1; tombstone tối thiểu không tự nén.
+
+**Quy tắc bổ sung:**
+- **Danh tính gắn tài khoản là chuyện của phase sau; Account ≠ FinancialMember.** P2 KHÔNG có Account/Auth/Owner/Invite/Firebase/sync/createdByAccountId.
+- **Không đoán "bạn là Vợ hay Chồng"** ở P2. Phase claim sẽ hỏi rõ "Bạn là ai trong Ví hiện tại?"; thành viên được chọn gắn vào Owner Account, thành viên còn lại là slot Member chưa gắn. Người được mời sau này gắn vào **`memberId` ĐÃ CÓ**, không tạo FinancialMember mới (nếu Owner claim `chong` rồi mời Vợ ⇒ gắn vào `vo`; ngược lại tương tự).
+- **Nguồn sự thật Owner:** `wallet.ownerAccountId` là chuẩn (xem §13).
+- **Giới hạn thu hồi:** chỉ chặn được truy cập cloud tương lai, không xoá hồi tố dữ liệu đã lưu đệm offline (xem §13).
+
+**Đã thực hiện ở P2 (schema v8, cộng thêm):**
+- `wallet_meta` — SINGLETON (khóa chính CHECK = 1): `wallet_id` mờ (UUID v4 sinh 1 lần), `kind = local`, `created_at`.
+- `financial_member_rows` — `member_id`, `label`, `display_order`, `created_at`; Wallet di sản: `vo`/"Vợ", `chong`/"Chồng" (giữ nguyên token đang nằm trong `*_ref_id`, nên **không viết lại dòng nào**).
+- **Chiến lược ID:** Wallet di sản dùng `vo`/`chong` vì ĐÚNG là chuỗi mà mã hiện tại còn ghi vào cột ref. Wallet/thành viên MỚI dùng ID mờ (`OpaqueId`). ID mờ chỉ nối vào ứng dụng ở phase "thành viên là dữ liệu" (khi enum `FamilyMember` được thay). Trước đó mọi DB (kể cả cài mới) dùng `vo`/`chong` để giữ tương thích; đó là quyết định tương thích di sản, **không** phải chiến lược ID chung.
+- **Lớp phân giải thành viên:** `WalletMemberResolver` ánh xạ `FamilyMember` ↔ `FinancialMember` (không đổi hành vi hiển thị).
+- **Descriptor ví:** `WalletDescriptor` + `AppDatabase(wallet: …)`; DB hiện tại = `WalletDescriptor.legacyLocal` (file `vi_nha_minh.sqlite`, KHÔNG di chuyển). Registry bền vững nhiều ví **hoãn** tới phase cách ly Account/Wallet, vì thêm ngay sẽ mở rộng phạm vi khởi động không cần thiết.

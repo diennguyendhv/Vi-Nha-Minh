@@ -1,5 +1,8 @@
 # FINAL DESIGN FREEZE
 
+> **⚠️ Cập nhật P2 (2026-09-21):** phần mô hình `FAMILY`/`MEMBER(uid)`/`familyId` trong tài liệu này đã bị THAY THẾ bởi kiến trúc Wallet/FinancialMember/Membership trong `docs/account-wallet-security-foundation.md`. Đọc `familyId` = `walletId`; `uid` của thành viên tài chính = `memberId` (danh tính tài chính ổn định); tài khoản đăng nhập là `accountId` (Membership riêng). Email/uid KHÔNG phải danh tính tài chính.
+
+
 Kiểm tra cuối cùng trước khi implementation. **Chưa code** — tài liệu này chỉ tổng hợp/đối chiếu lại nội dung đã có trong `docs/financial-core-v2.md`, `spec.md`, `CLAUDE.md`, `docs/design.html` thành 1 bản "đóng băng" tham chiếu nhanh cho phiên code tiếp theo.
 
 ---
@@ -54,8 +57,8 @@ Kiểm tra cuối cùng trước khi implementation. **Chưa code** — tài li�
 
 | Entity | Fields chính | PK | FK | Enum | Relationships | Nullable | Validation | Delete behavior |
 |---|---|---|---|---|---|---|---|---|
-| `FAMILY` | name, accountType, syncMode, ownerUid, createdAt, memberIds | familyId | — | accountType{personal,family}; syncMode{local,cloud} | 1—N mọi entity con | — | — | Không xoá |
-| `MEMBER` | displayName, roleLabel, joinedAt, isOwner, isActive | uid | familyId | — (Giai đoạn A: `FamilyMember{vo,chong}` cố định, cố ý chưa tổng quát) | N—N Transaction (source/destination) | roleLabel tự do | — | Soft delete (`isActive`) |
+| `WALLET` (trước: FAMILY) | kind (local/personal/family), syncMode, ownerAccountId (nguồn sự thật Owner), createdAt | familyId | — | accountType{personal,family}; syncMode{local,cloud} | 1—N mọi entity con | — | — | Không xoá |
+| `FINANCIAL_MEMBER` (trước: MEMBER) + `MEMBERSHIP` | label, displayOrder; Membership: accessRole OWNER/MEMBER, state, linkedAccountId | memberId (+ accountId) | familyId | — (Giai đoạn A: `FamilyMember{vo,chong}` cố định, cố ý chưa tổng quát) | N—N Transaction (source/destination) | roleLabel tự do | — | Soft delete (`isActive`) |
 | `INVITE` | code, suggestedRoleLabel, createdBy, createdAt, expiresAt, maxUses, usedCount | inviteId | familyId | — | — | — | code 6-8 ký tự ngẫu nhiên | Tự hết hạn |
 | `CATEGORY` | name, color, type, statsEnabled, excludeFromTotals, linkedExpenseCategoryId, isDefault, isActive | categoryId | familyId | type{INCOME,EXPENSE,TRANSFER} | 1—N Status; 1—N Transaction; self-ref qua linkedExpenseCategoryId | linkedExpenseCategoryId (chỉ hợp lệ khi type=INCOME) | type=TRANSFER bắt buộc isDefault=true | Soft delete (`isActive`), vẫn chọn được khi sửa giao dịch cũ tham chiếu nó |
 | `STATUS` | name, sortOrder, isActive | statusId | categoryId | — | N—1 Category; 1—N Transaction | — | Không giới hạn số bước | Soft delete |

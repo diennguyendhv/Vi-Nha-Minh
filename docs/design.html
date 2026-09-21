@@ -485,7 +485,8 @@ footer{padding:36px 0 60px;color:var(--ink-soft);font-size:.78rem;display:flex;j
 
 <div class="wrap">
 
-  <section class="hero" id="tong-quan">
+  <div style="background:#fff4d6;border:1px solid #e3b341;padding:10px 14px;margin:8px auto;max-width:1100px;font:13px/1.5 sans-serif;border-radius:8px"><b>Cập nhật P2 (2026-09-21):</b> các phần ERD/use case dùng <code>family</code>/<code>familyId</code>/<code>uid</code>/<code>memberIds</code>/<code>ownerUid</code> đã bị <b>thay thế</b> bởi kiến trúc Wallet / FinancialMember (<code>memberId</code>) / Membership (<code>accountId</code>) trong <code>docs/account-wallet-security-foundation.md</code>. Đọc <code>familyId</code> = <code>walletId</code>; <code>uid</code> của thành viên tài chính = <code>memberId</code>; email/uid KHÔNG phải danh tính tài chính.</div>
+<section class="hero" id="tong-quan">
     <div class="eyebrow">Đặc tả thiết kế · trước khi code Giai đoạn A</div>
     <h1>Bản vẽ Ví Nhà Mình</h1>
     <p class="lede">Ba phần cần chốt trước khi đặt bút viết code: sơ đồ use case cho toàn bộ tính năng, cơ sở dữ liệu Firestore trình bày theo kiểu quan hệ để dễ rà soát, và giao diện mô phỏng cho các màn hình chính. Dựa trên <code>spec.md</code> và <code>CLAUDE.md</code> hiện có trong repo — chưa có dòng code ứng dụng nào được viết dựa trên bản này.</p>

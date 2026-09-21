@@ -44,7 +44,7 @@ Logic nghiệp vụ (tính tổng theo hạng mục, kiểm tra vượt ngân s�
 
 ## 7. Bảo mật — luôn ghi nhớ
 
-Không bao giờ hardcode API key/secret trong code (dùng `.env` + `flutter_dotenv` hoặc Firebase config chuẩn, không commit file service account). Mọi thay đổi Firestore Security Rules phải giữ nguyên tắc: chỉ `memberIds` của một `family` mới đọc/ghi được dữ liệu family đó — xem chi tiết rule mẫu trong `spec.md` mục kiến trúc dữ liệu.
+Không bao giờ hardcode API key/secret trong code (dùng `.env` + `flutter_dotenv` hoặc Firebase config chuẩn, không commit file service account). Mọi thay đổi Firestore Security Rules phải giữ nguyên tắc: chỉ thành viên có Membership `ACTIVE` (kèm phiên thiết bị hợp lệ) của một `wallet` mới đọc/ghi được dữ liệu ví đó; các trường quyền (Owner, Membership, `linkedAccountId`, lời mời, gói) chỉ Cloud Function được ghi, client không bao giờ được tin — xem `docs/account-wallet-security-foundation.md` (kiến trúc Account/Wallet/FinancialMember/Membership đã duyệt; thay thế mô hình cũ `families/memberIds(uid)`).
 
 ## 8. Quốc tế hoá (i18n) & thương hiệu — bắt buộc thiết kế từ đầu, không phải tính sau
 
