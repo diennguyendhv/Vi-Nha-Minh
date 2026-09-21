@@ -1,11 +1,9 @@
-import 'family_member.dart';
-
 /// Mọi nơi giữ tiền trong hệ thống là một "pool", xác định bằng
 /// `(PoolKind, refId)` (`docs/financial-core-v2.md` mục 4). `external` là
 /// bên ngoài hệ thống (lương công ty, tiền trả người bán...) — `refId` luôn
 /// null khi `kind == external`.
 enum PoolKind {
-  /// refId = FamilyMember.name — tiền có thể chi của 1 thành viên.
+  /// refId = `memberId` của FinancialMember — tiền có thể chi của 1 thành viên.
   memberAvailable,
 
   /// 1 loại tài sản tiết kiệm CỦA 1 thành viên cụ thể (Gửi ngân hàng, Vàng,
@@ -42,21 +40,16 @@ enum PoolKind {
 /// Ghép `assetTypeId` + thành viên thành 1 khoá pool duy nhất — dùng cho
 /// `PoolKind.memberSavingsAsset.refId`. Ký tự `|` không xuất hiện trong id
 /// (id sinh bởi `IdGenerator`/enum name), an toàn để làm dấu phân cách.
-String savingsAssetRefId(String assetTypeId, FamilyMember member) {
-  return '$assetTypeId|${member.name}';
+String savingsAssetRefId(String assetTypeId, String memberId) {
+  return '$assetTypeId|$memberId';
 }
 
 /// Tách ngược `savingsAssetRefId` — trả về null nếu chuỗi không đúng định
 /// dạng (vd refId của 1 pool kind khác lỡ truyền nhầm vào).
-({String assetTypeId, FamilyMember member})? parseSavingsAssetRefId(
+({String assetTypeId, String memberId})? parseSavingsAssetRefId(
   String refId,
 ) {
   final parts = refId.split('|');
-  if (parts.length != 2) return null;
-  for (final m in FamilyMember.values) {
-    if (m.name == parts[1]) {
-      return (assetTypeId: parts[0], member: m);
-    }
-  }
-  return null;
+  if (parts.length != 2 || parts[0].isEmpty || parts[1].isEmpty) return null;
+  return (assetTypeId: parts[0], memberId: parts[1]);
 }

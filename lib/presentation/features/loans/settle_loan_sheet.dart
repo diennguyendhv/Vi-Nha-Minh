@@ -6,12 +6,13 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/engine/obligation_settlement.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/obligation_direction.dart';
 import '../../widgets/amount_input_formatter.dart';
 import '../../widgets/amount_preview.dart';
 import '../../widgets/sheet_error_banner.dart';
 import '../../widgets/tap_guard.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/obligation_providers.dart';
 import 'loan_error_mapping.dart';
 
@@ -26,7 +27,7 @@ Future<void> showSettleLoanSheet(
   required int outstandingBaseline,
   required String categoryId,
   required String interestCategoryId,
-  FamilyMember initialMember = FamilyMember.vo,
+  String? initialMemberId,
   String? correctingAnchorTransactionId,
   int? initialAmountMinor,
   DateTime? initialDate,
@@ -44,7 +45,7 @@ Future<void> showSettleLoanSheet(
       outstandingBaseline: outstandingBaseline,
       categoryId: categoryId,
       interestCategoryId: interestCategoryId,
-      initialMember: initialMember,
+      initialMemberId: initialMemberId,
       correctingAnchorTransactionId: correctingAnchorTransactionId,
       initialAmountMinor: initialAmountMinor,
       initialDate: initialDate,
@@ -61,7 +62,7 @@ class SettleLoanSheet extends ConsumerStatefulWidget {
     required this.outstandingBaseline,
     required this.categoryId,
     required this.interestCategoryId,
-    required this.initialMember,
+    this.initialMemberId,
     this.correctingAnchorTransactionId,
     this.initialAmountMinor,
     this.initialDate,
@@ -78,7 +79,9 @@ class SettleLoanSheet extends ConsumerStatefulWidget {
   final int outstandingBaseline;
   final String categoryId;
   final String interestCategoryId;
-  final FamilyMember initialMember;
+
+  /// `memberId` mở sẵn; không thuộc Wallet/null → thành viên mặc định.
+  final String? initialMemberId;
 
   /// Khác `null` khi đang SỬA (không phải tạo mới) — id 1 leg bất kỳ của
   /// lần tất toán đang sửa, truyền thẳng cho `correctObligationSettlement`.
@@ -98,7 +101,11 @@ class _SettleLoanSheetState extends ConsumerState<SettleLoanSheet> {
     text: widget.initialAmountMinor?.toString() ?? '',
   );
   late final _noteController = TextEditingController(text: widget.initialNote);
-  late FamilyMember _member = widget.initialMember;
+  late String? _memberSel = widget.initialMemberId;
+
+  MemberDirectory get _directory => ref.read(memberDirectoryProvider);
+
+  String get _member => _directory.resolveOrDefault(_memberSel) ?? '';
   late DateTime _date = widget.initialDate ?? DateTime.now();
   bool _submitting = false;
 
@@ -157,7 +164,7 @@ class _SettleLoanSheetState extends ConsumerState<SettleLoanSheet> {
         final command = SettleObligationCommand(
           obligationId: widget.obligationId,
           direction: widget.direction,
-          memberRefId: _member.name,
+          memberRefId: _member,
           amountMinor: _amount,
           transactionDate: _date,
           categoryId: widget.categoryId,
@@ -180,12 +187,14 @@ class _SettleLoanSheetState extends ConsumerState<SettleLoanSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Theo dõi để dựng lại khi danh sách thành viên tới (đọc qua `_directory`).
+    ref.watch(memberDirectoryProvider);
     final isReceivable = widget.direction == ObligationDirection.receivable;
     final legs = _amount > 0
         ? buildObligationSettlementLegs(
             direction: widget.direction,
             obligationId: widget.obligationId,
-            memberRefId: _member.name,
+            memberRefId: _member,
             outstanding: widget.outstandingBaseline,
             paymentAmount: _amount,
             categoryId: widget.categoryId,
@@ -312,21 +321,23 @@ class _SettleLoanSheetState extends ConsumerState<SettleLoanSheet> {
                         const SizedBox(height: 16),
                         _FieldLabel(isReceivable ? 'Người nhận' : 'Người trả'),
                         const SizedBox(height: 8),
-                        SegmentedButton<FamilyMember>(
-                          segments: FamilyMember.values
-                              .map(
-                                (m) => ButtonSegment(
-                                  value: m,
-                                  label: Text(m.label),
-                                ),
-                              )
-                              .toList(),
-                          selected: {_member},
-                          onSelectionChanged: (s) => setState(() {
-                            _member = s.first;
-                            _errorText = null;
-                          }),
-                        ),
+                        _directory.isEmpty
+                            ? const SizedBox.shrink()
+                            : SegmentedButton<String>(
+                                segments: _directory.members
+                                    .map(
+                                      (m) => ButtonSegment(
+                                        value: m.memberId,
+                                        label: Text(m.label),
+                                      ),
+                                    )
+                                    .toList(),
+                                selected: {_member},
+                                onSelectionChanged: (s) => setState(() {
+                                  _memberSel = s.first;
+                                  _errorText = null;
+                                }),
+                              ),
                         const SizedBox(height: 16),
                         _FieldLabel('Ngày'),
                         const SizedBox(height: 6),

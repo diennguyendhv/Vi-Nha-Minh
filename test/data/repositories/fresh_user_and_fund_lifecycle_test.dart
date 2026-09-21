@@ -9,7 +9,6 @@ import 'package:vi_nha_minh/data/repositories/local_fund_repository.dart';
 import 'package:vi_nha_minh/data/repositories/local_savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
@@ -75,7 +74,7 @@ void main() {
       categoryId: 'thu_test',
       sourceKind: PoolKind.external,
       destinationKind: PoolKind.memberAvailable,
-      destinationRefId: FamilyMember.vo.name,
+      destinationRefId: 'vo',
       amountMinor: amount,
       transactionDate: DateTime(2026, 9, 1),
       createdAt: DateTime(2026, 9, 1),
@@ -88,7 +87,7 @@ void main() {
       transferKind: TransferKind.fundTopup,
       categoryId: 'nap_quy',
       sourceKind: PoolKind.memberAvailable,
-      sourceRefId: FamilyMember.vo.name,
+      sourceRefId: 'vo',
       destinationKind: PoolKind.fund,
       destinationRefId: fund,
       amountMinor: amount,

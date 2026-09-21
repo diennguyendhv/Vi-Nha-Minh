@@ -1,5 +1,4 @@
 import '../engine/financial_engine.dart';
-import '../entities/family_member.dart';
 import '../entities/pool_kind.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
@@ -18,7 +17,7 @@ import 'compute_expense_breakdown.dart';
 /// của người đó, tránh phải thêm khái niệm "breakdown theo chiều" phức tạp
 /// hơn cho 1 category duy nhất.
 List<CategoryTotal> computeMemberOutflowBreakdown(
-  FamilyMember member,
+  String memberId,
   List<Transaction> transactions, {
   DateTime? month,
 }) {
@@ -30,7 +29,7 @@ List<CategoryTotal> computeMemberOutflowBreakdown(
         (t.transactionDate.year != month.year || t.transactionDate.month != month.month)) {
       continue;
     }
-    if (t.sourceKind != PoolKind.memberAvailable || t.sourceRefId != member.name) continue;
+    if (t.sourceKind != PoolKind.memberAvailable || t.sourceRefId != memberId) continue;
     totals.update(t.categoryId, (v) => v + t.amountMinor, ifAbsent: () => t.amountMinor);
   }
   final result =

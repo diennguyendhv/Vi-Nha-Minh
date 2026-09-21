@@ -7,7 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/counterparty.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/obligation.dart';
 import '../../../domain/entities/obligation_direction.dart';
 import '../../../domain/entities/pool_kind.dart';
@@ -17,6 +17,7 @@ import '../../widgets/amount_preview.dart';
 import '../../widgets/sheet_error_banner.dart';
 import '../../widgets/tap_guard.dart';
 import '../../providers/counterparty_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/obligation_providers.dart';
 import '../../providers/transaction_providers.dart';
 import 'loan_error_mapping.dart';
@@ -51,7 +52,12 @@ class _CreateLoanSheetState extends ConsumerState<CreateLoanSheet> {
   final _counterpartyController = TextEditingController();
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
-  FamilyMember _member = FamilyMember.vo;
+  String? _memberSel;
+
+  MemberDirectory get _directory => ref.read(memberDirectoryProvider);
+
+  /// Người đang chọn (mặc định = thành viên đầu tiên theo `displayOrder`).
+  String get _member => _directory.resolveOrDefault(_memberSel) ?? '';
   DateTime _date = DateUtils.dateOnly(DateTime.now());
   DateTime? _dueDate;
   bool _submitting = false;
@@ -158,11 +164,11 @@ class _CreateLoanSheetState extends ConsumerState<CreateLoanSheet> {
               sourceKind: _isReceivable
                   ? PoolKind.memberAvailable
                   : PoolKind.external,
-              sourceRefId: _isReceivable ? _member.name : null,
+              sourceRefId: _isReceivable ? _member : null,
               destinationKind: _isReceivable
                   ? PoolKind.receivable
                   : PoolKind.memberAvailable,
-              destinationRefId: _isReceivable ? obligation.id : _member.name,
+              destinationRefId: _isReceivable ? obligation.id : _member,
               amountMinor: amount,
               transactionDate: _date,
               note: _noteController.text.trim(),
@@ -191,6 +197,8 @@ class _CreateLoanSheetState extends ConsumerState<CreateLoanSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Theo dõi để dựng lại khi danh sách thành viên tới (đọc qua `_directory`).
+    ref.watch(memberDirectoryProvider);
     final counterpartiesAsync = ref.watch(counterpartiesStreamProvider);
     final counterparties = counterpartiesAsync.value ?? const <Counterparty>[];
     final suggestions = _counterpartyController.text.trim().isEmpty
@@ -373,23 +381,25 @@ class _CreateLoanSheetState extends ConsumerState<CreateLoanSheet> {
                               : 'Người nhận tiền',
                         ),
                         const SizedBox(height: 8),
-                        SegmentedButton<FamilyMember>(
-                          segments: FamilyMember.values
-                              .map(
-                                (m) => ButtonSegment(
-                                  value: m,
-                                  label: Text(m.label),
-                                ),
-                              )
-                              .toList(),
-                          selected: {_member},
-                          onSelectionChanged: _submitting
-                              ? null
-                              : (s) => setState(() {
-                                  _resetPending();
-                                  _member = s.first;
-                                }),
-                        ),
+                        _directory.isEmpty
+                            ? const SizedBox.shrink()
+                            : SegmentedButton<String>(
+                                segments: _directory.members
+                                    .map(
+                                      (m) => ButtonSegment(
+                                        value: m.memberId,
+                                        label: Text(m.label),
+                                      ),
+                                    )
+                                    .toList(),
+                                selected: {_member},
+                                onSelectionChanged: _submitting
+                                    ? null
+                                    : (s) => setState(() {
+                                        _resetPending();
+                                        _memberSel = s.first;
+                                      }),
+                              ),
                         const SizedBox(height: 16),
                         _FieldLabel('Ghi chú (không bắt buộc)'),
                         const SizedBox(height: 6),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -107,8 +106,8 @@ Transaction _move(int amount) {
   );
 }
 
-GroupedTotals _totals(List<Transaction> t, {DateTime? month, FamilyMember? member}) =>
-    computeGroupedTotals(t, _categories, month: month, member: member);
+GroupedTotals _totals(List<Transaction> t, {DateTime? month, String? member}) =>
+    computeGroupedTotals(t, _categories, month: month, memberId: member);
 
 void main() {
   test('1 — chỉ Doanh thu', () {
@@ -209,8 +208,8 @@ void main() {
       _out('sinh_hoat', 100000, from: 'vo'),
       _out('luong_gv', 900000, from: 'chong'),
     ];
-    final vo = _totals(all, member: FamilyMember.vo);
-    final chong = _totals(all, member: FamilyMember.chong);
+    final vo = _totals(all, member: 'vo');
+    final chong = _totals(all, member: 'chong');
     expect((vo.revenue, vo.spending, vo.businessExpense), (1000000, 100000, 0));
     expect((chong.revenue, chong.spending, chong.businessExpense), (4000000, 0, 900000));
     final family = _totals(all);

@@ -10,6 +10,7 @@ import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_list_screen.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
@@ -63,6 +64,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+        ...legacyMemberOverrides,
           transactionsStreamProvider.overrideWith((ref) => Stream.value(ledger)),
           categoriesStreamProvider.overrideWith((ref) => Stream.value(categories)),
         ],

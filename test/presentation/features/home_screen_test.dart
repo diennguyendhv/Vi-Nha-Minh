@@ -9,7 +9,6 @@ import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/core/utils/formatters.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/entities/obligation.dart';
@@ -35,10 +34,13 @@ import 'package:vi_nha_minh/presentation/providers/primary_fund_provider.dart';
 import 'package:vi_nha_minh/presentation/providers/app_state_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
+import 'package:vi_nha_minh/domain/entities/wallet_identity.dart';
+import 'package:vi_nha_minh/presentation/providers/member_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/feature_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 /// Widget test cho Trang chủ tối giản: vòng đời render, số hiển thị KHỚP đúng
 /// nguồn sự thật (Net Income / Chi tiêu gia đình / pool của Engine / quỹ tiền
@@ -269,7 +271,7 @@ List<Transaction> _sampleLedger() => [
     from: PoolKind.memberAvailable,
     fromRef: 'vo',
     to: PoolKind.memberSavingsAsset,
-    toRef: savingsAssetRefId(DefaultSavingsAssetTypes.all.first.id, FamilyMember.vo),
+    toRef: savingsAssetRefId(DefaultSavingsAssetTypes.all.first.id, 'vo'),
     amount: 2000000,
   ),
   _tx(
@@ -291,6 +293,7 @@ Future<void> _pumpHome(
   List<Fund>? funds,
   bool advancedFeatures = false,
   PrimaryFundController? primary,
+  List<FinancialMember>? members,
 }) async {
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -299,6 +302,10 @@ Future<void> _pumpHome(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (members == null)
+          ...legacyMemberOverrides
+        else
+          membersStreamProvider.overrideWith((ref) => Stream.value(members)),
         advancedFeaturesEnabledProvider.overrideWithValue(advancedFeatures),
         if (primary != null) primaryFundIdProvider.overrideWith((ref) => primary),
         transactionRepositoryProvider.overrideWithValue(fakeRepo),
@@ -377,7 +384,7 @@ void main() {
     expect(_text(tester, 'home_income_vo'), '4.000.000 đ');
     expect(_text(tester, 'home_income_chong'), '3.000.000 đ');
     expect(_text(tester, 'home_income_vo'),
-        Formatters.amount(computeMemberNetIncome(FamilyMember.vo, ledger, categories, month: month)));
+        Formatters.amount(computeMemberNetIncome('vo', ledger, categories, month: month)));
 
     // Số dư hiện tại = pool khả dụng của Engine: 5tr − 1tr (KD) − 2tr (gửi tiết kiệm) − 500k (nạp quỹ).
     expect(_text(tester, 'home_balance_vo'), '1.500.000 đ',
@@ -539,7 +546,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(SavingsScreen, skipOffstage: false), findsOneWidget, reason: 'không mở trùng ($m)');
         final screen = tester.widget<SavingsScreen>(find.byType(SavingsScreen));
-        expect(screen.initialMember?.name, m);
+        expect(screen.initialMemberId, m);
         expect(find.text('TIẾT KIỆM ${m == 'vo' ? 'VỢ' : 'CHỒNG'}'), findsOneWidget);
         // Màn Tiết kiệm luôn hiện TỔNG (gồm cả phần đã phân bổ), khác số "chưa phân bổ" trên Home.
         expect(
@@ -564,7 +571,7 @@ void main() {
           from: PoolKind.memberAvailable,
           fromRef: 'chong',
           to: PoolKind.memberSavingsAsset,
-          toRef: savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong),
+          toRef: savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'chong'),
           amount: 1000000,
         ),
       ]);
@@ -578,7 +585,7 @@ void main() {
       categoryId: DefaultCategories.thuNhap.id,
       from: PoolKind.external,
       to: PoolKind.memberSavingsAsset,
-      toRef: savingsAssetRefId(asset, FamilyMember.values.firstWhere((m) => m.name == member)),
+      toRef: savingsAssetRefId(asset, member),
       amount: amount,
     );
 
@@ -588,7 +595,7 @@ void main() {
         intoSavings('chong', DefaultSavingsAssetTypes.bankId, 70000000),
         intoSavings('vo', SystemSavingsAssets.unallocatedId, 4740000),
       ];
-      final assetsBefore = computeFinancialSummary(
+      final assetsBefore = computeFinancialSummary(members: legacyMembers, 
         ledger,
         categories: DefaultCategories.all,
         funds: const [],
@@ -612,7 +619,7 @@ void main() {
     testWidgets('Chưa phân bổ = 0, đã phân bổ > 0 → Home hiện 0; màn Tiết kiệm vẫn thấy khoản đã phân bổ; Tổng tài sản không đổi', (tester) async {
       final ledger = [intoSavings('chong', DefaultSavingsAssetTypes.bankId, 70000000)];
       expect(
-        computeFinancialSummary(
+        computeFinancialSummary(members: legacyMembers, 
           ledger,
           categories: DefaultCategories.all,
           funds: const [],
@@ -715,5 +722,49 @@ void main() {
     await pumpWith(tester, [old, _income(1000000, memberRefId: 'vo')]);
     expect(_text(tester, 'home_income_vo'), '1.000.000 đ');
     expect(_text(tester, 'home_balance_vo'), '8.000.000 đ');
+  });
+
+  group('P4 — thành viên là dữ liệu (ID mờ)', () {
+    const idWife = '5b0f6c1e-2a34-4c5d-8e7f-1a2b3c4d5e6f';
+    const idHusband = '9d8c7b6a-5f4e-4d3c-a2b1-0f9e8d7c6b5a';
+    final opaque = [
+      const FinancialMember(memberId: idWife, label: 'Vợ', displayOrder: 0),
+      const FinancialMember(memberId: idHusband, label: 'Chồng', displayOrder: 1),
+    ];
+
+    testWidgets('thành viên ID mờ nhãn "Vợ"/"Chồng": Home hiện đúng nhãn + số, KHÔNG cần memberId == "vo"', (tester) async {
+      await _pumpHome(tester, fakeRepo: fakeRepo, members: opaque);
+      fakeRepo.emit([
+        _income(5000000, memberRefId: idWife),
+        _income(3000000, memberRefId: idHusband),
+        _expense(1000000, category: DefaultCategories.chiPhiKinhDoanh.id, member: idWife),
+        _expense(300000, category: DefaultCategories.sinhHoat.id, member: idHusband),
+      ]);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('home_member_$idWife')), findsOneWidget);
+      expect(find.byKey(const Key('home_member_$idHusband')), findsOneWidget);
+      expect(find.byKey(const Key('home_member_vo')), findsNothing);
+      expect(find.text('VỢ'), findsOneWidget);
+      expect(find.text('CHỒNG'), findsOneWidget);
+      // Thu nhập ròng Vợ = 5tr − 1tr (chi phí KD); số dư Vợ = 4tr; Chồng thu 3tr, số dư 2,7tr.
+      expect(_text(tester, 'home_income_$idWife'), Formatters.amount(4000000));
+      expect(_text(tester, 'home_balance_$idWife'), Formatters.amount(4000000));
+      expect(_text(tester, 'home_income_$idHusband'), Formatters.amount(3000000));
+      expect(_text(tester, 'home_balance_$idHusband'), Formatters.amount(2700000));
+    });
+
+    testWidgets('thứ tự thẻ theo displayOrder của dữ liệu (đảo thứ tự → Chồng lên trước)', (tester) async {
+      final swapped = [
+        const FinancialMember(memberId: idHusband, label: 'Chồng', displayOrder: 0),
+        const FinancialMember(memberId: idWife, label: 'Vợ', displayOrder: 1),
+      ];
+      await _pumpHome(tester, fakeRepo: fakeRepo, members: swapped);
+      fakeRepo.emit(const []);
+      await tester.pumpAndSettle();
+      final husbandY = tester.getTopLeft(find.byKey(const Key('home_member_$idHusband'))).dy;
+      final wifeY = tester.getTopLeft(find.byKey(const Key('home_member_$idWife'))).dy;
+      expect(husbandY, lessThan(wifeY));
+    });
   });
 }

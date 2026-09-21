@@ -101,7 +101,7 @@ void validateSavingsMembers(Transaction tx) {
 
   String? savingsMember(PoolKind k, String? ref) {
     if (k != PoolKind.memberSavingsAsset || ref == null) return null;
-    return parseSavingsAssetRefId(ref)?.member.name;
+    return parseSavingsAssetRefId(ref)?.memberId;
   }
 
   String? availableMember(PoolKind k, String? ref) =>

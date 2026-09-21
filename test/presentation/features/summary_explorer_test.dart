@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
@@ -15,6 +14,8 @@ import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/presentation/features/summary/summary_screen.dart';
 import 'package:vi_nha_minh/presentation/features/transactions/transaction_detail_screen.dart';
+import 'package:vi_nha_minh/domain/entities/wallet_identity.dart';
+import 'package:vi_nha_minh/presentation/providers/member_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/counterparty_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/explorer_sort_provider.dart';
@@ -22,6 +23,7 @@ import 'package:vi_nha_minh/domain/usecases/explore_transactions.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 const _chua = Status(id: 'st_chua', categoryId: 'cho_di', name: 'CCB', sortOrder: 0);
 const _gui = Status(id: 'st_gui', categoryId: 'cho_di', name: 'ĐG', sortOrder: 1);
@@ -120,7 +122,7 @@ Transaction _move(String cat, int amount, {String from = 'vo', String to = 'chon
   );
 }
 
-Future<void> _pump(WidgetTester tester, List<Transaction> ledger) async {
+Future<void> _pump(WidgetTester tester, List<Transaction> ledger, {List<FinancialMember>? members}) async {
   tester.view.physicalSize = const Size(1080, 3200);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
@@ -128,6 +130,10 @@ Future<void> _pump(WidgetTester tester, List<Transaction> ledger) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (members == null)
+          ...legacyMemberOverrides
+        else
+          membersStreamProvider.overrideWith((ref) => Stream.value(members)),
         transactionsStreamProvider.overrideWith((ref) => Stream.value(ledger)),
         categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
         obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
@@ -355,6 +361,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+        ...legacyMemberOverrides,
           transactionsStreamProvider.overrideWith((ref) => Stream.value([_out('cu_co_gd', 5000, note: 'cũ')])),
           categoriesStreamProvider.overrideWith((ref) => Stream.value(cats)),
           obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
@@ -606,6 +613,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+        ...legacyMemberOverrides,
             transactionsStreamProvider.overrideWith((ref) => Stream.value(data())),
             categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
             obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
@@ -634,6 +642,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+        ...legacyMemberOverrides,
             transactionsStreamProvider.overrideWith((ref) => Stream.value(data())),
             categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
             obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
@@ -702,6 +711,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+        ...legacyMemberOverrides,
           transactionsStreamProvider.overrideWith((ref) => controller.stream),
           categoriesStreamProvider.overrideWith((ref) => Stream.value(_cats)),
           obligationsStreamProvider.overrideWith((ref) => Stream.value(const [])),
@@ -814,11 +824,11 @@ void main() {
     await _pump(tester, [
       ...base,
       sv(TransferKind.savingsTopup, PoolKind.memberAvailable, 'chong', PoolKind.memberSavingsAsset,
-          savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong), 111000),
-      sv(TransferKind.savingsWithdraw, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', FamilyMember.vo),
+          savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'chong'), 111000),
+      sv(TransferKind.savingsWithdraw, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', 'vo'),
           PoolKind.memberAvailable, 'vo', 222000),
-      sv(TransferKind.savingsConvert, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', FamilyMember.vo),
-          PoolKind.memberSavingsAsset, savingsAssetRefId('savings_bank', FamilyMember.vo), 333000),
+      sv(TransferKind.savingsConvert, PoolKind.memberSavingsAsset, savingsAssetRefId('savings_gold', 'vo'),
+          PoolKind.memberSavingsAsset, savingsAssetRefId('savings_bank', 'vo'), 333000),
     ]);
     expect(find.text('Chồng · Thêm vào tiết kiệm'), findsOneWidget);
     expect(find.text('Vợ · Rút từ tiết kiệm · Vàng'), findsOneWidget);
@@ -838,7 +848,7 @@ void main() {
       sourceKind: PoolKind.memberAvailable,
       sourceRefId: m,
       destinationKind: PoolKind.memberSavingsAsset,
-      destinationRefId: savingsAssetRefId(SystemSavingsAssets.unallocatedId, m == 'vo' ? FamilyMember.vo : FamilyMember.chong),
+      destinationRefId: savingsAssetRefId(SystemSavingsAssets.unallocatedId, m == 'vo' ? 'vo' : 'chong'),
       amountMinor: m == 'vo' ? 123000 : 456000,
       transactionDate: _today,
       createdAt: _today,
@@ -952,5 +962,28 @@ void main() {
     // ListView lười: số dòng đang dựng ≪ 1800.
     expect(_rowCount(tester), lessThan(200));
     expect(sw.elapsedMilliseconds, lessThan(20000));
+  });
+
+  testWidgets('P4 — thẻ Thu nhập ròng + chip lọc sinh từ DỮ LIỆU thành viên (ID mờ, nhãn Vợ/Chồng)', (tester) async {
+    const idWife = '5b0f6c1e-2a34-4c5d-8e7f-1a2b3c4d5e6f';
+    const idHusband = '9d8c7b6a-5f4e-4d3c-a2b1-0f9e8d7c6b5a';
+    final ledger = [
+      _in('thu_nhap', 6000000, to: idWife, note: 'HP wife'),
+      _in('thu_nhap', 5000000, to: idHusband, note: 'HP husband'),
+    ];
+    await _pump(tester, ledger, members: const [
+      FinancialMember(memberId: idWife, label: 'Vợ', displayOrder: 0),
+      FinancialMember(memberId: idHusband, label: 'Chồng', displayOrder: 1),
+    ]);
+    expect(_valueText(tester, 'summary_net_$idWife', '').data, '6.000.000 đ');
+    expect(_valueText(tester, 'summary_net_$idHusband', '').data, '5.000.000 đ');
+    expect(find.byKey(const Key('summary_net_vo')), findsNothing);
+
+    await _tapKey(tester, 'summary_member_$idHusband');
+    expect(find.text('HP husband'), findsOneWidget);
+    expect(find.text('HP wife'), findsNothing);
+    await _tapKey(tester, 'summary_member_$idWife');
+    expect(find.text('HP wife'), findsOneWidget);
+    expect(find.text('HP husband'), findsNothing);
   });
 }

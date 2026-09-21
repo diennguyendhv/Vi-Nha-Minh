@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/obligation.dart';
 import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
@@ -12,6 +11,7 @@ import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
+import '../support/legacy_members.dart';
 
 /// Test cho Phase 8 — Dashboard/Financial Summary read model. Dùng chung
 /// bộ builder transaction thuần Dart (không Drift/Flutter widget) đúng
@@ -80,7 +80,7 @@ void main() {
     List<Obligation> obligations = const [],
     DateTime? month,
   }) {
-    return computeFinancialSummary(
+    return computeFinancialSummary(members: legacyMembers, 
       txs,
       categories: categories,
       funds: funds,
@@ -100,7 +100,7 @@ void main() {
         amountMinor: 1000000,
       );
       final s = summarize([t]);
-      expect(s.availableByMember[FamilyMember.vo], 1000000);
+      expect(s.availableByMember['vo'], 1000000);
       expect(s.totalAvailable, 1000000);
       expect(s.totalAssets, 1000000);
     });
@@ -121,7 +121,7 @@ void main() {
         amountMinor: 300000,
       );
       final s = summarize([income, expense]);
-      expect(s.availableByMember[FamilyMember.vo], 700000);
+      expect(s.availableByMember['vo'], 700000);
       expect(s.totalAssets, 700000);
     });
   });
@@ -163,8 +163,8 @@ void main() {
         ),
         transfer,
       ]);
-      expect(s.availableByMember[FamilyMember.vo], 8000000);
-      expect(s.availableByMember[FamilyMember.chong], 2000000);
+      expect(s.availableByMember['vo'], 8000000);
+      expect(s.availableByMember['chong'], 2000000);
     });
 
     test('FUND_TOPUP: member -amount, fund +amount, Total Assets không đổi', () {
@@ -214,7 +214,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, 'vo'),
         amountMinor: 1000000,
       );
       final after = seedAndAssets([topup]);
@@ -228,7 +228,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, 'vo'),
         amountMinor: 1000000,
       );
       final before = seedAndAssets([topup]);
@@ -236,7 +236,7 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsWithdraw,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        sourceRefId: savingsAssetRefId(depositType.id, 'vo'),
         destinationKind: PoolKind.memberAvailable,
         destinationRefId: 'vo',
         amountMinor: 400000,
@@ -252,7 +252,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, 'vo'),
         amountMinor: 1000000,
       );
       final beforeSummary = summarize(
@@ -272,9 +272,9 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        sourceRefId: savingsAssetRefId(depositType.id, 'vo'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(goldType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(goldType.id, 'vo'),
         amountMinor: 600000,
       );
       final afterSummary = summarize(
@@ -293,9 +293,9 @@ void main() {
       );
 
       expect(afterSummary.totalAssets, beforeSummary.totalAssets);
-      expect(afterSummary.savingsByMember[FamilyMember.vo], beforeSummary.savingsByMember[FamilyMember.vo]);
-      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 400000);
-      expect(afterSummary.savingsByMemberAndAssetType[FamilyMember.vo]![goldType.id], 600000);
+      expect(afterSummary.savingsByMember['vo'], beforeSummary.savingsByMember['vo']);
+      expect(afterSummary.savingsByMemberAndAssetType['vo']![depositType.id], 400000);
+      expect(afterSummary.savingsByMemberAndAssetType['vo']![goldType.id], 600000);
     });
   });
 
@@ -307,7 +307,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(depositType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(depositType.id, 'vo'),
         amountMinor: 1200000,
       );
       final bankTopup = tx(
@@ -316,14 +316,14 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId(goldType.id, FamilyMember.vo),
+        destinationRefId: savingsAssetRefId(goldType.id, 'vo'),
         amountMinor: 8000000,
       );
       final s = summarize([cashTopup, bankTopup], assetTypes: [depositType, goldType]);
 
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 1200000);
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![goldType.id], 8000000);
-      expect(s.savingsByMember[FamilyMember.vo], 9200000);
+      expect(s.savingsByMemberAndAssetType['vo']![depositType.id], 1200000);
+      expect(s.savingsByMemberAndAssetType['vo']![goldType.id], 8000000);
+      expect(s.savingsByMember['vo'], 9200000);
       expect(s.totalSavings, 9200000);
     });
   });
@@ -375,7 +375,7 @@ void main() {
       final after = summarize([income, reversal]);
 
       expect(after.totalAssets, before.totalAssets);
-      expect(after.availableByMember[FamilyMember.vo], 0);
+      expect(after.availableByMember['vo'], 0);
     });
   });
 
@@ -405,7 +405,7 @@ void main() {
       );
 
       final s = summarize([seed, original, correction.reversal, correction.replacement]);
-      expect(s.availableByMember[FamilyMember.vo], 650000, reason: '1.000.000 - 350.000, KHÔNG phải 1.000.000-500.000-350.000');
+      expect(s.availableByMember['vo'], 650000, reason: '1.000.000 - 350.000, KHÔNG phải 1.000.000-500.000-350.000');
       expect(s.totalAssets, 650000);
     });
   });
@@ -432,7 +432,7 @@ void main() {
       );
       final sB = summarize([withStatusB]);
 
-      expect(sA.availableByMember[FamilyMember.vo], sB.availableByMember[FamilyMember.vo]);
+      expect(sA.availableByMember['vo'], sB.availableByMember['vo']);
       expect(sA.totalAssets, sB.totalAssets);
     });
   });
@@ -494,7 +494,7 @@ void main() {
       expect(s.monthlyNet, 0);
       expect(s.fundBalances[fundA.id], 0);
       expect(s.fundBalances[fundB.id], 0);
-      expect(s.savingsByMemberAndAssetType[FamilyMember.vo]![depositType.id], 0);
+      expect(s.savingsByMemberAndAssetType['vo']![depositType.id], 0);
     });
   });
 
@@ -515,7 +515,7 @@ void main() {
         amountMinor: 1234567891,
       );
       final s = summarize([bigIncome, bigExpense]);
-      expect(s.availableByMember[FamilyMember.vo], 9999999999 - 1234567891);
+      expect(s.availableByMember['vo'], 9999999999 - 1234567891);
       expect(s.totalAssets, 9999999999 - 1234567891);
     });
   });
@@ -602,7 +602,7 @@ void main() {
       );
 
       expect(
-        s.availableByMember[FamilyMember.chong],
+        s.availableByMember['chong'],
         -6000000 + 6500000,
         reason: 'Available effect từ resale = +6.500.000 (STOP condition)',
       );
@@ -640,7 +640,7 @@ void main() {
         month: DateTime(2026, 9),
       );
 
-      expect(s.availableByMember[FamilyMember.chong], -6000000 + 4500000);
+      expect(s.availableByMember['chong'], -6000000 + 4500000);
       expect(s.monthlyIncome, 0, reason: 'bán lỗ không tạo "income âm"');
       expect(s.monthlyExpense, 6000000);
     });

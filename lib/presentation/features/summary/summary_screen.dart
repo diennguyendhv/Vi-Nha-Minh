@@ -5,7 +5,7 @@ import '../../../core/constants/advanced_system_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/wallet_identity.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
@@ -14,6 +14,7 @@ import '../../../domain/usecases/explore_transactions.dart';
 import '../../../domain/usecases/time_selection.dart';
 import '../../providers/explorer_sort_provider.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/category_label.dart';
@@ -100,20 +101,20 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     // Ghi chú — phần đó nằm ở tổng của Explorer bên dưới). Dùng lại đúng các hàm
     // báo cáo hiện có, không tính lại công thức.
     final periodLabel = timeSelectionLabel(_time);
-    final netVo = computeMemberNetIncome(
-      FamilyMember.vo,
-      transactions,
-      categories,
-      from: _time.from,
-      to: _time.to,
-    );
-    final netChong = computeMemberNetIncome(
-      FamilyMember.chong,
-      transactions,
-      categories,
-      from: _time.from,
-      to: _time.to,
-    );
+    final directory = ref.watch(memberDirectoryProvider);
+    final netByMember = [
+      for (final m in directory.members)
+        (
+          member: m,
+          net: computeMemberNetIncome(
+            m.memberId,
+            transactions,
+            categories,
+            from: _time.from,
+            to: _time.to,
+          ),
+        ),
+    ];
     final spending = computeGroupedTotals(
       transactions,
       categories,
@@ -153,23 +154,17 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(
-                    child: _NetIncomeCard(
-                      key: const Key('summary_net_vo'),
-                      label: 'Vợ · Thu nhập ròng',
-                      period: periodLabel,
-                      value: netVo,
+                  for (final (i, e) in netByMember.indexed) ...[
+                    if (i > 0) const SizedBox(width: 10),
+                    Expanded(
+                      child: _NetIncomeCard(
+                        key: Key('summary_net_${e.member.memberId}'),
+                        label: '${e.member.label} · Thu nhập ròng',
+                        period: periodLabel,
+                        value: e.net,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _NetIncomeCard(
-                      key: const Key('summary_net_chong'),
-                      label: 'Chồng · Thu nhập ròng',
-                      period: periodLabel,
-                      value: netChong,
-                    ),
-                  ),
+                  ],
                 ],
               ),
               const SizedBox(height: 10),
@@ -190,7 +185,8 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               _TimeBar(selection: _time, onChanged: _setTime),
               const SizedBox(height: 8),
               _MemberChips(
-                selected: _filter.member,
+                members: directory.members,
+                selected: _filter.memberId,
                 onChanged: (m) =>
                     setState(() => _filter = _filter.withMember(m)),
               ),
@@ -320,6 +316,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                   transaction: t,
                   category: categoryById[t.categoryId],
                   assetTypes: savingsAssetTypes,
+                  members: directory.members,
                 );
               },
             ),
@@ -448,14 +445,19 @@ BoxDecoration _cardDecoration() => BoxDecoration(
 );
 
 class _MemberChips extends StatelessWidget {
-  const _MemberChips({required this.selected, required this.onChanged});
+  const _MemberChips({
+    required this.members,
+    required this.selected,
+    required this.onChanged,
+  });
 
-  final FamilyMember? selected;
-  final ValueChanged<FamilyMember?> onChanged;
+  final List<FinancialMember> members;
+  final String? selected;
+  final ValueChanged<String?> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    Widget chip(String keyName, String label, FamilyMember? value) {
+    Widget chip(String keyName, String label, String? value) {
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: ChoiceChip(
@@ -470,8 +472,7 @@ class _MemberChips extends StatelessWidget {
     return Row(
       children: [
         chip('all', 'Tất cả', null),
-        chip('vo', 'Vợ', FamilyMember.vo),
-        chip('chong', 'Chồng', FamilyMember.chong),
+        for (final m in members) chip(m.memberId, m.label, m.memberId),
       ],
     );
   }
@@ -1177,6 +1178,7 @@ class _ExplorerRow extends StatelessWidget {
     required this.transaction,
     required this.category,
     this.assetTypes = const [],
+    this.members = const [],
   });
 
   final Transaction transaction;
@@ -1185,10 +1187,13 @@ class _ExplorerRow extends StatelessWidget {
   /// Để hiện tên loại tài sản trong dòng Tiết kiệm (không bắt buộc).
   final List<SavingsAssetType> assetTypes;
 
+  /// [FinancialMember] để tra nhãn người.
+  final List<FinancialMember> members;
+
   @override
   Widget build(BuildContext context) {
     final t = transaction;
-    final memberLabel = transactionMemberLabel(t);
+    final memberLabel = transactionMemberLabel(t, members);
     final isTransfer = t.type == TransactionType.transfer;
     final savingsLabel = savingsTransferLabel(t, assetTypes);
     final title = savingsLabel != null

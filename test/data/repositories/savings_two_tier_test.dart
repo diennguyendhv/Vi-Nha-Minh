@@ -7,7 +7,6 @@ import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/repositories/local_savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart' as domain;
@@ -41,7 +40,7 @@ void main() {
 
   tearDown(() async => db.close());
 
-  String ref(String asset, FamilyMember m) => savingsAssetRefId(asset, m);
+  String ref(String asset, String m) => savingsAssetRefId(asset, m);
 
   domain.Transaction tx({
     required String id,
@@ -71,23 +70,23 @@ void main() {
     );
   }
 
-  domain.Transaction income(String id, FamilyMember m, int amount) => tx(
+  domain.Transaction income(String id, String m, int amount) => tx(
     id: id,
     type: TransactionType.income,
     category: 'thu_nhap',
     from: PoolKind.external,
     to: PoolKind.memberAvailable,
-    toRef: m.name,
+    toRef: m,
     amount: amount,
   );
 
   /// Thêm vào tiết kiệm: Khả dụng(m) → Chưa phân bổ(m).
-  domain.Transaction topup(String id, FamilyMember m, int amount) => tx(
+  domain.Transaction topup(String id, String m, int amount) => tx(
     id: id,
     type: TransactionType.transfer,
     kind: TransferKind.savingsTopup,
     from: PoolKind.memberAvailable,
-    fromRef: m.name,
+    fromRef: m,
     to: PoolKind.memberSavingsAsset,
     toRef: ref(unalloc, m),
     amount: amount,
@@ -95,7 +94,7 @@ void main() {
 
   domain.Transaction convert(
     String id,
-    FamilyMember m,
+    String m,
     String fromAsset,
     String toAsset,
     int amount,
@@ -110,24 +109,24 @@ void main() {
     amount: amount,
   );
 
-  domain.Transaction withdraw(String id, FamilyMember m, String asset, int amount) => tx(
+  domain.Transaction withdraw(String id, String m, String asset, int amount) => tx(
     id: id,
     type: TransactionType.transfer,
     kind: TransferKind.savingsWithdraw,
     from: PoolKind.memberSavingsAsset,
     fromRef: ref(asset, m),
     to: PoolKind.memberAvailable,
-    toRef: m.name,
+    toRef: m,
     amount: amount,
   );
 
   Future<List<domain.Transaction>> all() => txRepo.watchTransactions().first;
 
-  Future<int> avail(FamilyMember m) async =>
+  Future<int> avail(String m) async =>
       computeMemberAvailableBalance(m, await all());
-  Future<int> savings(FamilyMember m) async =>
+  Future<int> savings(String m) async =>
       computeMemberSavingsTotal(m, await all());
-  Future<int> asset(String a, FamilyMember m) async =>
+  Future<int> asset(String a, String m) async =>
       computeMemberSavingsByAssetType(a, m, await all());
   Future<int> totalAssets() async {
     // Total Assets = tổng mọi pool không phải external.
@@ -143,8 +142,8 @@ void main() {
     }
   }
 
-  const vo = FamilyMember.vo;
-  const chong = FamilyMember.chong;
+  const vo = 'vo';
+  const chong = 'chong';
 
   group('Tầng 1 + tầng 2 — flow A/B/C', () {
     test('A — Thêm vào tiết kiệm: Khả dụng giảm, Savings tăng, vào "Chưa phân bổ", Total Assets không đổi', () async {
@@ -261,7 +260,7 @@ void main() {
         type: TransactionType.transfer,
         kind: TransferKind.savingsTopup,
         from: PoolKind.memberAvailable,
-        fromRef: vo.name,
+        fromRef: vo,
         to: PoolKind.memberSavingsAsset,
         toRef: ref(unalloc, chong),
         amount: 1000,
@@ -295,7 +294,7 @@ void main() {
         from: PoolKind.memberSavingsAsset,
         fromRef: ref(gold, vo),
         to: PoolKind.memberAvailable,
-        toRef: chong.name,
+        toRef: chong,
         amount: 1000,
       );
       await expectLater(txRepo.addTransaction(wrongWithdraw), throwsA(isA<SavingsMemberMismatchException>()));
@@ -306,7 +305,7 @@ void main() {
         from: PoolKind.memberSavingsAsset,
         fromRef: ref(gold, vo),
         to: PoolKind.memberAvailable,
-        toRef: vo.name,
+        toRef: vo,
         amount: 1000,
       );
       await expectLater(txRepo.addTransaction(wrongShape), throwsA(isA<SavingsMemberMismatchException>()));
@@ -321,9 +320,9 @@ void main() {
           kind: TransferKind.memberToMember,
           category: 'chuyen_tien_thanh_vien',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.memberAvailable,
-          toRef: chong.name,
+          toRef: chong,
           amount: 250000,
         ),
       );
@@ -427,7 +426,7 @@ void main() {
           type: TransactionType.expense,
           category: 'sinh_hoat',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.external,
           amount: 900000,
         ),
@@ -446,7 +445,7 @@ void main() {
           kind: TransferKind.fundTopup,
           category: 'nap_quy',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.fund,
           toRef: 'an_uong',
           amount: 300000,
@@ -670,13 +669,13 @@ void main() {
       await txRepo.addTransaction(income('i1', chong, 5000000));
       final categories = DefaultCategories.all;
       final list0 = await all();
-      final g0 = computeGroupedTotals(list0, categories, member: chong);
+      final g0 = computeGroupedTotals(list0, categories, memberId: chong);
 
       await txRepo.addTransaction(topup('t1', chong, 1000000));
       await txRepo.addTransaction(convert('c1', chong, unalloc, gold, 500000));
       await txRepo.addTransaction(withdraw('w1', chong, gold, 200000));
 
-      final g1 = computeGroupedTotals(await all(), categories, member: chong);
+      final g1 = computeGroupedTotals(await all(), categories, memberId: chong);
       expect(g1.revenue, g0.revenue);
       expect(g1.otherInflow, g0.otherInflow);
       expect(g1.spending, g0.spending);

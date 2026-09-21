@@ -4,6 +4,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction.dart';
+import '../../../domain/entities/wallet_identity.dart';
 import '../../../domain/usecases/deletion_check.dart';
 import '../../../domain/usecases/transaction_member_label.dart';
 import 'transaction_detail_screen.dart';
@@ -14,6 +15,7 @@ List<DeletionBlocker> blockersFromTransactionIds(
   Iterable<String> ids,
   Iterable<Transaction> transactions,
   Iterable<Category> categories,
+  Iterable<FinancialMember> members,
 ) {
   final byId = {for (final t in transactions) t.id: t};
   final categoryById = {for (final c in categories) c.id: c};
@@ -33,7 +35,7 @@ List<DeletionBlocker> blockersFromTransactionIds(
           statusName: byId[id]!.statusId == null
               ? null
               : statusName[byId[id]!.statusId!],
-          memberLabel: transactionMemberLabel(byId[id]!),
+          memberLabel: transactionMemberLabel(byId[id]!, members),
         ),
   ];
 }

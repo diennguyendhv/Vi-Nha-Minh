@@ -31,6 +31,7 @@ import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/feature_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 /// Ghi lại toàn bộ tham số 1 lần gọi `updateTransaction`.
 class RecordedUpdateCall {
@@ -337,6 +338,7 @@ Future<void> _pumpDetail(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        ...legacyMemberOverrides,
         obligationsStreamProvider.overrideWith(
           (ref) => Stream.value(obligations),
         ),

@@ -1,7 +1,6 @@
 import '../../core/utils/text_search.dart';
 import '../engine/financial_engine.dart';
 import '../entities/category.dart';
-import '../entities/family_member.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
 import 'compute_grouped_totals.dart';
@@ -139,7 +138,7 @@ class TransactionFilter {
   const TransactionFilter({
     this.from,
     this.to,
-    this.member,
+    this.memberId,
     this.categoryIds = const {},
     this.statusIds = const {},
     this.includeNoStatus = false,
@@ -150,7 +149,7 @@ class TransactionFilter {
   /// Khoảng ngày (bao gồm 2 đầu, so theo NGÀY). `null` = không giới hạn.
   final DateTime? from;
   final DateTime? to;
-  final FamilyMember? member;
+  final String? memberId;
   final Set<String> categoryIds;
   final Set<String> statusIds;
 
@@ -168,7 +167,7 @@ class TransactionFilter {
   TransactionFilter copyWith({
     Object? from = _keep,
     Object? to = _keep,
-    Object? member = _keep,
+    Object? memberId = _keep,
     Set<String>? categoryIds,
     Set<String>? statusIds,
     bool? includeNoStatus,
@@ -177,7 +176,7 @@ class TransactionFilter {
   }) => TransactionFilter(
     from: identical(from, _keep) ? this.from : from as DateTime?,
     to: identical(to, _keep) ? this.to : to as DateTime?,
-    member: identical(member, _keep) ? this.member : member as FamilyMember?,
+    memberId: identical(memberId, _keep) ? this.memberId : memberId as String?,
     categoryIds: categoryIds ?? this.categoryIds,
     statusIds: statusIds ?? this.statusIds,
     includeNoStatus: includeNoStatus ?? this.includeNoStatus,
@@ -190,7 +189,7 @@ class TransactionFilter {
     to: to == null ? null : _day(to),
   );
 
-  TransactionFilter withMember(FamilyMember? value) => copyWith(member: value);
+  TransactionFilter withMember(String? value) => copyWith(memberId: value);
 
   TransactionFilter withCategories(Set<String> value) =>
       copyWith(categoryIds: {...value});
@@ -206,7 +205,7 @@ class TransactionFilter {
 
   /// Đang có điều kiện nào ngoài khoảng ngày không (để hiện "Xoá bộ lọc").
   bool get hasNonDateFilter =>
-      member != null ||
+      memberId != null ||
       categoryIds.isNotEmpty ||
       hasStatusFilter ||
       query.trim().isNotEmpty ||
@@ -251,14 +250,14 @@ class ExplorerResult {
 
 /// Người liên quan tới giao dịch (để lọc theo Vợ/Chồng): Thu → người nhận,
 /// Chi → người chi, Chuyển → người gửi HOẶC người nhận.
-bool involvesMember(Transaction t, FamilyMember member) {
+bool involvesMember(Transaction t, String memberId) {
   switch (t.type) {
     case TransactionType.income:
-      return incomeRecipient(t) == member;
+      return incomeRecipient(t) == memberId;
     case TransactionType.expense:
-      return expenseSpender(t) == member;
+      return expenseSpender(t) == memberId;
     case TransactionType.transfer:
-      return expenseSpender(t) == member || incomeRecipient(t) == member;
+      return expenseSpender(t) == memberId || incomeRecipient(t) == memberId;
   }
 }
 
@@ -286,7 +285,7 @@ ExplorerResult exploreTransactions(
     );
     if (filter.from != null && day.isBefore(filter.from!)) continue;
     if (filter.to != null && day.isAfter(filter.to!)) continue;
-    if (filter.member != null && !involvesMember(t, filter.member!)) continue;
+    if (filter.memberId != null && !involvesMember(t, filter.memberId!)) continue;
     if (filter.categoryIds.isNotEmpty &&
         !filter.categoryIds.contains(t.categoryId)) {
       continue;
@@ -416,7 +415,7 @@ List<ExplorerOption> explorerStatusOptions(
 /// Chi phí kinh doanh người đó chi. KHÔNG trừ Chi tiêu, KHÔNG cộng Khoản thu
 /// khác, KHÔNG chia đôi số liệu cả nhà.
 int computeMemberNetIncome(
-  FamilyMember member,
+  String memberId,
   List<Transaction> transactions,
   List<Category> categories, {
   DateTime? month,
@@ -428,5 +427,5 @@ int computeMemberNetIncome(
   month: month,
   from: from,
   to: to,
-  member: member,
+  memberId: memberId,
 ).netIncome;

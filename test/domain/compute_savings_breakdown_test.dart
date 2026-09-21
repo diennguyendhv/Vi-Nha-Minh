@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -11,7 +10,7 @@ import 'package:vi_nha_minh/domain/usecases/compute_savings_breakdown.dart';
 
 int _n = 0;
 
-Transaction _into(FamilyMember m, String asset, int amount) {
+Transaction _into(String m, String asset, int amount) {
   _n++;
   return Transaction(
     id: 'x$_n',
@@ -28,8 +27,8 @@ Transaction _into(FamilyMember m, String asset, int amount) {
 }
 
 void main() {
-  const vo = FamilyMember.vo;
-  const chong = FamilyMember.chong;
+  const vo = 'vo';
+  const chong = 'chong';
   final types = List<SavingsAssetType>.of(DefaultSavingsAssetTypes.all);
 
   test('"Chưa phân bổ" luôn ở đầu (kể cả 0) rồi tới các loại đang dùng theo thứ tự', () {

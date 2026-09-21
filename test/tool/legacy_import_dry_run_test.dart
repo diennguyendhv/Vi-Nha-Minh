@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
@@ -15,6 +14,7 @@ import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_three_totals.dart';
+import '../support/legacy_members.dart';
 
 /// DRY-RUN nhập dữ liệu thật (V2-2A) — CHỈ ĐỌC, in-memory.
 ///
@@ -93,7 +93,7 @@ void main() {
   };
 
   Map<String, dynamic> summaryJson(List<Transaction> txs) {
-    final s = computeFinancialSummary(txs, categories: categories, funds: const [], assetTypes: assetTypes);
+    final s = computeFinancialSummary(members: legacyMembers, txs, categories: categories, funds: const [], assetTypes: assetTypes);
     final three = computeThreeTotals(txs, categories);
     final g = computeGroupedTotals(txs, categories);
     Map<String, dynamic> gj(GroupedTotals x) => {
@@ -101,20 +101,20 @@ void main() {
       'businessExpense': x.businessExpense, 'netIncome': x.netIncome, 'cashFlow': x.cashFlow,
     };
     return {
-      'availableVo': s.availableByMember[FamilyMember.vo],
-      'availableChong': s.availableByMember[FamilyMember.chong],
-      'savingsVo': s.savingsByMember[FamilyMember.vo],
-      'savingsChong': s.savingsByMember[FamilyMember.chong],
-      'savingsVoByAsset': s.savingsByMemberAndAssetType[FamilyMember.vo],
-      'savingsChongByAsset': s.savingsByMemberAndAssetType[FamilyMember.chong],
+      'availableVo': s.availableByMember['vo'],
+      'availableChong': s.availableByMember['chong'],
+      'savingsVo': s.savingsByMember['vo'],
+      'savingsChong': s.savingsByMember['chong'],
+      'savingsVoByAsset': s.savingsByMemberAndAssetType['vo'],
+      'savingsChongByAsset': s.savingsByMemberAndAssetType['chong'],
       'totalAvailable': s.totalAvailable,
       'totalSavings': s.totalSavings,
       'totalFunds': s.totalFunds,
       'totalAssets': s.totalAssets,
       'threeTotals': {'income': three.totalIncome, 'expense': three.totalExpense, 'transfer': three.totalTransfer},
       'grouped': gj(g),
-      'groupedVo': gj(computeGroupedTotals(txs, categories, member: FamilyMember.vo)),
-      'groupedChong': gj(computeGroupedTotals(txs, categories, member: FamilyMember.chong)),
+      'groupedVo': gj(computeGroupedTotals(txs, categories, memberId: 'vo')),
+      'groupedChong': gj(computeGroupedTotals(txs, categories, memberId: 'chong')),
       'pools': poolsJson(computeAllPoolBalances(txs)),
     };
   }
@@ -239,9 +239,9 @@ void main() {
         transferKind: TransferKind.savingsConvert,
         categoryId: 'tiet_kiem',
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong),
+        sourceRefId: savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'chong'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('ngan_hang', FamilyMember.chong),
+        destinationRefId: savingsAssetRefId('ngan_hang', 'chong'),
         amountMinor: 70000000,
         transactionDate: DateTime(2026, 9, 13),
         createdAt: DateTime(2026, 9, 13),
@@ -274,8 +274,8 @@ void main() {
           for (var m = 1; m <= 12; m++)
             '$m': {
               'all': gjson(computeGroupedTotals(all, categories, month: DateTime(2026, m))),
-              'vo': gjson(computeGroupedTotals(all, categories, month: DateTime(2026, m), member: FamilyMember.vo)),
-              'chong': gjson(computeGroupedTotals(all, categories, month: DateTime(2026, m), member: FamilyMember.chong)),
+              'vo': gjson(computeGroupedTotals(all, categories, month: DateTime(2026, m), memberId: 'vo')),
+              'chong': gjson(computeGroupedTotals(all, categories, month: DateTime(2026, m), memberId: 'chong')),
             },
         },
         'asOf17Sep': summaryJson(all.where((t) => !t.transactionDate.isAfter(futureCut)).toList()),

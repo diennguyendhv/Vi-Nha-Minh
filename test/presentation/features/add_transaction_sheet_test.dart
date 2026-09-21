@@ -10,7 +10,6 @@ import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/presentation/features/category/category_edit_screen.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
@@ -24,12 +23,15 @@ import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/presentation/features/add_transaction/add_transaction_sheet.dart';
+import 'package:vi_nha_minh/domain/entities/wallet_identity.dart';
+import 'package:vi_nha_minh/presentation/providers/member_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/category_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/currency_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 import 'package:vi_nha_minh/presentation/widgets/tap_guard.dart';
+import '../../support/legacy_members.dart';
 
 /// Fake `TransactionRepository` điều khiển được — cho phép ép lỗi 1 lần
 /// (mô phỏng transient/persistence failure), "treo" 1 lần lưu đang chạy
@@ -223,6 +225,7 @@ Future<void> _pumpSheet(
   EntryType initialType = EntryType.chi,
   Transaction? recoveryTarget,
   List<Category>? categories,
+  List<FinancialMember>? members,
 }) async {
   // Sheet dài (DraggableScrollableSheet + nhiều panel) không vừa viewport test
   // mặc định (800x600) — phóng to bề mặt test để mọi control (kể cả bàn
@@ -235,6 +238,10 @@ Future<void> _pumpSheet(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        if (members == null)
+          ...legacyMemberOverrides
+        else
+          membersStreamProvider.overrideWith((ref) => Stream.value(members)),
         ..._formLookupOverrides(categories: categories),
         transactionRepositoryProvider.overrideWithValue(fakeRepo),
         currencyContextProvider.overrideWithValue(currencyContext),
@@ -270,7 +277,7 @@ List<Transaction> _voBankSavings() => [
     categoryId: 'so_du_ban_dau',
     sourceKind: PoolKind.external,
     destinationKind: PoolKind.memberSavingsAsset,
-    destinationRefId: savingsAssetRefId(DefaultSavingsAssetTypes.bankId, FamilyMember.vo),
+    destinationRefId: savingsAssetRefId(DefaultSavingsAssetTypes.bankId, 'vo'),
     amountMinor: 500000,
     transactionDate: DateTime(2026, 9, 1),
     createdAt: DateTime(2026, 9, 1),
@@ -798,7 +805,7 @@ void main() {
       expect(tx.destinationKind, PoolKind.memberSavingsAsset);
       expect(
         tx.destinationRefId,
-        savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.vo),
+        savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'vo'),
         reason: 'mặc định vào "Chưa phân bổ"',
       );
       expect(tx.amountMinor, 100000);
@@ -820,7 +827,7 @@ void main() {
       expect(tx.type, TransactionType.transfer);
       expect(tx.transferKind, TransferKind.savingsWithdraw);
       expect(tx.sourceKind, PoolKind.memberSavingsAsset);
-      expect(tx.sourceRefId, savingsAssetRefId(DefaultSavingsAssetTypes.bankId, FamilyMember.vo));
+      expect(tx.sourceRefId, savingsAssetRefId(DefaultSavingsAssetTypes.bankId, 'vo'));
       expect(tx.destinationKind, PoolKind.memberAvailable);
       expect(tx.destinationRefId, 'vo');
       expect(tx.amountMinor, 20000);
@@ -843,9 +850,9 @@ void main() {
       expect(tx.type, TransactionType.transfer);
       expect(tx.transferKind, TransferKind.savingsConvert);
       expect(tx.sourceKind, PoolKind.memberSavingsAsset);
-      expect(tx.sourceRefId, savingsAssetRefId(DefaultSavingsAssetTypes.bankId, FamilyMember.vo));
+      expect(tx.sourceRefId, savingsAssetRefId(DefaultSavingsAssetTypes.bankId, 'vo'));
       expect(tx.destinationKind, PoolKind.memberSavingsAsset);
-      expect(tx.destinationRefId, savingsAssetRefId(DefaultSavingsAssetTypes.goldId, FamilyMember.vo));
+      expect(tx.destinationRefId, savingsAssetRefId(DefaultSavingsAssetTypes.goldId, 'vo'));
       expect(tx.amountMinor, 70000);
     });
 
@@ -1491,6 +1498,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+        ...legacyMemberOverrides,
             ..._formLookupOverrides(),
             transactionRepositoryProvider.overrideWithValue(fakeRepo),
             currencyContextProvider.overrideWithValue(const _TestCurrencyContext('VND')),
@@ -1766,6 +1774,50 @@ void main() {
         ),
         'Dữ liệu tham chiếu không hợp lệ, vui lòng thử lại.',
       );
+    });
+  });
+
+  group('P4 — Add dùng thành viên từ dữ liệu (ID mờ)', () {
+    const idWife = '5b0f6c1e-2a34-4c5d-8e7f-1a2b3c4d5e6f';
+    const idHusband = '9d8c7b6a-5f4e-4d3c-a2b1-0f9e8d7c6b5a';
+    const opaque = [
+      FinancialMember(memberId: idWife, label: 'Vợ', displayOrder: 0),
+      FinancialMember(memberId: idHusband, label: 'Chồng', displayOrder: 1),
+    ];
+
+    testWidgets('Chi: người chi mặc định = thành viên đầu tiên theo dữ liệu; nhãn "Vợ" đến từ dữ liệu', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chi, members: opaque);
+      expect(find.text('Vợ'), findsWidgets);
+      await _tapSegment(tester, 'Chi phí kinh doanh');
+      await _selectDropdown(tester, 'Chọn danh mục', 'Chi phí kinh doanh');
+      await _typeDigits(tester, '100000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      final tx = fakeRepo.lastAdded!;
+      expect(tx.sourceRefId, idWife);
+      expect(tx.sourceRefId, isNot('vo'));
+    });
+
+    testWidgets('Chi: chọn "Chồng" → sourceRefId là memberId mờ của Chồng', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chi, members: opaque);
+      await _tapSegment(tester, 'Chồng');
+      await _tapSegment(tester, 'Chi phí kinh doanh');
+      await _selectDropdown(tester, 'Chọn danh mục', 'Chi phí kinh doanh');
+      await _typeDigits(tester, '100000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      expect(fakeRepo.lastAdded!.sourceRefId, idHusband);
+    });
+
+    testWidgets('Chuyển giữa thành viên: người nhận mặc định suy ra từ DỮ LIỆU (người còn lại)', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.chuyen, members: opaque);
+      await _typeDigits(tester, '80000');
+      await _tapSave(tester);
+      await tester.pumpAndSettle();
+      final tx = fakeRepo.lastAdded!;
+      expect(tx.transferKind, TransferKind.memberToMember);
+      expect(tx.sourceRefId, idWife);
+      expect(tx.destinationRefId, idHusband);
     });
   });
 }

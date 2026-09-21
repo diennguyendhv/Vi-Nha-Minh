@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -143,7 +142,7 @@ void main() {
       ];
 
       final totals = computeThreeTotals(transactions, [soDuBanDau, thuNhap]);
-      final voBalance = computeMemberFinancials(FamilyMember.vo, transactions).balance;
+      final voBalance = computeMemberFinancials('vo', transactions).balance;
 
       expect(voBalance, 15000000);
       expect(totals.totalIncome, 10000000);
@@ -178,8 +177,8 @@ void main() {
         _memberTransfer(500000, from: 'chong', to: 'vo'),
       ];
 
-      final vo = computeMemberFinancials(FamilyMember.vo, transactions);
-      final chong = computeMemberFinancials(FamilyMember.chong, transactions);
+      final vo = computeMemberFinancials('vo', transactions);
+      final chong = computeMemberFinancials('chong', transactions);
 
       expect(vo.balance, -1000000 + 500000);
       expect(chong.balance, 10000000 - 500000);

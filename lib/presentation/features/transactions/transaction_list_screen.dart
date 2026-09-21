@@ -8,7 +8,9 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/entities/wallet_identity.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/category_label.dart';
@@ -37,6 +39,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
+    final members = ref.watch(memberDirectoryProvider).members;
     final categoryById = {for (final c in categories) c.id: c};
     final assetTypes =
         ref.watch(savingsAssetTypesStreamProvider).valueOrNull ??
@@ -148,6 +151,7 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                                 category: categoryById[t.categoryId],
                                 assetTypes: assetTypes,
                                 stt: sttById[t.id],
+                                members: members,
                               ),
                           ],
                         ),
@@ -170,8 +174,8 @@ int _signedAmount(Transaction t) {
 }
 
 /// "ghi chú · Vợ" (hoặc chỉ ghi chú / chỉ Vợ/Chồng / "Vợ → Chồng" khi chuyển).
-String? _subtitle(Transaction t) {
-  final member = transactionMemberLabel(t);
+String? _subtitle(Transaction t, List<FinancialMember> members) {
+  final member = transactionMemberLabel(t, members);
   final note = t.note;
   if (note.isEmpty) return member;
   return member == null ? note : '$note · $member';
@@ -183,7 +187,10 @@ class _TransactionTile extends StatelessWidget {
     required this.category,
     this.assetTypes = const [],
     this.stt,
+    this.members = const [],
   });
+
+  final List<FinancialMember> members;
 
   /// Để hiện tên loại tài sản trong dòng Tiết kiệm.
   final List<SavingsAssetType> assetTypes;
@@ -216,9 +223,9 @@ class _TransactionTile extends StatelessWidget {
       title: Text(
         '${stt != null ? '$stt. ' : ''}${savingsTransferLabel(transaction, assetTypes) ?? categoryDisplayLabel(category)}',
       ),
-      subtitle: _subtitle(transaction) == null
+      subtitle: _subtitle(transaction, members) == null
           ? null
-          : Text(_subtitle(transaction)!),
+          : Text(_subtitle(transaction, members)!),
       trailing: Text(
         '$sign ${Formatters.amount(transaction.amountMinor)}',
         style: TextStyle(fontWeight: FontWeight.w800, color: color),

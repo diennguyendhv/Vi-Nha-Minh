@@ -5,12 +5,13 @@ import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/counterparty.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/obligation.dart';
 import '../../../domain/entities/obligation_direction.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/usecases/compute_obligation_summary.dart';
 import '../../providers/counterparty_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/obligation_providers.dart';
 import '../../providers/transaction_providers.dart';
 import 'loan_error_mapping.dart';
@@ -93,11 +94,12 @@ class LoanDetailScreen extends ConsumerWidget {
     final creationDate = history.first.date;
     final defaultMember =
         _resolveMember(
+          ref.read(memberDirectoryProvider),
           direction,
           transactions,
           history.first.anchorTransactionId,
         ) ??
-        FamilyMember.vo;
+        ref.read(memberDirectoryProvider).defaultMemberId;
 
     return Scaffold(
       appBar: AppBar(title: Text(counterparty?.displayName ?? '—')),
@@ -110,7 +112,7 @@ class LoanDetailScreen extends ConsumerWidget {
                 outstandingBaseline: summary.outstanding,
                 categoryId: _categoryId,
                 interestCategoryId: _interestCategoryId,
-                initialMember: defaultMember,
+                initialMemberId: defaultMember,
               ),
               icon: const Icon(Icons.add_rounded),
               label: Text(isReceivable ? 'Nhận tiền' : 'Trả tiền'),
@@ -152,7 +154,8 @@ class LoanDetailScreen extends ConsumerWidget {
     );
   }
 
-  FamilyMember? _resolveMember(
+  String? _resolveMember(
+    MemberDirectory directory,
     ObligationDirection direction,
     List<Transaction> transactions,
     String creationTransactionId,
@@ -165,10 +168,7 @@ class LoanDetailScreen extends ConsumerWidget {
     final refId = direction == ObligationDirection.receivable
         ? creation.sourceRefId
         : creation.destinationRefId;
-    for (final m in FamilyMember.values) {
-      if (m.name == refId) return m;
-    }
-    return null;
+    return directory.contains(refId) ? refId : null;
   }
 
   Future<void> _undo(
@@ -217,7 +217,7 @@ class LoanDetailScreen extends ConsumerWidget {
     String obligationId,
     ObligationSummary summary,
     LoanHistoryEntry entry,
-    FamilyMember defaultMember,
+    String? defaultMember,
   ) {
     showSettleLoanSheet(
       context,
@@ -229,7 +229,7 @@ class LoanDetailScreen extends ConsumerWidget {
           summary.outstanding + (entry.principalPortion ?? entry.amountMinor),
       categoryId: _categoryId,
       interestCategoryId: _interestCategoryId,
-      initialMember: defaultMember,
+      initialMemberId: defaultMember,
       correctingAnchorTransactionId: entry.anchorTransactionId,
       initialAmountMinor: entry.amountMinor,
       initialDate: entry.date,

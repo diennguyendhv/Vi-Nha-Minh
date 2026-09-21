@@ -8,8 +8,9 @@ enum WalletKind { local, personal, family }
 ///
 /// [memberId] của Wallet CŨ (di sản) là `vo` / `chong` — đúng chuỗi đang nằm trong
 /// `source_ref_id` / `destination_ref_id` của mọi giao dịch, nên không phải viết lại
-/// dòng nào. Wallet MỚI (phase sau) dùng ID mờ (`OpaqueId`) — đừng bao giờ giả định
-/// `memberId == 'vo' | 'chong'` ở nơi khác ngoài lớp tương thích di sản.
+/// dòng nào. Wallet MỚI dùng ID mờ (`OpaqueId`, P4) — đừng bao giờ giả định
+/// `memberId == 'vo' | 'chong'` và đừng suy nhãn hiển thị từ `memberId`: danh sách và
+/// nhãn thành viên luôn đến từ `MemberRepository` (`memberDirectoryProvider`).
 class FinancialMember {
   const FinancialMember({
     required this.memberId,

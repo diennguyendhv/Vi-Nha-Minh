@@ -1,6 +1,5 @@
 import '../engine/financial_engine.dart';
 import '../entities/category.dart';
-import '../entities/family_member.dart';
 import '../entities/pool_kind.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
@@ -44,24 +43,21 @@ class GroupedTotals {
 
 /// Người chi (ví khả dụng hoặc pool tiết kiệm của thành viên); `null` nếu
 /// nguồn không thuộc 1 thành viên (vd Quỹ dùng chung).
-FamilyMember? expenseSpender(Transaction t) {
+String? expenseSpender(Transaction t) {
   final refId = t.sourceRefId;
   if (refId == null) return null;
   switch (t.sourceKind) {
     case PoolKind.memberAvailable:
-      for (final m in FamilyMember.values) {
-        if (m.name == refId) return m;
-      }
-      return null;
+      return refId;
     case PoolKind.memberSavingsAsset:
-      return parseSavingsAssetRefId(refId)?.member;
+      return parseSavingsAssetRefId(refId)?.memberId;
     default:
       return null;
   }
 }
 
 /// Tính [GroupedTotals] cho [month] hoặc khoảng ngày [from]..[to] (theo
-/// `transactionDate`; bỏ trống = toàn bộ lịch sử) và tuỳ chọn [member] (Vợ/Chồng). Chỉ đếm giao dịch đang hiệu
+/// `transactionDate`; bỏ trống = toàn bộ lịch sử) và tuỳ chọn [memberId] (1 FinancialMember). Chỉ đếm giao dịch đang hiệu
 /// lực (`isVisible`) nên reversal/correction không bao giờ đếm đôi; đổi nhóm
 /// của 1 danh mục chỉ đổi số báo cáo này, không đổi giao dịch nào.
 GroupedTotals computeGroupedTotals(
@@ -70,7 +66,7 @@ GroupedTotals computeGroupedTotals(
   DateTime? month,
   DateTime? from,
   DateTime? to,
-  FamilyMember? member,
+  String? memberId,
 }) {
   final categoryById = {for (final c in categories) c.id: c};
   final interestPortions = computeObligationSettlementInterestPortions(
@@ -99,12 +95,12 @@ GroupedTotals computeGroupedTotals(
     }
     switch (t.type) {
       case TransactionType.income:
-        if (member != null && incomeRecipient(t) != member) continue;
+        if (memberId != null && incomeRecipient(t) != memberId) continue;
         final asRevenue = reportable[t.id] ?? 0;
         revenue += asRevenue;
         otherInflow += t.amountMinor - asRevenue;
       case TransactionType.expense:
-        if (member != null && expenseSpender(t) != member) continue;
+        if (memberId != null && expenseSpender(t) != memberId) continue;
         final int amount;
         if (t.obligationId != null) {
           amount = interestPortions[t.id] ?? 0;

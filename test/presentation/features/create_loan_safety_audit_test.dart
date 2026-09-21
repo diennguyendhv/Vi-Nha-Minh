@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/entities/counterparty.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/obligation.dart';
 import 'package:vi_nha_minh/domain/entities/obligation_direction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -18,6 +17,7 @@ import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 import '../../application/support/recording_transaction_repository.dart';
+import '../../support/legacy_members.dart';
 
 class _Counterparties implements CounterpartyRepository {
   final rows = <Counterparty>[];
@@ -88,6 +88,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+        ...legacyMemberOverrides,
           counterpartyRepositoryProvider.overrideWithValue(counterparties),
           obligationRepositoryProvider.overrideWithValue(obligations),
           transactionRepositoryProvider.overrideWithValue(transactions),
@@ -202,7 +203,7 @@ void main() {
       await tester.pump();
       expect(tester.testTextInput.isVisible, isFalse);
       expect(tester.widget<TextField>(amountField).controller!.text, '100000');
-      expect(tester.widget<SegmentedButton<FamilyMember>>(find.byType(SegmentedButton<FamilyMember>)).onSelectionChanged, isNull);
+      expect(tester.widget<SegmentedButton<String>>(find.byType(SegmentedButton<String>)).onSelectionChanged, isNull);
       for (final button in tester.widgetList<OutlinedButton>(find.byType(OutlinedButton))) {
         expect(button.onPressed, isNull);
       }

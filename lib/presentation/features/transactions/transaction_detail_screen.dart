@@ -6,7 +6,7 @@ import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/usecases/selectable_categories.dart';
 import '../../../domain/entities/status.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/entities/field_update.dart';
 import '../../../domain/entities/transaction.dart';
@@ -15,6 +15,7 @@ import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_recovery_summary.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/feature_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/obligation_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../widgets/amount_input_formatter.dart';
@@ -73,7 +74,10 @@ class _TransactionDetailScreenState
     return choices.any((s) => s.id == _statusId) ? _statusId : null;
   }
 
-  FamilyMember? _member;
+  /// `memberId` đang chọn ở form Sửa (null = giao dịch không có "người tiêu" sửa được).
+  String? _member;
+
+  MemberDirectory get _directory => ref.read(memberDirectoryProvider);
 
   @override
   void dispose() {
@@ -105,18 +109,15 @@ class _TransactionDetailScreenState
   /// Chỉ khác null khi giao dịch có đúng 1 "người tiêu" rõ ràng có thể sửa
   /// — INCOME (người nhận) hoặc EXPENSE nguồn ví (người chi). TRANSFER và
   /// EXPENSE nguồn Quỹ không có field này để sửa.
-  FamilyMember? _currentMember(Transaction t) {
+  String? _currentMember(Transaction t) {
     final refId = t.type == TransactionType.income
         ? t.destinationRefId
         : (t.type == TransactionType.expense &&
                   t.sourceKind == PoolKind.memberAvailable
               ? t.sourceRefId
               : null);
-    if (refId == null) return null;
-    for (final m in FamilyMember.values) {
-      if (m.name == refId) return m;
-    }
-    return null;
+    // ID lạ (không thuộc Wallet) → không sửa người được, không đoán.
+    return _directory.contains(refId) ? refId : null;
   }
 
   /// Số tiền đang nhập (0 nếu trống/không hợp lệ) — Lưu bị khoá khi <= 0.
@@ -170,7 +171,7 @@ class _TransactionDetailScreenState
         amountMinor: newAmount,
         categoryId: _categoryId,
         note: _noteController.text.trim(),
-        memberRefId: _member?.name,
+        memberRefId: _member,
         transactionDate: _transactionDate,
         status: _statusUpdateFor(current),
       );
@@ -244,6 +245,7 @@ class _TransactionDetailScreenState
       ids,
       ref.read(transactionsStreamProvider).valueOrNull ?? const [],
       ref.read(categoriesStreamProvider).valueOrNull ?? const [],
+      _directory.members,
     );
     if (blockers.isEmpty) {
       ScaffoldMessenger.of(context)
@@ -307,6 +309,7 @@ class _TransactionDetailScreenState
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(memberDirectoryProvider);
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
@@ -464,11 +467,11 @@ class _TransactionDetailScreenState
               ),
             ),
             const SizedBox(height: 8),
-            SegmentedButton<FamilyMember>(
-              segments: FamilyMember.values
-                  .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+            SegmentedButton<String>(
+              segments: _directory.members
+                  .map((m) => ButtonSegment(value: m.memberId, label: Text(m.label)))
                   .toList(),
-              selected: {_member ?? FamilyMember.vo},
+              selected: {_member ?? _directory.defaultMemberId!},
               onSelectionChanged: (s) => setState(() => _member = s.first),
             ),
           ],
@@ -618,7 +621,7 @@ class _TransactionDetailScreenState
           _ReadOnlyRow(label: 'Ghi chú', value: transaction.note),
           if (member != null) ...[
             const SizedBox(height: 16),
-            _ReadOnlyRow(label: 'Người tiêu', value: member.label),
+            _ReadOnlyRow(label: 'Người tiêu', value: _directory.labelOf(member) ?? ''),
           ],
           if (statuses != null && statuses.isNotEmpty) ...[
             const SizedBox(height: 16),

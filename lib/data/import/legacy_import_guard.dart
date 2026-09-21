@@ -1,5 +1,4 @@
 import '../../domain/engine/financial_engine.dart';
-import '../../domain/entities/family_member.dart';
 import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/savings_asset_type.dart';
 import '../../domain/usecases/compute_grouped_totals.dart';
@@ -152,25 +151,29 @@ class LegacyImportGuard {
   }
 
   static Map<String, int> _balances(Map<PoolRef, int> b) {
-    int a(FamilyMember m) => poolBalance(b, PoolKind.memberAvailable, m.name);
-    int s(String asset, FamilyMember m) =>
+    // Importer di sản (debug, đã gắn với file Excel Vợ/Chồng): memberId `vo`/`chong`
+    // là ID di sản của Wallet hiện tại — KHÔNG phải chiến lược ID chung (P4).
+    const vo = 'vo';
+    const chong = 'chong';
+    int a(String m) => poolBalance(b, PoolKind.memberAvailable, m);
+    int s(String asset, String m) =>
         poolBalance(b, PoolKind.memberSavingsAsset, savingsAssetRefId(asset, m));
     final uv = SystemSavingsAssets.unallocatedId;
-    int savings(FamilyMember m) => b.entries
+    int savings(String m) => b.entries
         .where(
           (e) =>
               e.key.$1 == PoolKind.memberSavingsAsset &&
               e.key.$2 != null &&
-              parseSavingsAssetRefId(e.key.$2!)?.member == m,
+              parseSavingsAssetRefId(e.key.$2!)?.memberId == m,
         )
         .fold<int>(0, (x, e) => x + e.value);
     return {
-      'availableVo': a(FamilyMember.vo),
-      'availableChong': a(FamilyMember.chong),
-      'savingsVo': savings(FamilyMember.vo),
-      'savingsChong': savings(FamilyMember.chong),
-      'unallocatedChong': s(uv, FamilyMember.chong),
-      'bankChong': s('savings_bank', FamilyMember.chong),
+      'availableVo': a(vo),
+      'availableChong': a(chong),
+      'savingsVo': savings(vo),
+      'savingsChong': savings(chong),
+      'unallocatedChong': s(uv, chong),
+      'bankChong': s('savings_bank', chong),
       'totalAssets': b.values.fold<int>(0, (x, v) => x + v),
       'totalFunds': b.entries
           .where((e) => e.key.$1 == PoolKind.fund)

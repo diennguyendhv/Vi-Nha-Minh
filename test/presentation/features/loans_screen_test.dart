@@ -16,6 +16,7 @@ import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
 
 import 'loans_test_support.dart';
+import '../../support/legacy_members.dart';
 
 /// Phase 8.8 — widget test cho toàn bộ luồng "Vay & Cho vay".
 ///
@@ -45,6 +46,7 @@ void main() {
   Widget wrap(Widget child) {
     return ProviderScope(
       overrides: [
+        ...legacyMemberOverrides,
         transactionRepositoryProvider.overrideWithValue(transactionRepository),
         obligationRepositoryProvider.overrideWithValue(obligationRepository),
         counterpartyRepositoryProvider.overrideWithValue(counterpartyRepository),

@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -358,16 +357,16 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_bank', 'vo'),
         amountMinor: 2000000,
       );
       final convert = _tx(
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', 'vo'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', 'vo'),
         amountMinor: 1500000,
       );
       final balances = computeAllPoolBalances([topup, convert]);
@@ -376,7 +375,7 @@ void main() {
         poolBalance(
           balances,
           PoolKind.memberSavingsAsset,
-          savingsAssetRefId('savings_bank', FamilyMember.vo),
+          savingsAssetRefId('savings_bank', 'vo'),
         ),
         500000,
       );
@@ -384,7 +383,7 @@ void main() {
         poolBalance(
           balances,
           PoolKind.memberSavingsAsset,
-          savingsAssetRefId('savings_gold', FamilyMember.vo),
+          savingsAssetRefId('savings_gold', 'vo'),
         ),
         1500000,
       );
@@ -399,7 +398,7 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('chung_khoan', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('chung_khoan', 'vo'),
         amountMinor: 3000000,
       );
       final bankTopup = _tx(
@@ -408,10 +407,10 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'vo',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', 'vo'),
         amountMinor: 2000000,
       );
-      final total = computeMemberSavingsTotal(FamilyMember.vo, [stocksTopup, bankTopup]);
+      final total = computeMemberSavingsTotal('vo', [stocksTopup, bankTopup]);
       expect(total, 5000000);
     });
   });
@@ -468,9 +467,9 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', 'vo'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_bank', 'vo'),
         amountMinor: 500000,
       );
       expect(() => validateNewTransaction(tx), throwsA(isA<SameSourceDestinationException>()));
@@ -481,9 +480,9 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('savings_bank', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('savings_bank', 'vo'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('savings_gold', FamilyMember.vo),
+        destinationRefId: savingsAssetRefId('savings_gold', 'vo'),
         amountMinor: 500000,
       );
       expect(() => validateNewTransaction(tx), returnsNormally);

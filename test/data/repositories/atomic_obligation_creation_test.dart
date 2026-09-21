@@ -12,6 +12,7 @@ import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/errors/domain_exceptions.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
+import '../../support/legacy_members.dart';
 
 void main() {
   late AppDatabase db;
@@ -58,7 +59,7 @@ void main() {
     BEGIN SELECT RAISE(ABORT, 'injected opening failure after metadata insert'); END
   ''');
 
-  Future<FinancialSummary> summary() async => computeFinancialSummary(
+  Future<FinancialSummary> summary() async => computeFinancialSummary(members: legacyMembers, 
     await ledger.watchTransactions().first,
     categories: [], funds: [], assetTypes: [], obligations: await loans.watchObligations().first,
   );

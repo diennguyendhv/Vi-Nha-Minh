@@ -11,7 +11,6 @@ import 'package:vi_nha_minh/data/local/seed_defaults.dart';
 import 'package:vi_nha_minh/data/repositories/local_category_repository.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -19,6 +18,7 @@ import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_three_totals.dart';
+import '../support/legacy_members.dart';
 
 /// V2-2B — STAGING import (V2-2B): nhập kế hoạch thật vào 1 DB Drift TẠM trên đĩa
 /// (KHÔNG phải DB của app/Pixel), qua repository thật; đóng → mở lại → tính lại
@@ -62,7 +62,7 @@ void main() {
     final catRepo = LocalCategoryRepository(db);
     final txs = await txRepo.watchTransactions().first;
     final cats = await catRepo.watchCategories().first;
-    final s = computeFinancialSummary(txs, categories: cats, funds: const [], assetTypes: assetTypes);
+    final s = computeFinancialSummary(members: legacyMembers, txs, categories: cats, funds: const [], assetTypes: assetTypes);
     final three = computeThreeTotals(txs, cats);
     final pools = computeAllPoolBalances(txs);
 
@@ -168,26 +168,26 @@ void main() {
         'negativeProtectedPools': negatives,
       },
       'summary': {
-        'availableVo': s.availableByMember[FamilyMember.vo],
-        'availableChong': s.availableByMember[FamilyMember.chong],
-        'savingsVo': s.savingsByMember[FamilyMember.vo],
-        'savingsChong': s.savingsByMember[FamilyMember.chong],
-        'savingsVoByAsset': s.savingsByMemberAndAssetType[FamilyMember.vo],
-        'savingsChongByAsset': s.savingsByMemberAndAssetType[FamilyMember.chong],
+        'availableVo': s.availableByMember['vo'],
+        'availableChong': s.availableByMember['chong'],
+        'savingsVo': s.savingsByMember['vo'],
+        'savingsChong': s.savingsByMember['chong'],
+        'savingsVoByAsset': s.savingsByMemberAndAssetType['vo'],
+        'savingsChongByAsset': s.savingsByMemberAndAssetType['chong'],
         'totalFunds': s.totalFunds,
         'totalAssets': s.totalAssets,
         'threeTotals': {'income': three.totalIncome, 'expense': three.totalExpense, 'transfer': three.totalTransfer},
         'grouped': gj(computeGroupedTotals(txs, cats)),
-        'groupedVo': gj(computeGroupedTotals(txs, cats, member: FamilyMember.vo)),
-        'groupedChong': gj(computeGroupedTotals(txs, cats, member: FamilyMember.chong)),
+        'groupedVo': gj(computeGroupedTotals(txs, cats, memberId: 'vo')),
+        'groupedChong': gj(computeGroupedTotals(txs, cats, memberId: 'chong')),
         'pools': {for (final e in pools.entries) '${e.key.$1.name}|${e.key.$2}': e.value},
       },
       'groupedByMonth': {
         for (var m = 1; m <= 12; m++)
           '$m': {
             'all': gj(computeGroupedTotals(txs, cats, month: DateTime(2026, m))),
-            'vo': gj(computeGroupedTotals(txs, cats, month: DateTime(2026, m), member: FamilyMember.vo)),
-            'chong': gj(computeGroupedTotals(txs, cats, month: DateTime(2026, m), member: FamilyMember.chong)),
+            'vo': gj(computeGroupedTotals(txs, cats, month: DateTime(2026, m), memberId: 'vo')),
+            'chong': gj(computeGroupedTotals(txs, cats, month: DateTime(2026, m), memberId: 'chong')),
           },
       },
       'periods': {

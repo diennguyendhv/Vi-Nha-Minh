@@ -5,7 +5,7 @@
 /// giống hệt nguyên tắc `Fund`/`SavingsAssetType` (dữ liệu gia đình tự tạo,
 /// không hardcode).
 ///
-/// KHÔNG đại diện cho thành viên gia đình (`FamilyMember` đã có sẵn, đảm
+/// KHÔNG đại diện cho thành viên gia đình (`FinancialMember` đã có sẵn, đảm
 /// nhiệm việc "pool này của ai" — `Counterparty` chỉ là bên NGOÀI hệ pool
 /// gia đình).
 class Counterparty {

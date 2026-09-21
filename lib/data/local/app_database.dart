@@ -299,7 +299,9 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       if (details.wasCreated) {
         await seedDefaults(this, seedProfile);
-        await _ensureWalletIdentity();
+        await _ensureWalletIdentity(
+          legacyIds: seedProfile == SeedProfile.demo,
+        );
       }
     },
   );
@@ -319,11 +321,15 @@ class AppDatabase extends _$AppDatabase {
   /// Thứ tự copy (status_rows trước, rồi mới transaction_rows) đã đảm bảo
   /// FK hợp lệ theo đúng dữ liệu gốc mà không cần tắt enforcement.
   /// Tạo (idempotent) danh tính Wallet của DB này: đúng 1 dòng `wallet_meta` + 2
-  /// thành viên tài chính di sản `vo`/`chong`. Chạy lại KHÔNG tạo bản sao (singleton +
-  /// khóa chính + `insertOrIgnore`). Cả DB di sản nâng cấp lẫn DB mới hiện dùng
-  /// chuỗi `vo`/`chong` vì mã hiện tại còn ghi đúng các chuỗi đó vào cột ref; ID mờ
-  /// cho thành viên của Wallet MỚI đến cùng phase "thành viên là dữ liệu".
-  Future<void> _ensureWalletIdentity() async {
+  /// thành viên tài chính mặc định. Chạy lại KHÔNG tạo bản sao (singleton + khóa chính
+  /// + `insertOrIgnore`).
+  ///
+  /// [legacyIds] = true (nâng cấp v7→v8 và [SeedProfile.demo]): dùng ID di sản `vo` /
+  /// `chong` — đúng chuỗi đã nằm trong `*_ref_id` của giao dịch hiện có (không viết lại
+  /// dòng nào). false (Wallet MỚI, [SeedProfile.fresh]): ID mờ ổn định ([OpaqueId]),
+  /// không suy từ nhãn/vai trò. Từ P4 mã tài chính không còn phân biệt hai kiểu này —
+  /// mọi thành viên đều đi qua bảng `financial_member_rows`.
+  Future<void> _ensureWalletIdentity({required bool legacyIds}) async {
     final now = DateTime.now();
     await into(walletMeta).insert(
       WalletMetaCompanion.insert(
@@ -333,10 +339,16 @@ class AppDatabase extends _$AppDatabase {
       ),
       mode: InsertMode.insertOrIgnore,
     );
-    for (final (index, member) in const [('vo', 'Vợ'), ('chong', 'Chồng')].indexed) {
+    // Seed nhãn mặc định (i18n: chuyển sang .arb ở phase i18n).
+    const defaults = [('vo', 'Vợ'), ('chong', 'Chồng')];
+    if (!legacyIds &&
+        (await select(financialMemberRows).get()).isNotEmpty) {
+      return;
+    }
+    for (final (index, member) in defaults.indexed) {
       await into(financialMemberRows).insert(
         FinancialMemberRowsCompanion.insert(
-          memberId: member.$1,
+          memberId: legacyIds ? member.$1 : OpaqueId.generate(),
           label: member.$2,
           displayOrder: index,
           createdAt: now,
@@ -349,7 +361,7 @@ class AppDatabase extends _$AppDatabase {
   Future<void> _migrateToV8(Migrator m) async {
     await m.createTable(walletMeta);
     await m.createTable(financialMemberRows);
-    await _ensureWalletIdentity();
+    await _ensureWalletIdentity(legacyIds: true);
   }
 
   Future<void> _migrateToV4(Migrator m) async {

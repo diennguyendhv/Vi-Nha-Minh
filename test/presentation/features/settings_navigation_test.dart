@@ -26,6 +26,7 @@ import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 // Repository giả chạy trên Stream.value — KHÔNG dùng Drift in-memory thật
 // trong widget test (gotcha đã biết: `pumpAndSettle` treo vì timer nội bộ của
@@ -82,6 +83,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+        ...legacyMemberOverrides,
           appLockPlatformProvider.overrideWithValue(FakeAppLockPlatform()),
           deviceAuthenticatorProvider.overrideWithValue(FakeDeviceAuthenticator()),
           transactionRepositoryProvider.overrideWithValue(_EmptyTransactionRepository()),

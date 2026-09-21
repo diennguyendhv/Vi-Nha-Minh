@@ -10,7 +10,6 @@ import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart'
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart' as domain;
@@ -28,7 +27,7 @@ void main() {
   late LocalTransactionRepository repo;
   late LocalCategoryRepository cats;
   var seq = 0;
-  const vo = FamilyMember.vo;
+  const vo = 'vo';
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -76,7 +75,7 @@ void main() {
     category: 'thu_nhap',
     from: PoolKind.external,
     to: PoolKind.memberAvailable,
-    toRef: vo.name,
+    toRef: vo,
     amount: amount,
     day: day,
   );
@@ -87,7 +86,7 @@ void main() {
     category: category,
     statusId: statusId,
     from: PoolKind.memberAvailable,
-    fromRef: vo.name,
+    fromRef: vo,
     to: PoolKind.external,
     amount: amount,
     day: day,
@@ -96,7 +95,7 @@ void main() {
   Future<List<domain.Transaction>> all() => repo.watchTransactions().first;
 
   Future<int> avail() async =>
-      poolBalance(computeAllPoolBalances(await all()), PoolKind.memberAvailable, vo.name);
+      poolBalance(computeAllPoolBalances(await all()), PoolKind.memberAvailable, vo);
 
   Future<void> addCategoryWithStatuses() async {
     await cats.addCategory(
@@ -239,7 +238,7 @@ void main() {
           categoryId: 'vay_no',
           sourceKind: PoolKind.external,
           destinationKind: PoolKind.memberAvailable,
-          destinationRefId: vo.name,
+          destinationRefId: vo,
           amountMinor: 500000,
           settlementGroupId: 'grp1',
           transactionDate: DateTime(2026, 9, 1),
@@ -333,7 +332,7 @@ void main() {
         kind: TransferKind.savingsTopup,
         category: 'tiet_kiem',
         from: PoolKind.memberAvailable,
-        fromRef: vo.name,
+        fromRef: vo,
         to: PoolKind.memberSavingsAsset,
         toRef: savingsAssetRefId(unalloc, vo),
         amount: 1000000,

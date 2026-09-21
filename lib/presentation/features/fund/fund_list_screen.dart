@@ -11,6 +11,7 @@ import '../../../domain/usecases/deletion_check.dart';
 import '../../providers/category_providers.dart';
 import '../../widgets/stopped_item_tile.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/primary_fund_provider.dart';
 import '../../providers/transaction_providers.dart';
 import 'fund_detail_screen.dart';
@@ -89,7 +90,12 @@ class FundListScreen extends ConsumerWidget {
                       name: f.name,
                       color: f.color,
                       noun: 'quỹ này',
-                      check: checkFundDeletion(f.id, categories, transactions),
+                      check: checkFundDeletion(
+                        f.id,
+                        categories,
+                        transactions,
+                        members: ref.watch(memberDirectoryProvider).members,
+                      ),
                       onReuse: () =>
                           ref.read(fundRepositoryProvider).reactivateFund(f.id),
                       onDelete: () => _confirmDelete(context, ref, f, deletable),

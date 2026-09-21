@@ -12,7 +12,6 @@ import 'package:vi_nha_minh/data/repositories/local_status_repository.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart' as domain;
@@ -31,8 +30,8 @@ void main() {
   late LocalCategoryRepository cats;
   late LocalStatusRepository statuses;
   var seq = 0;
-  const vo = FamilyMember.vo;
-  const chong = FamilyMember.chong;
+  const vo = 'vo';
+  const chong = 'chong';
   const unalloc = SystemSavingsAssets.unallocatedId;
   const gold = DefaultSavingsAssetTypes.goldId;
 
@@ -80,40 +79,40 @@ void main() {
     );
   }
 
-  domain.Transaction income(String id, FamilyMember m, int amount, {String category = 'thu_nhap'}) => tx(
+  domain.Transaction income(String id, String m, int amount, {String category = 'thu_nhap'}) => tx(
     id: id,
     type: TransactionType.income,
     category: category,
     from: PoolKind.external,
     to: PoolKind.memberAvailable,
-    toRef: m.name,
+    toRef: m,
     amount: amount,
   );
 
-  domain.Transaction expense(String id, FamilyMember m, int amount, {String category = 'sinh_hoat', String? statusId}) => tx(
+  domain.Transaction expense(String id, String m, int amount, {String category = 'sinh_hoat', String? statusId}) => tx(
     id: id,
     type: TransactionType.expense,
     category: category,
     statusId: statusId,
     from: PoolKind.memberAvailable,
-    fromRef: m.name,
+    fromRef: m,
     to: PoolKind.external,
     amount: amount,
   );
 
-  domain.Transaction topup(String id, FamilyMember m, int amount) => tx(
+  domain.Transaction topup(String id, String m, int amount) => tx(
     id: id,
     type: TransactionType.transfer,
     kind: TransferKind.savingsTopup,
     category: 'tiet_kiem',
     from: PoolKind.memberAvailable,
-    fromRef: m.name,
+    fromRef: m,
     to: PoolKind.memberSavingsAsset,
     toRef: savingsAssetRefId(unalloc, m),
     amount: amount,
   );
 
-  domain.Transaction allocate(String id, FamilyMember m, int amount) => tx(
+  domain.Transaction allocate(String id, String m, int amount) => tx(
     id: id,
     type: TransactionType.transfer,
     kind: TransferKind.savingsConvert,
@@ -128,8 +127,8 @@ void main() {
   Future<List<domain.Transaction>> all() => repo.watchTransactions().first;
   Future<bool> exists(String id) async => (await all()).any((t) => t.id == id);
   Future<int> rows() async => (await all()).length;
-  Future<int> avail(FamilyMember m) async => computeMemberAvailableBalance(m, await all());
-  Future<int> savings(FamilyMember m) async => computeMemberSavingsTotal(m, await all());
+  Future<int> avail(String m) async => computeMemberAvailableBalance(m, await all());
+  Future<int> savings(String m) async => computeMemberSavingsTotal(m, await all());
 
   Category cat(String id) => Category(
     id: id,
@@ -173,9 +172,9 @@ void main() {
           kind: TransferKind.memberToMember,
           category: 'chuyen_tien_thanh_vien',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.memberAvailable,
-          toRef: chong.name,
+          toRef: chong,
           amount: 400000,
         ),
       );
@@ -252,7 +251,7 @@ void main() {
           kind: TransferKind.fundTopup,
           category: 'nap_quy',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.fund,
           toRef: 'an_uong',
           amount: 300000,
@@ -293,7 +292,7 @@ void main() {
       await repo.deleteTransaction('e1');
 
       expect(await rows(), 1, reason: 'cả gốc lẫn hoàn tác đều biến mất');
-      expect(computeAllPoolBalances(await all())[(PoolKind.memberAvailable, vo.name)], balancesBefore[(PoolKind.memberAvailable, vo.name)]);
+      expect(computeAllPoolBalances(await all())[(PoolKind.memberAvailable, vo)], balancesBefore[(PoolKind.memberAvailable, vo)]);
     });
 
     test('H2 — chọn đúng DÒNG HOÀN TÁC cũng dọn cả cặp', () async {
@@ -373,7 +372,7 @@ void main() {
           category: 'hoan_tien_thu_hoi',
           from: PoolKind.external,
           to: PoolKind.memberAvailable,
-          toRef: vo.name,
+          toRef: vo,
           amount: 100000,
           recoveryOf: 'e1',
         ),
@@ -395,7 +394,7 @@ void main() {
           type: TransactionType.expense,
           category: 'tra_no',
           from: PoolKind.memberAvailable,
-          fromRef: vo.name,
+          fromRef: vo,
           to: PoolKind.external,
           amount: 1000,
           obligation: 'ob-1',

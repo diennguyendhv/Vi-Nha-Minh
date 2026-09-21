@@ -8,7 +8,6 @@ import 'package:vi_nha_minh/core/constants/default_categories.dart';
 import 'package:vi_nha_minh/core/constants/default_funds.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
@@ -28,6 +27,7 @@ import 'package:vi_nha_minh/presentation/providers/fund_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/obligation_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/savings_asset_type_providers.dart';
 import 'package:vi_nha_minh/presentation/providers/transaction_providers.dart';
+import '../../support/legacy_members.dart';
 
 class _TxRepo implements TransactionRepository {
   _TxRepo(this.ledger);
@@ -89,7 +89,7 @@ class _AssetRepo implements SavingsAssetTypeRepository {
 }
 
 int _n = 0;
-Transaction _into(FamilyMember m, String asset, int amount) {
+Transaction _into(String m, String asset, int amount) {
   _n++;
   return Transaction(
     id: 's$_n',
@@ -105,7 +105,7 @@ Transaction _into(FamilyMember m, String asset, int amount) {
   );
 }
 
-Transaction _outOf(FamilyMember m, String asset, int amount) {
+Transaction _outOf(String m, String asset, int amount) {
   _n++;
   return Transaction(
     id: 'o$_n',
@@ -126,7 +126,7 @@ Future<_AssetRepo> _pump(
   List<Transaction> ledger = const [],
   List<SavingsAssetType>? types,
   Set<String> deletable = const {},
-  FamilyMember? member,
+  String? member,
 }) async {
   tester.view.physicalSize = const Size(1080, 3200);
   tester.view.devicePixelRatio = 1.0;
@@ -136,13 +136,14 @@ Future<_AssetRepo> _pump(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
+        ...legacyMemberOverrides,
         transactionRepositoryProvider.overrideWithValue(_TxRepo(ledger)),
         categoryRepositoryProvider.overrideWithValue(_CatRepo()),
         fundRepositoryProvider.overrideWithValue(_FundRepo()),
         obligationRepositoryProvider.overrideWithValue(_ObRepo()),
         savingsAssetTypeRepositoryProvider.overrideWithValue(assets),
       ],
-      child: MaterialApp(home: SavingsScreen(initialMember: member)),
+      child: MaterialApp(home: SavingsScreen(initialMemberId: member)),
     ),
   );
   await tester.pumpAndSettle();
@@ -153,8 +154,8 @@ String _text(WidgetTester tester, String key) => tester.widget<Text>(find.byKey(
 
 void main() {
   GoogleFonts.config.allowRuntimeFetching = false;
-  const vo = FamilyMember.vo;
-  const chong = FamilyMember.chong;
+  const vo = 'vo';
+  const chong = 'chong';
   const bank = DefaultSavingsAssetTypes.bankId;
   const gold = DefaultSavingsAssetTypes.goldId;
   const unalloc = SystemSavingsAssets.unallocatedId;
@@ -243,7 +244,7 @@ void main() {
       expect(find.byType(AddTransactionSheet, skipOffstage: false), findsOneWidget);
       final sheet = tester.widget<AddTransactionSheet>(find.byType(AddTransactionSheet));
       expect(sheet.initialSavingsAction, SavingsAction.topup);
-      expect(sheet.initialMember, chong);
+      expect(sheet.initialMemberId, chong);
       expect(sheet.initialTransferSubKind, TransferSubKind.savings);
       expect(find.byKey(const Key('savings_topup_hint')), findsOneWidget, reason: 'không hỏi loại tài sản');
     });

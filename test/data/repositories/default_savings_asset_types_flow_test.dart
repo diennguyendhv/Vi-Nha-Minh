@@ -5,7 +5,6 @@ import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart' as domain;
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -36,8 +35,8 @@ void main() {
     await db.close();
   });
 
-  String bankRef(FamilyMember m) => savingsAssetRefId(DefaultSavingsAssetTypes.bankId, m);
-  String goldRef(FamilyMember m) => savingsAssetRefId(DefaultSavingsAssetTypes.goldId, m);
+  String bankRef(String m) => savingsAssetRefId(DefaultSavingsAssetTypes.bankId, m);
+  String goldRef(String m) => savingsAssetRefId(DefaultSavingsAssetTypes.goldId, m);
 
   domain.Transaction tx({
     required TransactionType type,
@@ -141,10 +140,10 @@ void main() {
       final totalBefore = await totalAssets();
       final ieBefore = await incomeExpense();
 
-      await topup(bankRef(FamilyMember.vo), 4000000);
+      await topup(bankRef('vo'), 4000000);
 
       expect(await balance(PoolKind.memberAvailable, 'vo'), 6000000);
-      expect(await balance(PoolKind.memberSavingsAsset, bankRef(FamilyMember.vo)), 4000000);
+      expect(await balance(PoolKind.memberSavingsAsset, bankRef('vo')), 4000000);
       expect(await totalAssets(), totalBefore);
       final ieAfter = await incomeExpense();
       expect(ieAfter.income, ieBefore.income);
@@ -156,10 +155,10 @@ void main() {
       final totalBefore = await totalAssets();
       final ieBefore = await incomeExpense();
 
-      await topup(goldRef(FamilyMember.vo), 3000000);
+      await topup(goldRef('vo'), 3000000);
 
       expect(await balance(PoolKind.memberAvailable, 'vo'), 7000000);
-      expect(await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.vo)), 3000000);
+      expect(await balance(PoolKind.memberSavingsAsset, goldRef('vo')), 3000000);
       expect(await totalAssets(), totalBefore);
       final ieAfter = await incomeExpense();
       expect(ieAfter.income, ieBefore.income);
@@ -168,7 +167,7 @@ void main() {
 
     test('3 — Gửi ngân hàng → Vàng (SAVINGS_CONVERT): tổng Savings, Available, Total Assets không đổi', () async {
       await openingAvailable(10000000);
-      await topup(bankRef(FamilyMember.vo), 4000000);
+      await topup(bankRef('vo'), 4000000);
       final totalBefore = await totalAssets();
       final availableBefore = await balance(PoolKind.memberAvailable, 'vo');
       final ieBefore = await incomeExpense();
@@ -179,15 +178,15 @@ void main() {
           transferKind: TransferKind.savingsConvert,
           categoryId: DefaultCategories.tietKiem.id,
           sourceKind: PoolKind.memberSavingsAsset,
-          sourceRefId: bankRef(FamilyMember.vo),
+          sourceRefId: bankRef('vo'),
           destinationKind: PoolKind.memberSavingsAsset,
-          destinationRefId: goldRef(FamilyMember.vo),
+          destinationRefId: goldRef('vo'),
           amountMinor: 1500000,
         ),
       );
 
-      final bank = await balance(PoolKind.memberSavingsAsset, bankRef(FamilyMember.vo));
-      final gold = await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.vo));
+      final bank = await balance(PoolKind.memberSavingsAsset, bankRef('vo'));
+      final gold = await balance(PoolKind.memberSavingsAsset, goldRef('vo'));
       expect(bank, 2500000);
       expect(gold, 1500000);
       expect(bank + gold, 4000000, reason: 'tổng Savings không đổi');
@@ -200,7 +199,7 @@ void main() {
 
     test('4 — Vàng → Available (SAVINGS_WITHDRAW): Savings giảm, Available tăng, Total Assets không đổi', () async {
       await openingAvailable(10000000);
-      await topup(goldRef(FamilyMember.vo), 3000000);
+      await topup(goldRef('vo'), 3000000);
       final totalBefore = await totalAssets();
       final ieBefore = await incomeExpense();
 
@@ -210,14 +209,14 @@ void main() {
           transferKind: TransferKind.savingsWithdraw,
           categoryId: DefaultCategories.tietKiem.id,
           sourceKind: PoolKind.memberSavingsAsset,
-          sourceRefId: goldRef(FamilyMember.vo),
+          sourceRefId: goldRef('vo'),
           destinationKind: PoolKind.memberAvailable,
           destinationRefId: 'vo',
           amountMinor: 1200000,
         ),
       );
 
-      expect(await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.vo)), 1800000);
+      expect(await balance(PoolKind.memberSavingsAsset, goldRef('vo')), 1800000);
       expect(await balance(PoolKind.memberAvailable, 'vo'), 8200000);
       expect(await totalAssets(), totalBefore);
       final ieAfter = await incomeExpense();
@@ -227,7 +226,7 @@ void main() {
 
     test('5 — rút/chuyển vượt số dư bị chặn (InsufficientBalanceException), không ghi gì', () async {
       await openingAvailable(10000000);
-      await topup(bankRef(FamilyMember.vo), 500000);
+      await topup(bankRef('vo'), 500000);
       final countBefore = (await allTx()).length;
 
       // rút 700k khi Gửi ngân hàng chỉ còn 500k
@@ -238,7 +237,7 @@ void main() {
             transferKind: TransferKind.savingsWithdraw,
             categoryId: DefaultCategories.tietKiem.id,
             sourceKind: PoolKind.memberSavingsAsset,
-            sourceRefId: bankRef(FamilyMember.vo),
+            sourceRefId: bankRef('vo'),
             destinationKind: PoolKind.memberAvailable,
             destinationRefId: 'vo',
             amountMinor: 700000,
@@ -254,9 +253,9 @@ void main() {
             transferKind: TransferKind.savingsConvert,
             categoryId: DefaultCategories.tietKiem.id,
             sourceKind: PoolKind.memberSavingsAsset,
-            sourceRefId: bankRef(FamilyMember.vo),
+            sourceRefId: bankRef('vo'),
             destinationKind: PoolKind.memberSavingsAsset,
-            destinationRefId: goldRef(FamilyMember.vo),
+            destinationRefId: goldRef('vo'),
             amountMinor: 700000,
           ),
         ),
@@ -264,8 +263,8 @@ void main() {
       );
 
       expect((await allTx()).length, countBefore, reason: 'không ghi nửa giao dịch');
-      expect(await balance(PoolKind.memberSavingsAsset, bankRef(FamilyMember.vo)), 500000);
-      expect(await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.vo)), 0);
+      expect(await balance(PoolKind.memberSavingsAsset, bankRef('vo')), 500000);
+      expect(await balance(PoolKind.memberSavingsAsset, goldRef('vo')), 0);
     });
 
     test('6 — Vợ và Chồng có Savings riêng cho cùng 1 loại (Vàng)', () async {
@@ -280,7 +279,7 @@ void main() {
           amountMinor: 5000000,
         ),
       );
-      await topup(goldRef(FamilyMember.vo), 2000000);
+      await topup(goldRef('vo'), 2000000);
       await repo.addTransaction(
         tx(
           type: TransactionType.transfer,
@@ -289,13 +288,13 @@ void main() {
           sourceKind: PoolKind.memberAvailable,
           sourceRefId: 'chong',
           destinationKind: PoolKind.memberSavingsAsset,
-          destinationRefId: goldRef(FamilyMember.chong),
+          destinationRefId: goldRef('chong'),
           amountMinor: 3000000,
         ),
       );
 
-      expect(await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.vo)), 2000000);
-      expect(await balance(PoolKind.memberSavingsAsset, goldRef(FamilyMember.chong)), 3000000);
+      expect(await balance(PoolKind.memberSavingsAsset, goldRef('vo')), 2000000);
+      expect(await balance(PoolKind.memberSavingsAsset, goldRef('chong')), 3000000);
     });
   });
 }

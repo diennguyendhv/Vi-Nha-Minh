@@ -8,9 +8,8 @@ import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/local/seed_defaults.dart';
 import 'package:vi_nha_minh/data/repositories/local_wallet_identity_repository.dart';
 import 'package:vi_nha_minh/core/utils/opaque_id.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/wallet_identity.dart';
-import 'package:vi_nha_minh/domain/entities/wallet_member_resolver.dart';
+import 'package:vi_nha_minh/data/repositories/local_member_repository.dart';
 
 /// P2 — schema v7 → v8: thêm `wallet_meta` (singleton) + `financial_member_rows`
 /// (`vo`, `chong`) và KHÔNG đổi bất kỳ dòng cũ nào. Fixture "v7 thật": dựng DB hiện
@@ -216,27 +215,27 @@ void main() {
     check.close();
   });
 
-  test('DB MỚI (fresh) cũng có đúng 1 Wallet + 2 thành viên; DB demo/test cũng vậy', () async {
+  test('DB MỚI: fresh = 2 thành viên ID mờ; demo (di sản) = vo/chong; đều đúng 1 Wallet', () async {
     for (final profile in SeedProfile.values) {
       final db = AppDatabase.forTesting(NativeDatabase.memory(), seed: profile);
       expect(await db.select(db.walletMeta).get(), hasLength(1), reason: '$profile');
-      expect((await db.select(db.financialMemberRows).get()).map((m) => m.memberId).toSet(), {'vo', 'chong'});
+      final members = await LocalMemberRepository(db).getMembers();
+      expect(members.map((m) => m.label), ['Vợ', 'Chồng'], reason: '$profile: theo displayOrder');
+      if (profile == SeedProfile.demo) {
+        expect(members.map((m) => m.memberId), ['vo', 'chong']);
+      } else {
+        expect(members.every((m) => OpaqueId.isValid(m.memberId)), isTrue, reason: 'Wallet mới dùng ID mờ');
+      }
       await db.close();
     }
   });
 
-  test('LocalWalletIdentityRepository + WalletMemberResolver: FamilyMember → FinancialMember không đổi hành vi', () async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory(), seed: SeedProfile.fresh);
+  test('LocalWalletIdentityRepository trả thành viên theo displayOrder', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
     final identity = await LocalWalletIdentityRepository(db).read();
     expect(identity.kind, WalletKind.local);
     expect(identity.members.map((m) => m.memberId), ['vo', 'chong'], reason: 'theo displayOrder');
-    final resolver = WalletMemberResolver(identity);
-    expect(resolver.resolve(FamilyMember.vo)!.label, 'Vợ');
-    expect(resolver.resolve(FamilyMember.chong)!.memberId, 'chong');
-    expect(WalletMemberResolver.legacyMemberFor('vo'), FamilyMember.vo);
-    expect(WalletMemberResolver.legacyMemberFor('chong'), FamilyMember.chong);
-    expect(WalletMemberResolver.legacyMemberFor(OpaqueId.generate()), isNull,
-        reason: 'ID mờ của Wallet mới không bị nhầm thành Vợ/Chồng');
+    expect(identity.memberById('vo')!.label, 'Vợ');
     await db.close();
   });
 
@@ -251,7 +250,7 @@ void main() {
   });
 
   test('Bất biến kiến trúc (chỉ kiểm mô hình, chưa triển khai mời): người còn lại sẽ gắn vào memberId ĐÃ CÓ, không tạo thành viên mới', () async {
-    final db = AppDatabase.forTesting(NativeDatabase.memory(), seed: SeedProfile.fresh);
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
     final before = (await LocalWalletIdentityRepository(db).read()).members;
     // Kịch bản tương lai: Owner claim 'chong' → 'vo' vẫn là slot chưa gắn. Ở P2 không có
     // thao tác nào được phép thêm thành viên: số thành viên cố định = 2 và ID không đổi.

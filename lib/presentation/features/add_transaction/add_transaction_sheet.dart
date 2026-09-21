@@ -7,7 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/usecases/selectable_categories.dart';
-import '../../../domain/entities/family_member.dart';
+import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/entities/savings_asset_type.dart';
@@ -23,6 +23,7 @@ import '../../widgets/tap_guard.dart';
 import '../../providers/category_providers.dart';
 import '../category/category_edit_screen.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 
@@ -59,7 +60,7 @@ Future<void> showAddTransactionSheet(
   String? initialFundId,
   SavingsAction? initialSavingsAction,
   String? initialSavingsAssetTypeId,
-  FamilyMember? initialMember,
+  String? initialMemberId,
   Transaction? recoveryTarget,
 }) {
   return showModalBottomSheet<void>(
@@ -74,7 +75,7 @@ Future<void> showAddTransactionSheet(
       initialFundId: initialFundId,
       initialSavingsAction: initialSavingsAction,
       initialSavingsAssetTypeId: initialSavingsAssetTypeId,
-      initialMember: initialMember,
+      initialMemberId: initialMemberId,
       recoveryTarget: recoveryTarget,
     ),
   );
@@ -106,7 +107,7 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
     this.initialFundId,
     this.initialSavingsAction,
     this.initialSavingsAssetTypeId,
-    this.initialMember,
+    this.initialMemberId,
     this.recoveryTarget,
   });
 
@@ -115,7 +116,8 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
   final String? initialFundId;
   final SavingsAction? initialSavingsAction;
   final String? initialSavingsAssetTypeId;
-  final FamilyMember? initialMember;
+  /// `memberId` mở sẵn; không thuộc Wallet/null → thành viên mặc định (đầu tiên).
+  final String? initialMemberId;
 
   /// Phase 8.6 — khác null khi sheet mở ở chế độ "Hoàn tiền / Thu hồi" cho
   /// ĐÚNG giao dịch Chi này (mở từ nút trên Transaction Detail). Khoá loại
@@ -135,7 +137,13 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       ? EntryType.thu
       : widget.initialType;
   String? _categoryId;
-  late FamilyMember _member = widget.initialMember ?? FamilyMember.vo;
+  late String? _memberSel = widget.initialMemberId;
+
+  MemberDirectory get _directory => ref.read(memberDirectoryProvider);
+
+  /// Người đang chọn (luôn thuộc Wallet; rỗng chỉ khi Wallet chưa có thành viên).
+  String get _member => _directory.resolveOrDefault(_memberSel) ?? '';
+  String get _memberLabel => _directory.labelOf(_member) ?? '';
   String? _statusId;
   late String? _sourceFundId = widget.initialTransferSubKind == null
       ? widget.initialFundId
@@ -143,8 +151,17 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   late TransferSubKind _transferSubKind =
       widget.initialTransferSubKind ?? TransferSubKind.member;
-  FamilyMember _transferFrom = FamilyMember.vo;
-  FamilyMember _transferTo = FamilyMember.chong;
+  String? _transferFromSel;
+  String? _transferToSel;
+
+  String get _transferFrom =>
+      _directory.resolveOrDefault(_transferFromSel) ?? '';
+
+  /// Người nhận mặc định = người khác người gửi (suy từ danh sách thành viên).
+  String get _transferTo =>
+      _directory.contains(_transferToSel)
+      ? _transferToSel!
+      : (_directory.firstOtherThan(_transferFrom) ?? '');
   late String? _transferFundId =
       widget.initialTransferSubKind == TransferSubKind.fund
       ? widget.initialFundId
@@ -360,7 +377,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   /// từ trước (Thu/Chi/Chuyển × thành viên/quỹ/tiết kiệm) — không đổi hành
   /// vi nghiệp vụ nào, chỉ đổi kiểu dữ liệu trả về.
   _TransactionIntent? _buildLogicalIntent(List<Category> categories) {
-    if (_amount <= 0) return null;
+    if (_amount <= 0 || _directory.isEmpty) return null;
 
     // Phase 8.6 — chế độ "Hoàn tiền / Thu hồi": intent riêng, KHÔNG đi qua
     // category picker thường (khoá cứng `hoanTienThuHoi`), gắn thêm
@@ -374,7 +391,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         sourceKind: PoolKind.external,
         sourceRefId: null,
         destinationKind: PoolKind.memberAvailable,
-        destinationRefId: _member.name,
+        destinationRefId: _member,
         amountMinor: _amount,
         transactionDate: _transactionDate,
         note: _note.trim(),
@@ -396,7 +413,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           sourceKind: PoolKind.external,
           sourceRefId: null,
           destinationKind: PoolKind.memberAvailable,
-          destinationRefId: _member.name,
+          destinationRefId: _member,
           amountMinor: _amount,
           transactionDate: _transactionDate,
           note: _note.trim(),
@@ -415,7 +432,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           transferKind: null,
           categoryId: category.id,
           sourceKind: fundId == null ? PoolKind.memberAvailable : PoolKind.fund,
-          sourceRefId: fundId ?? _member.name,
+          sourceRefId: fundId ?? _member,
           destinationKind: PoolKind.external,
           destinationRefId: null,
           amountMinor: _amount,
@@ -428,15 +445,19 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       case EntryType.chuyen:
         switch (_transferSubKind) {
           case TransferSubKind.member:
-            if (_transferFrom == _transferTo) return null;
+            if (_transferFrom.isEmpty ||
+                _transferTo.isEmpty ||
+                _transferFrom == _transferTo) {
+              return null;
+            }
             return (
               type: TransactionType.transfer,
               transferKind: TransferKind.memberToMember,
               categoryId: DefaultCategories.chuyenTienThanhVien.id,
               sourceKind: PoolKind.memberAvailable,
-              sourceRefId: _transferFrom.name,
+              sourceRefId: _transferFrom,
               destinationKind: PoolKind.memberAvailable,
-              destinationRefId: _transferTo.name,
+              destinationRefId: _transferTo,
               amountMinor: _amount,
               transactionDate: _transactionDate,
               note: _note.trim(),
@@ -453,7 +474,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transferKind: TransferKind.fundTopup,
                   categoryId: DefaultCategories.napQuy.id,
                   sourceKind: PoolKind.memberAvailable,
-                  sourceRefId: _member.name,
+                  sourceRefId: _member,
                   destinationKind: PoolKind.fund,
                   destinationRefId: fundId,
                   amountMinor: _amount,
@@ -470,7 +491,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceKind: PoolKind.fund,
                   sourceRefId: fundId,
                   destinationKind: PoolKind.memberAvailable,
-                  destinationRefId: _member.name,
+                  destinationRefId: _member,
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
@@ -493,7 +514,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   transferKind: TransferKind.savingsTopup,
                   categoryId: DefaultCategories.tietKiem.id,
                   sourceKind: PoolKind.memberAvailable,
-                  sourceRefId: member.name,
+                  sourceRefId: member,
                   destinationKind: PoolKind.memberSavingsAsset,
                   destinationRefId: savingsAssetRefId(
                     SystemSavingsAssets.unallocatedId,
@@ -513,7 +534,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceKind: PoolKind.memberSavingsAsset,
                   sourceRefId: savingsAssetRefId(assetTypeId!, member),
                   destinationKind: PoolKind.memberAvailable,
-                  destinationRefId: member.name,
+                  destinationRefId: member,
                   amountMinor: _amount,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
@@ -544,6 +565,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Theo dõi để sheet dựng lại khi danh sách thành viên đổi (đọc qua `_directory`).
+    ref.watch(memberDirectoryProvider);
     final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
     final transactions =
@@ -792,8 +815,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         const _SectionLabel('Người nhận'),
         const SizedBox(height: 8),
         _MemberToggle(
-          member: _member,
-          onChanged: (m) => setState(() => _member = m),
+          directory: _directory,
+          memberId: _member,
+          onChanged: (m) => setState(() => _memberSel = m),
         ),
       ];
     }
@@ -840,8 +864,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           const _SectionLabel('Người nhận'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _member,
-            onChanged: (m) => setState(() => _member = m),
+            directory: _directory,
+            memberId: _member,
+            onChanged: (m) => setState(() => _memberSel = m),
           ),
         ];
 
@@ -887,9 +912,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           const _SectionLabel('Người chi'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _member,
+            directory: _directory,
+            memberId: _member,
             onChanged: (m) => setState(() {
-              _member = m;
+              _memberSel = m;
               _sourceFundId = null;
             }),
           ),
@@ -897,7 +923,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           const _SectionLabel('Nguồn tiền'),
           const SizedBox(height: 8),
           _FundPickRow(
-            walletLabel: 'Ví của ${_member.label}',
+            walletLabel: 'Ví của $_memberLabel',
             funds: funds,
             selectedFundId: _sourceFundId,
             amount: _amount,
@@ -935,15 +961,17 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           const _SectionLabel('Người gửi'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _transferFrom,
-            onChanged: (m) => setState(() => _transferFrom = m),
+            directory: _directory,
+            memberId: _transferFrom,
+            onChanged: (m) => setState(() => _transferFromSel = m),
           ),
           const SizedBox(height: 12),
           const _SectionLabel('Người nhận'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _transferTo,
-            onChanged: (m) => setState(() => _transferTo = m),
+            directory: _directory,
+            memberId: _transferTo,
+            onChanged: (m) => setState(() => _transferToSel = m),
           ),
         ];
       case TransferSubKind.fund:
@@ -959,8 +987,9 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           _SectionLabel(isWithdraw ? 'Người nhận' : 'Người nạp'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _member,
-            onChanged: (m) => setState(() => _member = m),
+            directory: _directory,
+            memberId: _member,
+            onChanged: (m) => setState(() => _memberSel = m),
           ),
           const SizedBox(height: 12),
           _SectionLabel(isWithdraw ? 'Quỹ nguồn' : 'Quỹ đích'),
@@ -1008,9 +1037,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           const _SectionLabel('Của ai'),
           const SizedBox(height: 8),
           _MemberToggle(
-            member: _member,
+            directory: _directory,
+            memberId: _member,
             onChanged: (m) => setState(() {
-              _member = m;
+              _memberSel = m;
               _savingsAssetTypeId = null;
               _savingsTargetAssetTypeId = null;
             }),
@@ -1280,17 +1310,22 @@ class _Segmented<T> extends StatelessWidget {
 }
 
 class _MemberToggle extends StatelessWidget {
-  const _MemberToggle({required this.member, required this.onChanged});
+  const _MemberToggle({
+    required this.directory,
+    required this.memberId,
+    required this.onChanged,
+  });
 
-  final FamilyMember member;
-  final ValueChanged<FamilyMember> onChanged;
+  final MemberDirectory directory;
+  final String memberId;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return _Segmented<FamilyMember>(
-      value: member,
-      options: FamilyMember.values,
-      labelOf: (m) => m.label,
+    return _Segmented<String>(
+      value: memberId,
+      options: directory.ids,
+      labelOf: (id) => directory.labelOf(id) ?? '',
       onChanged: onChanged,
     );
   }

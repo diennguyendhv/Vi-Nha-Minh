@@ -1,8 +1,8 @@
 import '../engine/financial_engine.dart';
 import '../engine/obligation_settlement.dart';
 import '../entities/category.dart';
-import '../entities/family_member.dart';
 import '../entities/fund.dart';
+import '../entities/wallet_identity.dart';
 import '../entities/obligation.dart';
 import '../entities/obligation_direction.dart';
 import '../entities/pool_kind.dart';
@@ -34,7 +34,7 @@ class FinancialSummary {
     required this.monthlyExpense,
   });
 
-  final Map<FamilyMember, int> availableByMember;
+  final Map<String, int> availableByMember;
   final int totalAvailable;
 
   /// `savingsByMemberAndAssetType[member][assetTypeId]` — chỉ chứa các
@@ -44,8 +44,8 @@ class FinancialSummary {
   /// breakdown này, nhưng số dư của nó (luôn phải = 0 theo mục 8 — chỉ xoá
   /// được khi balance = 0) vẫn được cộng đúng vào [totalSavings] vì tổng đó
   /// quét TRỰC TIẾP trên `balances`, không qua danh sách này.
-  final Map<FamilyMember, Map<String, int>> savingsByMemberAndAssetType;
-  final Map<FamilyMember, int> savingsByMember;
+  final Map<String, Map<String, int>> savingsByMemberAndAssetType;
+  final Map<String, int> savingsByMember;
 
   /// Tổng tiết kiệm CẢ NHÀ — quét toàn bộ `PoolKind.memberSavingsAsset`
   /// trực tiếp trên `balances` (Invariant 10: rebuild 100% từ transaction
@@ -132,27 +132,28 @@ FinancialSummary computeFinancialSummary(
   required List<Category> categories,
   required List<Fund> funds,
   required List<SavingsAssetType> assetTypes,
+  required List<FinancialMember> members,
   List<Obligation> obligations = const [],
   DateTime? month,
 }) {
   final balances = computeAllPoolBalances(transactions);
 
-  final availableByMember = <FamilyMember, int>{
-    for (final m in FamilyMember.values)
-      m: poolBalance(balances, PoolKind.memberAvailable, m.name),
+  final availableByMember = <String, int>{
+    for (final m in members)
+      m.memberId: poolBalance(balances, PoolKind.memberAvailable, m.memberId),
   };
   final totalAvailable = availableByMember.values.fold<int>(0, (s, v) => s + v);
 
-  final savingsByMemberAndAssetType = <FamilyMember, Map<String, int>>{
-    for (final m in FamilyMember.values)
-      m: {
+  final savingsByMemberAndAssetType = <String, Map<String, int>>{
+    for (final m in members)
+      m.memberId: {
         for (final a in assetTypes)
-          a.id: poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId(a.id, m)),
+          a.id: poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId(a.id, m.memberId)),
       },
   };
-  final savingsByMember = <FamilyMember, int>{
-    for (final m in FamilyMember.values)
-      m: savingsByMemberAndAssetType[m]!.values.fold<int>(0, (s, v) => s + v),
+  final savingsByMember = <String, int>{
+    for (final m in members)
+      m.memberId: savingsByMemberAndAssetType[m.memberId]!.values.fold<int>(0, (s, v) => s + v),
   };
 
   final fundBalances = <String, int>{

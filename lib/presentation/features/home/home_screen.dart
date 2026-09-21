@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
-import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/fund.dart';
+import '../../../domain/entities/wallet_identity.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/compute_member_financials.dart';
@@ -16,6 +16,7 @@ import '../../providers/app_state_providers.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/feature_providers.dart';
 import '../../providers/fund_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/primary_fund_provider.dart';
 import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
@@ -46,14 +47,19 @@ class HomeScreen extends ConsumerWidget {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
     final categoriesAsync = ref.watch(categoriesStreamProvider);
     final fundsAsync = ref.watch(fundsStreamProvider);
+    final membersAsync = ref.watch(membersStreamProvider);
 
     if (transactionsAsync.isLoading ||
         categoriesAsync.isLoading ||
-        fundsAsync.isLoading) {
+        fundsAsync.isLoading ||
+        membersAsync.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
     final error =
-        transactionsAsync.error ?? categoriesAsync.error ?? fundsAsync.error;
+        transactionsAsync.error ??
+        categoriesAsync.error ??
+        fundsAsync.error ??
+        membersAsync.error;
     if (error != null) {
       return Center(child: Text('Lỗi tải dữ liệu: $error'));
     }
@@ -62,6 +68,7 @@ class HomeScreen extends ConsumerWidget {
       transactions: transactionsAsync.value ?? const [],
       categories: categoriesAsync.value ?? const [],
       funds: fundsAsync.value ?? const [],
+      walletMembers: membersAsync.value ?? const [],
       showLoans: ref.watch(advancedFeaturesEnabledProvider),
     );
   }
@@ -72,12 +79,16 @@ class _HomeContent extends ConsumerStatefulWidget {
     required this.transactions,
     required this.categories,
     required this.funds,
+    required this.walletMembers,
     required this.showLoans,
   });
 
   final List<Transaction> transactions;
   final List<Category> categories;
   final List<Fund> funds;
+
+  /// [FinancialMember] của Wallet (theo `displayOrder`) — nguồn danh sách thẻ Vợ/Chồng.
+  final List<FinancialMember> walletMembers;
 
   /// Lối tắt Vay & Cho vay chỉ hiện khi bật tính năng nâng cao.
   final bool showLoans;
@@ -109,16 +120,16 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
     final categories = widget.categories;
 
     final members = [
-      for (final m in FamilyMember.values)
+      for (final m in widget.walletMembers)
         (
           member: m,
           income: computeMemberNetIncome(
-            m,
+            m.memberId,
             transactions,
             categories,
             month: month,
           ),
-          financials: computeMemberFinancials(m, transactions),
+          financials: computeMemberFinancials(m.memberId, transactions),
         ),
     ];
     final spending = computeGroupedTotals(
@@ -149,7 +160,7 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             onSavings: () => _once(
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => SavingsScreen(initialMember: m.member),
+                  builder: (_) => SavingsScreen(initialMemberId: m.member.memberId),
                 ),
               ),
             ),
@@ -348,7 +359,7 @@ class _MemberCard extends StatelessWidget {
     required this.onSavings,
   });
 
-  final FamilyMember member;
+  final FinancialMember member;
   final int income;
   final int balance;
   final int savings;
@@ -358,7 +369,7 @@ class _MemberCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final key = member.name;
+    final key = member.memberId;
     return _Card(
       key: Key('home_member_$key'),
       child: Column(

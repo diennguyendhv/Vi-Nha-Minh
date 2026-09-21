@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/status.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
@@ -154,11 +153,11 @@ void main() {
     ];
 
     test('A — Vợ = Doanh thu Vợ nhận − Chi phí KD Vợ chi (không trừ Chi tiêu, không cộng Khoản thu khác)', () {
-      expect(computeMemberNetIncome(FamilyMember.vo, ledger, _cats), 10000000 - 4000000);
+      expect(computeMemberNetIncome('vo', ledger, _cats), 10000000 - 4000000);
     });
 
     test('B — Chồng = Doanh thu Chồng nhận − Chi phí KD Chồng chi', () {
-      expect(computeMemberNetIncome(FamilyMember.chong, ledger, _cats), 5000000 - 500000);
+      expect(computeMemberNetIncome('chong', ledger, _cats), 5000000 - 500000);
     });
 
     test('C — Chi tiêu gia đình = tổng Chi tiêu của cả nhà (không gồm Chi phí KD)', () {
@@ -166,8 +165,8 @@ void main() {
     });
 
     test('Không chia đôi số cả nhà: Vợ + Chồng == Thu nhập ròng gia đình khi mọi giao dịch đều thuộc 1 thành viên', () {
-      final vo = computeMemberNetIncome(FamilyMember.vo, ledger, _cats);
-      final chong = computeMemberNetIncome(FamilyMember.chong, ledger, _cats);
+      final vo = computeMemberNetIncome('vo', ledger, _cats);
+      final chong = computeMemberNetIncome('chong', ledger, _cats);
       expect(vo + chong, computeGroupedTotals(ledger, _cats).netIncome);
     });
 
@@ -185,7 +184,7 @@ void main() {
         createdAt: DateTime(2026, 9, 10),
         clientTxId: 'c-fund-biz',
       );
-      expect(computeMemberNetIncome(FamilyMember.vo, [...ledger, fromFund], _cats), 6000000);
+      expect(computeMemberNetIncome('vo', [...ledger, fromFund], _cats), 6000000);
       expect(computeGroupedTotals([...ledger, fromFund], _cats).businessExpense, 4500000 + 900000);
     });
   });
@@ -211,13 +210,13 @@ void main() {
     });
 
     test('D — Vợ: gồm Thu người nhận Vợ, Chi Vợ chi, và Chuyển Vợ gửi', () {
-      final r = _run(ledger, const TransactionFilter(member: FamilyMember.vo));
+      final r = _run(ledger, const TransactionFilter(memberId: 'vo'));
       expect(r.rows.map((t) => t.note), containsAll(['HP lớp Excel', 'Bán lại quạt', 'Đi chợ', 'Lương cô Lam', 'gửi chồng']));
       expect(r.rows.any((t) => t.note == 'web bán hàng'), isFalse);
     });
 
     test('E — Chồng: gồm cả Chuyển Chồng nhận', () {
-      final r = _run(ledger, const TransactionFilter(member: FamilyMember.chong));
+      final r = _run(ledger, const TransactionFilter(memberId: 'chong'));
       expect(r.rows.map((t) => t.note), containsAll(['web bán hàng', 'gửi xe', 'CĐ tháng 9', 'gửi chồng']));
       expect(r.rows.any((t) => t.note == 'Đi chợ'), isFalse);
     });
@@ -310,7 +309,7 @@ void main() {
         final r = _run(
           ledger,
           const TransactionFilter(
-            member: FamilyMember.vo,
+            memberId: 'vo',
             categoryIds: {'sinh_hoat'},
             query: 'di',
           ),
@@ -345,7 +344,7 @@ void main() {
 
     test('K — Tháng 9 + Vợ + Sinh hoạt + note "chợ" = đúng giao', () {
       var f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30));
-      f = f.withMember(FamilyMember.vo);
+      f = f.withMember('vo');
       f = f.withCategories({'sinh_hoat'});
       f = f.withQuery('chợ');
       final r = _run(ledger, f);
@@ -356,7 +355,7 @@ void main() {
 
     test('Bỏ bớt từng điều kiện thì tập rộng dần', () {
       var f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30))
-          .withMember(FamilyMember.vo)
+          .withMember('vo')
           .withCategories({'sinh_hoat'});
       expect(_run(ledger, f).count, 2);
       f = f.withMember(null);
@@ -419,7 +418,7 @@ void main() {
 
     test('Chéo chiều: Năm + Chồng + (A|B) + (X|Y) + note = giao đúng', () {
       final f = TransactionFilter(from: DateTime(2026, 1, 1), to: DateTime(2026, 12, 31))
-          .withMember(FamilyMember.chong)
+          .withMember('chong')
           .withCategories({'luong_gv', 'cho_di', 'dang_hien'})
           .withStatuses({'st_gui', 'st_khac'}, includeNone: true)
           .withQuery('luong');
@@ -439,13 +438,13 @@ void main() {
       final range = (DateTime(2026, 1, 1), DateTime(2026, 12, 31));
       final a = const TransactionFilter()
           .withRange(range.$1, range.$2)
-          .withMember(FamilyMember.chong)
+          .withMember('chong')
           .withCategories({'cho_di', 'dang_hien'})
           .withStatuses({'st_chua', 'st_khac'});
       final b = const TransactionFilter()
           .withStatuses({'st_chua', 'st_khac'})
           .withCategories({'cho_di', 'dang_hien'})
-          .withMember(FamilyMember.chong)
+          .withMember('chong')
           .withRange(range.$1, range.$2);
       expect(ids(_run(ledger, a)), ids(_run(ledger, b)));
       expect(ids(_run(ledger, a)), {'cd1', 'dh1'});
@@ -665,7 +664,7 @@ void main() {
     test('hasNonDateFilter / advancedCount phản ánh đúng để hiện "Xoá bộ lọc"', () {
       expect(const TransactionFilter().hasNonDateFilter, isFalse);
       expect(const TransactionFilter(query: ' ').hasNonDateFilter, isFalse);
-      expect(const TransactionFilter(member: FamilyMember.vo).hasNonDateFilter, isTrue);
+      expect(const TransactionFilter(memberId: 'vo').hasNonDateFilter, isTrue);
       expect(const TransactionFilter(sort: ExplorerSort([SortRule(SortKey.amount)])).hasNonDateFilter, isTrue);
       expect(const TransactionFilter(sort: ExplorerSort.defaultSort).hasNonDateFilter, isFalse);
       final f = const TransactionFilter(categoryIds: {'sinh_hoat'}, includeNoStatus: true);
@@ -706,7 +705,7 @@ void main() {
         expect(categoryGroupOf(_byId[id]!, _hidden), isNull, reason: id);
       }
       // Lọc theo thành viên vẫn an toàn với dòng có đích là khoản vay.
-      expect(_run(ledger, const TransactionFilter(member: FamilyMember.vo)).count, greaterThanOrEqualTo(3));
+      expect(_run(ledger, const TransactionFilter(memberId: 'vo')).count, greaterThanOrEqualTo(3));
     });
   });
 
@@ -722,39 +721,39 @@ void main() {
       _out('sinh_hoat', 300000, from: 'chong', date: DateTime(2026, 9, 20)),
       _out('luong_gv', 500000, from: 'chong', date: DateTime(2027, 9, 20)),
     ];
-    int net(FamilyMember m, {DateTime? from, DateTime? to}) =>
+    int net(String m, {DateTime? from, DateTime? to}) =>
         computeMemberNetIncome(m, ledger, _cats, from: from, to: to);
     int spend({DateTime? from, DateTime? to}) =>
         computeGroupedTotals(ledger, _cats, from: from, to: to).spending;
 
     test('Ngày: chỉ giao dịch đúng ngày đó', () {
       final d = DateTime(2026, 9, 20);
-      expect(net(FamilyMember.vo, from: d, to: d), 0);
-      expect(net(FamilyMember.chong, from: d, to: d), 2000000);
+      expect(net('vo', from: d, to: d), 0);
+      expect(net('chong', from: d, to: d), 2000000);
       expect(spend(from: d, to: d), 300000);
     });
 
     test('Tháng: đúng tháng, khớp kết quả cũ theo `month`', () {
       final from = DateTime(2026, 9, 1);
       final to = DateTime(2026, 9, 30);
-      expect(net(FamilyMember.vo, from: from, to: to), 5000000 - 1000000);
+      expect(net('vo', from: from, to: to), 5000000 - 1000000);
       expect(spend(from: from, to: to), 500000);
-      expect(net(FamilyMember.vo, from: from, to: to), computeMemberNetIncome(FamilyMember.vo, ledger, _cats, month: DateTime(2026, 9)));
+      expect(net('vo', from: from, to: to), computeMemberNetIncome('vo', ledger, _cats, month: DateTime(2026, 9)));
       expect(spend(from: from, to: to), computeGroupedTotals(ledger, _cats, month: DateTime(2026, 9)).spending);
     });
 
     test('Năm: cả năm (không lấn sang năm khác)', () {
       final from = DateTime(2026, 1, 1);
       final to = DateTime(2026, 12, 31);
-      expect(net(FamilyMember.vo, from: from, to: to), 10000000 + 5000000 - 1000000);
-      expect(net(FamilyMember.chong, from: from, to: to), 2000000, reason: 'chi phí KD 500k thuộc năm 2027');
+      expect(net('vo', from: from, to: to), 10000000 + 5000000 - 1000000);
+      expect(net('chong', from: from, to: to), 2000000, reason: 'chi phí KD 500k thuộc năm 2027');
       expect(spend(from: from, to: to), 500000);
     });
 
     test('Khoảng ngày (bao gồm 2 đầu) và Tất cả thời gian', () {
-      expect(net(FamilyMember.vo, from: DateTime(2026, 9, 10), to: DateTime(2026, 9, 11)), 4000000);
-      expect(net(FamilyMember.vo), 10000000 + 5000000 - 1000000, reason: 'Tất cả: không giới hạn');
-      expect(net(FamilyMember.chong), 2000000 - 500000);
+      expect(net('vo', from: DateTime(2026, 9, 10), to: DateTime(2026, 9, 11)), 4000000);
+      expect(net('vo'), 10000000 + 5000000 - 1000000, reason: 'Tất cả: không giới hạn');
+      expect(net('chong'), 2000000 - 500000);
       expect(spend(), 500000);
     });
 
@@ -762,7 +761,7 @@ void main() {
       final f = TransactionFilter(from: DateTime(2026, 9, 1), to: DateTime(2026, 9, 30)).withCategories({'sinh_hoat'});
       // Explorer chỉ thấy Chi tiêu; số tổng quan của kỳ vẫn tính đủ Doanh thu/Chi phí KD.
       expect(_run(ledger, f).outflow, 500000);
-      expect(net(FamilyMember.vo, from: f.from, to: f.to), 4000000);
+      expect(net('vo', from: f.from, to: f.to), 4000000);
     });
   });
 
@@ -828,11 +827,11 @@ void main() {
       }
       final sw = Stopwatch()..start();
       final all = _run(ledger);
-      final vo = _run(ledger, const TransactionFilter(member: FamilyMember.vo));
+      final vo = _run(ledger, const TransactionFilter(memberId: 'vo'));
       final combo = _run(
         ledger,
         TransactionFilter(from: DateTime(2026, 3, 1), to: DateTime(2026, 6, 30))
-            .withMember(FamilyMember.vo)
+            .withMember('vo')
             .withCategories({'sinh_hoat', 'luong_gv'})
             .withQuery('chợ')
             .withSort(ExplorerSort.defaultSort),
@@ -842,7 +841,7 @@ void main() {
 
       expect(all.count, 1800);
       expect(vo.count, lessThan(all.count));
-      expect(combo.rows.every((t) => t.note.contains('chợ') && involvesMember(t, FamilyMember.vo)), isTrue);
+      expect(combo.rows.every((t) => t.note.contains('chợ') && involvesMember(t, 'vo')), isTrue);
       expect(search.count, greaterThan(0));
       expect(sw.elapsedMilliseconds, lessThan(1500), reason: '4 truy vấn trên 1.800 dòng phải rất nhanh (thường < 50ms)');
       // Sắp xếp mới nhất lên đầu.

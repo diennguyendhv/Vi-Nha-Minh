@@ -1,5 +1,4 @@
 import '../engine/financial_engine.dart';
-import '../entities/family_member.dart';
 import '../entities/pool_kind.dart';
 import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
@@ -39,13 +38,13 @@ class SavingsBreakdown {
   final List<SavingsAllocationRow> rows;
 }
 
-/// Tính breakdown cho [member]:
+/// Tính breakdown cho [memberId]:
 /// - "Chưa phân bổ" luôn ở đầu (kể cả 0 — đích mặc định của Thêm vào tiết kiệm);
 /// - mọi loại ĐANG DÙNG (kể cả số dư 0);
 /// - loại ĐÃ NGỪNG chỉ khi còn số dư ≠ 0 (isInactive = true);
 /// - pool mồ côi (không có định nghĩa) còn số dư ≠ 0.
 SavingsBreakdown computeMemberSavingsBreakdown(
-  FamilyMember member,
+  String memberId,
   List<Transaction> transactions,
   List<SavingsAssetType> assetTypes,
 ) {
@@ -55,7 +54,7 @@ SavingsBreakdown computeMemberSavingsBreakdown(
     final (kind, refId) = e.key;
     if (kind != PoolKind.memberSavingsAsset || refId == null) continue;
     final parsed = parseSavingsAssetRefId(refId);
-    if (parsed == null || parsed.member != member) continue;
+    if (parsed == null || parsed.memberId != memberId) continue;
     byAsset[parsed.assetTypeId] = (byAsset[parsed.assetTypeId] ?? 0) + e.value;
   }
   final total = byAsset.values.fold<int>(0, (a, b) => a + b);

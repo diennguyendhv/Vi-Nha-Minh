@@ -7,6 +7,7 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/status_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../../domain/entities/transaction.dart';
@@ -777,7 +778,12 @@ class _DeleteStatusDialog extends ConsumerWidget {
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ??
         const <Transaction>[];
-    final check = checkStatusDeletion(status.id, categories, transactions);
+    final check = checkStatusDeletion(
+      status.id,
+      categories,
+      transactions,
+      members: ref.watch(memberDirectoryProvider).members,
+    );
     final used = check.transactionBlockers.length;
 
     if (used == 0) {

@@ -7,6 +7,7 @@ import '../../../domain/entities/category.dart';
 import '../../../domain/entities/transaction_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../../../domain/usecases/deletion_check.dart';
 import '../transactions/blocking_transactions_dialog.dart';
@@ -117,7 +118,12 @@ class _StoppedSection extends ConsumerWidget {
     // Vì sao chưa xóa hẳn được — suy ra từ dữ liệu ĐANG XEM nên tự cập nhật ngay
     // khi người dùng sửa/xóa giao dịch đang giữ danh mục.
     DeletionCheckResult checkOf(Category c) =>
-        checkCategoryDeletion(c, allCategories, transactions);
+        checkCategoryDeletion(
+          c,
+          allCategories,
+          transactions,
+          members: ref.watch(memberDirectoryProvider).members,
+        );
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Theme(

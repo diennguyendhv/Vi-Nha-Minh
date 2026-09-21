@@ -1,10 +1,10 @@
 import '../../core/constants/advanced_system_categories.dart';
 import '../entities/category.dart';
-import '../entities/family_member.dart';
 import '../entities/pool_kind.dart';
 import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
+import '../entities/wallet_identity.dart';
 import 'compute_pool_balance.dart';
 import 'transaction_member_label.dart';
 
@@ -93,6 +93,7 @@ Iterable<DeletionBlocker> _blockersFor(
   Iterable<Transaction> transactions,
   Map<String, Category> categoryById,
   Map<String, String> statusNameById,
+  Iterable<FinancialMember> members,
 ) sync* {
   var hidden = 0;
   final live = <Transaction>[];
@@ -113,7 +114,7 @@ Iterable<DeletionBlocker> _blockersFor(
       amountMinor: t.amountMinor,
       categoryName: categoryById[t.categoryId]?.name,
       statusName: t.statusId == null ? null : statusNameById[t.statusId!],
-      memberLabel: transactionMemberLabel(t),
+      memberLabel: transactionMemberLabel(t, members),
     );
   }
   if (hidden > 0) {
@@ -131,8 +132,9 @@ Map<String, String> _statusNames(Iterable<Category> categories) => {
 DeletionCheckResult checkCategoryDeletion(
   Category category,
   Iterable<Category> categories,
-  Iterable<Transaction> transactions,
-) {
+  Iterable<Transaction> transactions, {
+  Iterable<FinancialMember> members = const [],
+}) {
   if (category.type == TransactionType.transfer ||
       AdvancedSystemCategories.contains(category.id)) {
     return const DeletionCheckResult([
@@ -148,6 +150,7 @@ DeletionCheckResult checkCategoryDeletion(
       transactions,
       {for (final c in categories) c.id: c},
       _statusNames(categories),
+      members,
     ).toList(),
   );
 }
@@ -155,14 +158,16 @@ DeletionCheckResult checkCategoryDeletion(
 DeletionCheckResult checkStatusDeletion(
   String statusId,
   Iterable<Category> categories,
-  Iterable<Transaction> transactions,
-) {
+  Iterable<Transaction> transactions, {
+  Iterable<FinancialMember> members = const [],
+}) {
   return DeletionCheckResult(
     _blockersFor(
       (t) => t.statusId == statusId,
       transactions,
       {for (final c in categories) c.id: c},
       _statusNames(categories),
+      members,
     ).toList(),
   );
 }
@@ -184,8 +189,9 @@ List<DeletionBlocker> _withBalance(
 DeletionCheckResult checkFundDeletion(
   String fundId,
   Iterable<Category> categories,
-  List<Transaction> transactions,
-) {
+  List<Transaction> transactions, {
+  Iterable<FinancialMember> members = const [],
+}) {
   bool holds(Transaction t) =>
       (t.sourceKind == PoolKind.fund && t.sourceRefId == fundId) ||
       (t.destinationKind == PoolKind.fund && t.destinationRefId == fundId);
@@ -197,18 +203,20 @@ DeletionCheckResult checkFundDeletion(
         transactions,
         {for (final c in categories) c.id: c},
         _statusNames(categories),
+        members,
       ).toList(),
     ),
   );
 }
 
 /// Loại tiết kiệm: "Chưa phân bổ" là hạ tầng (systemProtected). Loại thường: xóa
-/// hẳn được khi tổng số dư (cả Vợ và Chồng) = 0 và không dòng nào chạm nó.
+/// hẳn được khi tổng số dư (mọi thành viên) = 0 và không dòng nào chạm nó.
 DeletionCheckResult checkSavingsAssetDeletion(
   String assetTypeId,
   Iterable<Category> categories,
-  List<Transaction> transactions,
-) {
+  List<Transaction> transactions, {
+  Iterable<FinancialMember> members = const [],
+}) {
   if (SystemSavingsAssets.isSystem(assetTypeId)) {
     return const DeletionCheckResult([
       DeletionBlocker(kind: DeletionBlockerKind.systemProtected),
@@ -221,10 +229,7 @@ DeletionCheckResult checkSavingsAssetDeletion(
   bool holds(Transaction t) =>
       touches(t.sourceKind, t.sourceRefId) ||
       touches(t.destinationKind, t.destinationRefId);
-  var balance = 0;
-  for (final m in FamilyMember.values) {
-    balance += computeMemberSavingsByAssetType(assetTypeId, m, transactions);
-  }
+  final balance = computeSavingsAssetTypeBalance(assetTypeId, transactions);
   return DeletionCheckResult(
     _withBalance(
       balance,
@@ -233,6 +238,7 @@ DeletionCheckResult checkSavingsAssetDeletion(
         transactions,
         {for (final c in categories) c.id: c},
         _statusNames(categories),
+        members,
       ).toList(),
     ),
   );

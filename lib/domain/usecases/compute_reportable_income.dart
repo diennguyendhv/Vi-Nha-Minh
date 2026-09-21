@@ -1,6 +1,5 @@
 import '../engine/financial_engine.dart';
 import '../entities/category.dart';
-import '../entities/family_member.dart';
 import '../entities/pool_kind.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
@@ -101,17 +100,14 @@ List<ReportableIncome> computeReportableIncomeEntries(
 
 /// Thành viên nhận khoản INCOME — theo ví khả dụng hoặc theo pool tiết kiệm
 /// của họ; `null` nếu đích không thuộc 1 thành viên (vd Quỹ dùng chung).
-FamilyMember? incomeRecipient(Transaction t) {
+String? incomeRecipient(Transaction t) {
   final refId = t.destinationRefId;
   if (refId == null) return null;
   switch (t.destinationKind) {
     case PoolKind.memberAvailable:
-      for (final m in FamilyMember.values) {
-        if (m.name == refId) return m;
-      }
-      return null;
+      return refId;
     case PoolKind.memberSavingsAsset:
-      return parseSavingsAssetRefId(refId)?.member;
+      return parseSavingsAssetRefId(refId)?.memberId;
     default:
       return null;
   }
@@ -121,7 +117,7 @@ FamilyMember? incomeRecipient(Transaction t) {
 /// với thu nhập gia đình ([computeThreeTotals]): loại Số dư ban đầu, gốc Đi
 /// vay và phần hoàn vốn của recovery; chỉ tính lợi nhuận thật của recovery.
 int computeMemberIncomeTotal(
-  FamilyMember member,
+  String memberId,
   List<Transaction> transactions,
   List<Category> categories, {
   DateTime? month,
@@ -132,7 +128,7 @@ int computeMemberIncomeTotal(
     categories,
     month: month,
   )) {
-    if (incomeRecipient(e.transaction) == member) total += e.amountMinor;
+    if (incomeRecipient(e.transaction) == memberId) total += e.amountMinor;
   }
   return total;
 }

@@ -1,12 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/core/constants/default_savings_asset_types.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/presentation/widgets/category_label.dart';
+import '../../support/legacy_members.dart';
 
 Transaction _t(
   TransferKind kind,
@@ -31,15 +31,15 @@ Transaction _t(
 
 void main() {
   final types = DefaultSavingsAssetTypes.all;
-  String ref(String a, FamilyMember m) => savingsAssetRefId(a, m);
+  String ref(String a, String m) => savingsAssetRefId(a, m);
 
   final topup = _t(TransferKind.savingsTopup, PoolKind.memberAvailable, 'chong',
-      PoolKind.memberSavingsAsset, ref(SystemSavingsAssets.unallocatedId, FamilyMember.chong));
+      PoolKind.memberSavingsAsset, ref(SystemSavingsAssets.unallocatedId, 'chong'));
   final withdraw = _t(TransferKind.savingsWithdraw, PoolKind.memberSavingsAsset,
-      ref(DefaultSavingsAssetTypes.goldId, FamilyMember.vo), PoolKind.memberAvailable, 'vo');
+      ref(DefaultSavingsAssetTypes.goldId, 'vo'), PoolKind.memberAvailable, 'vo');
   final convert = _t(TransferKind.savingsConvert, PoolKind.memberSavingsAsset,
-      ref(DefaultSavingsAssetTypes.goldId, FamilyMember.vo), PoolKind.memberSavingsAsset,
-      ref(DefaultSavingsAssetTypes.bankId, FamilyMember.vo));
+      ref(DefaultSavingsAssetTypes.goldId, 'vo'), PoolKind.memberSavingsAsset,
+      ref(DefaultSavingsAssetTypes.bankId, 'vo'));
 
   test('Nhãn đời thường: Thêm vào / Rút từ / Tiết kiệm · A → B, không lộ enum hay id', () {
     expect(savingsTransferLabel(topup, types), 'Thêm vào tiết kiệm');
@@ -58,8 +58,8 @@ void main() {
 
   test('Phân bổ từ "Chưa phân bổ" và loại đã ngừng / không rõ vẫn có tên an toàn (không null)', () {
     final fromUnalloc = _t(TransferKind.savingsConvert, PoolKind.memberSavingsAsset,
-        ref(SystemSavingsAssets.unallocatedId, FamilyMember.chong), PoolKind.memberSavingsAsset,
-        ref(DefaultSavingsAssetTypes.goldId, FamilyMember.chong));
+        ref(SystemSavingsAssets.unallocatedId, 'chong'), PoolKind.memberSavingsAsset,
+        ref(DefaultSavingsAssetTypes.goldId, 'chong'));
     expect(savingsTransferLabel(fromUnalloc, types), 'Tiết kiệm · Chưa phân bổ → Vàng');
     // Không có danh sách loại (DB chưa tải) → loại thường có tên chung, hệ thống vẫn đúng.
     expect(savingsTransferLabel(fromUnalloc, const []), 'Tiết kiệm · Chưa phân bổ → Loại tài sản khác');
@@ -71,12 +71,12 @@ void main() {
     final member = _t(TransferKind.memberToMember, PoolKind.memberAvailable, 'vo',
         PoolKind.memberAvailable, 'chong');
     expect(savingsTransferLabel(member, types), isNull);
-    expect(transactionMemberLabel(member), 'Vợ → Chồng');
+    expect(transactionMemberLabel(member, legacyMembers), 'Vợ → Chồng');
   });
 
   test('Nhãn thành viên: nạp/rút/phân bổ tiết kiệm hiện ĐÚNG 1 tên (không "Vợ → Vợ", không rỗng)', () {
-    expect(transactionMemberLabel(topup), 'Chồng');
-    expect(transactionMemberLabel(withdraw), 'Vợ');
-    expect(transactionMemberLabel(convert), 'Vợ', reason: 'trước đây phân bổ không hiện thành viên nào');
+    expect(transactionMemberLabel(topup, legacyMembers), 'Chồng');
+    expect(transactionMemberLabel(withdraw, legacyMembers), 'Vợ');
+    expect(transactionMemberLabel(convert, legacyMembers), 'Vợ', reason: 'trước đây phân bổ không hiện thành viên nào');
   });
 }

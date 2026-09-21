@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
@@ -15,6 +14,7 @@ import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_three_totals.dart';
+import '../support/legacy_members.dart';
 
 /// PHASE 8.5 — REAL-DATA GOLDEN TEST.
 ///
@@ -155,7 +155,7 @@ void main() {
       categoryId: 'so_du_ban_dau',
       sourceKind: PoolKind.external,
       destinationKind: PoolKind.memberSavingsAsset,
-      destinationRefId: savingsAssetRefId('legacy', FamilyMember.vo),
+      destinationRefId: savingsAssetRefId('legacy', 'vo'),
       amountMinor: 2500000,
       transactionDate: openingDate,
       createdAt: openingDate,
@@ -167,7 +167,7 @@ void main() {
       categoryId: 'so_du_ban_dau',
       sourceKind: PoolKind.external,
       destinationKind: PoolKind.memberSavingsAsset,
-      destinationRefId: savingsAssetRefId('legacy', FamilyMember.chong),
+      destinationRefId: savingsAssetRefId('legacy', 'chong'),
       amountMinor: 12000000,
       transactionDate: openingDate,
       createdAt: openingDate,
@@ -186,9 +186,9 @@ void main() {
     transferKind: TransferKind.savingsConvert,
     categoryId: 'tiet_kiem',
     sourceKind: PoolKind.memberSavingsAsset,
-    sourceRefId: savingsAssetRefId('legacy', FamilyMember.chong),
+    sourceRefId: savingsAssetRefId('legacy', 'chong'),
     destinationKind: PoolKind.memberSavingsAsset,
-    destinationRefId: savingsAssetRefId('ngan_hang', FamilyMember.chong),
+    destinationRefId: savingsAssetRefId('ngan_hang', 'chong'),
     amountMinor: 70000000,
     note: 'STATE_SPLIT — tách theo GOLDEN_STATE, không phải dòng raw cụ thể',
     transactionDate: DateTime(2026, 9, 17),
@@ -277,28 +277,28 @@ void main() {
     );
 
     test('3 — Final state khớp CHÍNH XÁC GOLDEN_STATE 17/09/2026', () {
-      final summary = computeFinancialSummary(
+      final summary = computeFinancialSummary(members: legacyMembers, 
         allTx,
         categories: categories,
         funds: noFunds,
         assetTypes: assetTypes,
       );
 
-      expect(summary.availableByMember[FamilyMember.vo], 244000, reason: 'Vợ Available');
-      expect(summary.savingsByMember[FamilyMember.vo], 4740000, reason: 'Vợ Savings total');
-      expect(summary.availableByMember[FamilyMember.chong], 835000, reason: 'Chồng Available');
-      expect(summary.savingsByMember[FamilyMember.chong], 70500000, reason: 'Chồng Savings total');
+      expect(summary.availableByMember['vo'], 244000, reason: 'Vợ Available');
+      expect(summary.savingsByMember['vo'], 4740000, reason: 'Vợ Savings total');
+      expect(summary.availableByMember['chong'], 835000, reason: 'Chồng Available');
+      expect(summary.savingsByMember['chong'], 70500000, reason: 'Chồng Savings total');
       expect(summary.totalAssets, 76319000, reason: 'Total family assets');
     });
 
     test('4 — Chồng Savings tách đúng Bank/Non-bank (70.000.000 / 500.000)', () {
-      final summary = computeFinancialSummary(
+      final summary = computeFinancialSummary(members: legacyMembers, 
         allTx,
         categories: categories,
         funds: noFunds,
         assetTypes: assetTypes,
       );
-      final chongByAssetType = summary.savingsByMemberAndAssetType[FamilyMember.chong]!;
+      final chongByAssetType = summary.savingsByMemberAndAssetType['chong']!;
       expect(chongByAssetType['ngan_hang'], 70000000, reason: 'Bank');
       expect(chongByAssetType['legacy'], 500000, reason: 'Non-bank/other');
     });
@@ -365,14 +365,14 @@ void main() {
         // income" (không lẫn opening balance, không lẫn non-income inflow).
         final reconciled = openingAssets + totals.totalIncome + nonIncomeInflow - totals.totalExpense;
 
-        final summary = computeFinancialSummary(allTx, categories: categories, funds: noFunds, assetTypes: assetTypes);
+        final summary = computeFinancialSummary(members: legacyMembers, allTx, categories: categories, funds: noFunds, assetTypes: assetTypes);
         expect(reconciled, summary.totalAssets, reason: 'Công thức reconciliation phải khớp Total Assets thật');
         expect(summary.totalAssets, 76319000);
       },
     );
 
     test('8 — Checkpoint cuối kỳ (17/09/2026) — báo cáo, đã assert chính xác ở test 3', () {
-      final summary = computeFinancialSummary(
+      final summary = computeFinancialSummary(members: legacyMembers, 
         allTx,
         categories: categories,
         funds: noFunds,
@@ -381,16 +381,16 @@ void main() {
       );
       // ignore: avoid_print
       print(
-        'Checkpoint 17/09: Vợ avail=${summary.availableByMember[FamilyMember.vo]} '
-        'savings=${summary.savingsByMember[FamilyMember.vo]} | '
-        'Chồng avail=${summary.availableByMember[FamilyMember.chong]} '
-        'savings=${summary.savingsByMember[FamilyMember.chong]} | '
+        'Checkpoint 17/09: Vợ avail=${summary.availableByMember['vo']} '
+        'savings=${summary.savingsByMember['vo']} | '
+        'Chồng avail=${summary.availableByMember['chong']} '
+        'savings=${summary.savingsByMember['chong']} | '
         'totalAssets=${summary.totalAssets} | '
         'monthlyIncome(Sep)=${summary.monthlyIncome} monthlyExpense(Sep)=${summary.monthlyExpense} '
         'monthlyNet(Sep)=${summary.monthlyNet}',
       );
-      expect(summary.availableByMember[FamilyMember.vo], 244000);
-      expect(summary.availableByMember[FamilyMember.chong], 835000);
+      expect(summary.availableByMember['vo'], 244000);
+      expect(summary.availableByMember['chong'], 835000);
     });
 
     test(
@@ -409,7 +409,7 @@ void main() {
         ];
         for (final cp in checkpoints) {
           final upTo = allTx.where((t) => !t.transactionDate.isAfter(cp)).toList();
-          final summary = computeFinancialSummary(
+          final summary = computeFinancialSummary(members: legacyMembers, 
             upTo,
             categories: categories,
             funds: noFunds,
@@ -419,8 +419,8 @@ void main() {
           // ignore: avoid_print
           print(
             'Checkpoint ${cp.year}-${cp.month.toString().padLeft(2, '0')}: '
-            'Vợ avail=${summary.availableByMember[FamilyMember.vo]} savings=${summary.savingsByMember[FamilyMember.vo]} | '
-            'Chồng avail=${summary.availableByMember[FamilyMember.chong]} savings=${summary.savingsByMember[FamilyMember.chong]} | '
+            'Vợ avail=${summary.availableByMember['vo']} savings=${summary.savingsByMember['vo']} | '
+            'Chồng avail=${summary.availableByMember['chong']} savings=${summary.savingsByMember['chong']} | '
             'totalAssets=${summary.totalAssets} | income=${summary.monthlyIncome} expense=${summary.monthlyExpense}',
           );
           expect(summary.totalAssets, greaterThanOrEqualTo(0));

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart' show Colors;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/fund.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/savings_asset_type.dart';
@@ -10,6 +9,7 @@ import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
 import 'package:vi_nha_minh/domain/entities/transfer_kind.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_deletable_master_data.dart';
 import 'package:vi_nha_minh/domain/usecases/deletion_check.dart';
+import '../support/legacy_members.dart';
 
 /// Quỹ / Loại tiết kiệm dùng CÙNG mô hình blocker với Danh mục / Trạng thái:
 /// xóa hẳn được khi hết dấu vết; không thì chỉ rõ số dư còn lại và/hoặc từng
@@ -75,7 +75,7 @@ Transaction _fundSpend(String fund, int amount) => _tx(
   amount: amount,
 );
 
-Transaction _savingsIn(String asset, FamilyMember m, int amount) => _tx(
+Transaction _savingsIn(String asset, String m, int amount) => _tx(
   type: TransactionType.transfer,
   kind: TransferKind.savingsConvert,
   category: 'tiet_kiem',
@@ -89,16 +89,16 @@ Transaction _savingsIn(String asset, FamilyMember m, int amount) => _tx(
 void main() {
   group('Blocker giao dịch hiện đúng thành viên (dùng chung cho Danh mục / Trạng thái / Quỹ / Loại tiết kiệm)', () {
     test('Quỹ: nạp bởi Vợ → "Vợ"; giao dịch chi từ quỹ (không thuộc thành viên) → null', () {
-      final r = checkFundDeletion('q1', _cats, [_fundTopup('q1', 100000), _fundSpend('q1', 30000)]);
+      final r = checkFundDeletion('q1', _cats, [_fundTopup('q1', 100000), _fundSpend('q1', 30000)], members: legacyMembers);
       expect(r.transactionBlockers.map((b) => b.memberLabel), containsAll(<String?>['Vợ', null]));
     });
 
     test('Loại tiết kiệm: Vợ và Chồng đều hiện đúng tên', () {
       final ledger = [
-        _savingsIn('vang', FamilyMember.vo, 100000),
-        _savingsIn('vang', FamilyMember.chong, 200000),
+        _savingsIn('vang', 'vo', 100000),
+        _savingsIn('vang', 'chong', 200000),
       ];
-      final r = checkSavingsAssetDeletion('vang', _cats, ledger);
+      final r = checkSavingsAssetDeletion('vang', _cats, ledger, members: legacyMembers);
       final byAmount = {for (final b in r.transactionBlockers) b.amountMinor: b.memberLabel};
       expect(byAmount[100000], 'Vợ');
       expect(byAmount[200000], 'Chồng');
@@ -114,7 +114,7 @@ void main() {
         from: PoolKind.memberAvailable, fromRef: 'chong', to: PoolKind.external, amount: 2000,
       );
       final cat = _cats.firstWhere((c) => c.id == 'sinh_hoat');
-      final r = checkCategoryDeletion(cat, _cats, [wife, husband]);
+      final r = checkCategoryDeletion(cat, _cats, [wife, husband], members: legacyMembers);
       final byAmount = {for (final b in r.transactionBlockers) b.amountMinor: b.memberLabel};
       expect(byAmount[1000], 'Vợ');
       expect(byAmount[2000], 'Chồng');
@@ -129,7 +129,7 @@ void main() {
 
     test('Còn tiền → blocker số dư CHÍNH XÁC + blocker giao dịch (mở được)', () {
       final ledger = [_fundTopup('q1', 100000), _fundSpend('q1', 80000)];
-      final r = checkFundDeletion('q1', _cats, ledger);
+      final r = checkFundDeletion('q1', _cats, ledger, members: legacyMembers);
       expect(r.canDelete, isFalse);
       expect(r.remainingBalance, 20000);
       expect(r.transactionBlockers.length, 2);
@@ -139,7 +139,7 @@ void main() {
 
     test('Hết tiền nhưng còn giao dịch → chỉ blocker giao dịch (không blocker số dư)', () {
       final ledger = [_fundTopup('q1', 100000), _fundSpend('q1', 100000)];
-      final r = checkFundDeletion('q1', _cats, ledger);
+      final r = checkFundDeletion('q1', _cats, ledger, members: legacyMembers);
       expect(r.remainingBalance, isNull);
       expect(r.transactionBlockers.length, 2);
       expect(r.canDelete, isFalse);
@@ -154,7 +154,7 @@ void main() {
 
     test('Blocker mang đúng ngày/số tiền/tên danh mục để hiện "12/09 · 100.000 đ · Nạp quỹ"', () {
       final t = _fundTopup('q1', 100000, date: DateTime(2026, 9, 12));
-      final b = checkFundDeletion('q1', _cats, [t]).transactionBlockers.single;
+      final b = checkFundDeletion('q1', _cats, [t], members: legacyMembers).transactionBlockers.single;
       expect(b.transactionId, t.id);
       expect(b.date, DateTime(2026, 9, 12));
       expect(b.amountMinor, 100000);
@@ -187,34 +187,34 @@ void main() {
 
     test('Còn tiền (cộng cả Vợ và Chồng) → blocker số dư đúng số tiền + giao dịch giữ', () {
       final ledger = [
-        _savingsIn('savings_gold', FamilyMember.vo, 300000),
-        _savingsIn('savings_gold', FamilyMember.chong, 200000),
+        _savingsIn('savings_gold', 'vo', 300000),
+        _savingsIn('savings_gold', 'chong', 200000),
       ];
-      final r = checkSavingsAssetDeletion('savings_gold', _cats, ledger);
+      final r = checkSavingsAssetDeletion('savings_gold', _cats, ledger, members: legacyMembers);
       expect(r.remainingBalance, 500000);
       expect(r.transactionBlockers.length, 2);
     });
 
     test('Số dư 0 nhưng còn giao dịch (vào rồi ra) → blocker giao dịch; xóa các giao dịch đó → xóa được', () {
-      final into = _savingsIn('savings_gold', FamilyMember.chong, 1000);
+      final into = _savingsIn('savings_gold', 'chong', 1000);
       final out = _tx(
         type: TransactionType.transfer,
         kind: TransferKind.savingsConvert,
         category: 'tiet_kiem',
         from: PoolKind.memberSavingsAsset,
-        fromRef: savingsAssetRefId('savings_gold', FamilyMember.chong),
+        fromRef: savingsAssetRefId('savings_gold', 'chong'),
         to: PoolKind.memberSavingsAsset,
-        toRef: savingsAssetRefId(SystemSavingsAssets.unallocatedId, FamilyMember.chong),
+        toRef: savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'chong'),
         amount: 1000,
       );
-      final r = checkSavingsAssetDeletion('savings_gold', _cats, [into, out]);
+      final r = checkSavingsAssetDeletion('savings_gold', _cats, [into, out], members: legacyMembers);
       expect(r.remainingBalance, isNull);
       expect(r.transactionBlockers.length, 2);
       expect(checkSavingsAssetDeletion('savings_gold', _cats, const []).canDelete, isTrue);
     });
 
     test('Giao dịch của loại KHÁC không cản; tiền tố tên giống nhau không nhầm', () {
-      final other = _savingsIn('savings_gold_2', FamilyMember.vo, 1000);
+      final other = _savingsIn('savings_gold_2', 'vo', 1000);
       expect(checkSavingsAssetDeletion('savings_gold', _cats, [other]).canDelete, isTrue);
     });
   });

@@ -7,13 +7,13 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Chưa có Account/Auth/Firebase/cloud.
 
 ## Current Phase
-**P3 — Local Security — PASS** (nghiệm thu Pixel 2026-09-21). Phase kế tiếp (chưa bắt đầu, chờ duyệt): **P4 — FinancialMember là dữ liệu**.
+**P4 — FinancialMember là dữ liệu — PASS** (nghiệm thu Pixel 2026-09-21). Phase kế tiếp (chưa bắt đầu, chờ duyệt): **P5 — Nền Auth & môi trường**.
 
 ## Last Completed Phase
-P3 (App Lock + tắt Android Auto Backup). Trước đó: P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
+P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
-**v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 KHÔNG đổi schema.
+**v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 và P4 KHÔNG đổi schema.
 
 ## Local Wallet Architecture
 - 1 Wallet cục bộ hiện tại = 1 file SQLite `vi_nha_minh.sqlite` (không di chuyển).
@@ -21,8 +21,8 @@ P3 (App Lock + tắt Android Auto Backup). Trước đó: P2 Local Wallet Identi
 - Chưa Account/Auth/Firebase. Registry nhiều Wallet vật lý hoãn lại (đích: 1 Wallet = 1 SQLite; UI v1 chỉ 1 ví).
 
 ## Financial Members
-Wallet cục bộ di sản dùng `memberId = vo` / `chong` (ID tương thích, đã nằm trong `*_ref_id`).
-Wallet/thành viên MỚI sau này dùng ID mờ ổn định. **Không giả định toàn cục `memberId == vo/chong`**; chỉ qua lớp `WalletMemberResolver`.
+Runtime = bảng `financial_member_rows` qua `MemberRepository` (`watchMembers/getMembers/getMemberById/createMember`), UI qua `memberDirectoryProvider` (`MemberDirectory`: nhãn, mặc định = đầu theo `displayOrder`, `otherThan`). Enum `FamilyMember` và `WalletMemberResolver` đã XOÁ; domain dùng `String memberId`.
+Wallet di sản hiện tại: `memberId = vo`/`chong` (giữ nguyên, đã nằm trong `*_ref_id`). DB MỚI (`SeedProfile.fresh`): 2 thành viên ID mờ (`OpaqueId`), nhãn Vợ/Chồng; `createMember` cũng ID mờ. Không suy nhãn từ `memberId`. Nợ tạm: thành viên mặc định = người đầu theo `displayOrder`; `'vo'/'chong'` còn ở seed di sản + importer debug (đã tự khoá vì đòi schema v7). Chi tiết: `docs/p4-financial-member-audit.md`.
 
 ## Live Data Rule
 Chủ dự án đang nhập DỮ LIỆU THẬT trên Pixel. Mốc kiểm chứng gần nhất: 1.808 giao dịch — **chỉ là mốc tham chiếu, KHÔNG phải số bắt buộc**.
@@ -68,14 +68,14 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Mã hoá DB cục bộ trước cloud pilot/Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
-## Testing (kết quả P3 — gate mới nhất)
-`flutter test --concurrency=1`: 958 pass, 3 skip; Golden 24/24; `flutter analyze` 15 issue có sẵn, 0 lỗi; không đổi schema. Test bảo mật: `test/presentation/security/`, `test/security/android_security_config_test.dart`.
-Pixel: DB trước/sau P3 giống field-for-field (chỉ +1 giao dịch do chủ máy tự nhập lúc nghiệm thu); walletId + financial_member_rows không đổi; integrity ok; FK rỗng.
+## Testing (kết quả P4 — gate mới nhất)
+`flutter test --concurrency=1`: 977 pass, 3 skip (gồm Golden); `flutter analyze` 15 issue có sẵn, 0 lỗi; không đổi schema. Test P4: `test/domain/financial_member_as_data_test.dart` (ID mờ + nhãn "Vợ", repo, directory), thêm ca P4 ở home/add/summary widget test; fixture `test/support/legacy_members.dart`.
+Pixel: DB trước/sau P4 giống byte-for-byte (1.809 giao dịch); walletId + `financial_member_rows` không đổi; integrity ok.
 Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối phase; Golden chỉ khi UI ảnh hưởng.
 
 ## Known Backlog
 - Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
-- FinancialMember enum → dữ liệu (P4); registry Wallet bền (P6); Auth (P5); phiên thiết bị độc quyền (P7).
+- Registry Wallet bền (P6); Auth (P5); phiên thiết bị độc quyền (P7).
 - Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
 - Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
 - Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.

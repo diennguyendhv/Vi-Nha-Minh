@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
-import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_savings_breakdown.dart';
 import '../../../domain/usecases/deletion_check.dart';
 import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
 import '../../widgets/stopped_item_tile.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
@@ -35,16 +35,17 @@ String _norm(String v) =>
 ///
 /// Chỉ theo GIÁ TRỊ GHI SỔ — không kỳ hạn, lãi suất, giá thị trường.
 class SavingsScreen extends ConsumerStatefulWidget {
-  const SavingsScreen({super.key, this.initialMember});
+  const SavingsScreen({super.key, this.initialMemberId});
 
-  final FamilyMember? initialMember;
+  /// `memberId` mở sẵn; không thuộc Wallet/null → thành viên mặc định (đầu tiên).
+  final String? initialMemberId;
 
   @override
   ConsumerState<SavingsScreen> createState() => _SavingsScreenState();
 }
 
 class _SavingsScreenState extends ConsumerState<SavingsScreen> {
-  late FamilyMember _member = widget.initialMember ?? FamilyMember.vo;
+  late String? _selectedMemberId = widget.initialMemberId;
 
   /// Chặn bấm liên tiếp mở trùng sheet/hộp thoại.
   bool _busy = false;
@@ -69,7 +70,9 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       initialTransferSubKind: TransferSubKind.savings,
       initialSavingsAction: action,
       initialSavingsAssetTypeId: assetTypeId,
-      initialMember: _member,
+      initialMemberId: ref
+          .read(memberDirectoryProvider)
+          .resolveOrDefault(_selectedMemberId),
     ),
   );
 
@@ -82,15 +85,25 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
     final categories =
         ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
 
+    final directory = ref.watch(memberDirectoryProvider);
+    final memberId = directory.resolveOrDefault(_selectedMemberId);
+    if (memberId == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Tiết kiệm')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final memberLabel = directory.labelOf(memberId) ?? '';
+
     final breakdown = computeMemberSavingsBreakdown(
-      _member,
+      memberId,
       transactions,
       assetTypes,
     );
     // Loại đã ngừng và KHÔNG còn tiền ở cả 2 thành viên → khu "Ngừng sử dụng".
     final allBreakdowns = [
-      for (final m in FamilyMember.values)
-        computeMemberSavingsBreakdown(m, transactions, assetTypes),
+      for (final id in directory.ids)
+        computeMemberSavingsBreakdown(id, transactions, assetTypes),
     ];
     bool holdsMoney(String id) => allBreakdowns.any(
       (b) => b.rows.any((r) => r.assetTypeId == id && r.balance != 0),
@@ -105,13 +118,14 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SegmentedButton<FamilyMember>(
+          SegmentedButton<String>(
             key: const Key('savings_member'),
-            segments: FamilyMember.values
-                .map((m) => ButtonSegment(value: m, label: Text(m.label)))
+            segments: directory.members
+                .map((m) => ButtonSegment(value: m.memberId, label: Text(m.label)))
                 .toList(),
-            selected: {_member},
-            onSelectionChanged: (s) => setState(() => _member = s.first),
+            selected: {memberId},
+            onSelectionChanged: (s) =>
+                setState(() => _selectedMemberId = s.first),
           ),
           const SizedBox(height: 16),
           Container(
@@ -124,7 +138,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'TIẾT KIỆM ${_member.label.toUpperCase()}',
+                  'TIẾT KIỆM ${memberLabel.toUpperCase()}',
                   style: const TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w700,
@@ -220,7 +234,12 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                       name: a.name,
                       color: a.color,
                       noun: 'loại tiết kiệm này',
-                      check: checkSavingsAssetDeletion(a.id, categories, transactions),
+                      check: checkSavingsAssetDeletion(
+                        a.id,
+                        categories,
+                        transactions,
+                        members: directory.members,
+                      ),
                       onReuse: () => ref
                           .read(savingsAssetTypeRepositoryProvider)
                           .reactivateAssetType(a.id),

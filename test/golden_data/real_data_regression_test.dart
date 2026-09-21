@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/domain/entities/category.dart';
-import 'package:vi_nha_minh/domain/entities/family_member.dart';
 import 'package:vi_nha_minh/domain/entities/pool_kind.dart';
 import 'package:vi_nha_minh/domain/entities/transaction.dart';
 import 'package:vi_nha_minh/domain/entities/transaction_type.dart';
@@ -54,13 +53,13 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'chong',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('legacy', FamilyMember.chong),
+        destinationRefId: savingsAssetRefId('legacy', 'chong'),
         amountMinor: 150000,
       );
       final balances = computeAllPoolBalances([t]);
       expect(poolBalance(balances, PoolKind.memberAvailable, 'chong'), -150000);
       expect(
-        poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId('legacy', FamilyMember.chong)),
+        poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId('legacy', 'chong')),
         150000,
       );
     });
@@ -72,14 +71,14 @@ void main() {
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsWithdraw,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('legacy', FamilyMember.vo),
+        sourceRefId: savingsAssetRefId('legacy', 'vo'),
         destinationKind: PoolKind.memberAvailable,
         destinationRefId: 'vo',
         amountMinor: 120000,
       );
       final balances = computeAllPoolBalances([t]);
       expect(
-        poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId('legacy', FamilyMember.vo)),
+        poolBalance(balances, PoolKind.memberSavingsAsset, savingsAssetRefId('legacy', 'vo')),
         -120000,
       );
       expect(poolBalance(balances, PoolKind.memberAvailable, 'vo'), 120000);
@@ -175,16 +174,16 @@ void main() {
         sourceKind: PoolKind.memberAvailable,
         sourceRefId: 'chong',
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('legacy', FamilyMember.chong),
+        destinationRefId: savingsAssetRefId('legacy', 'chong'),
         amountMinor: 70000000,
       );
       final convert = tx(
         type: TransactionType.transfer,
         transferKind: TransferKind.savingsConvert,
         sourceKind: PoolKind.memberSavingsAsset,
-        sourceRefId: savingsAssetRefId('legacy', FamilyMember.chong),
+        sourceRefId: savingsAssetRefId('legacy', 'chong'),
         destinationKind: PoolKind.memberSavingsAsset,
-        destinationRefId: savingsAssetRefId('ngan_hang', FamilyMember.chong),
+        destinationRefId: savingsAssetRefId('ngan_hang', 'chong'),
         amountMinor: 70000000,
       );
       final beforeConvert = computeAllPoolBalances([topup]);
@@ -193,22 +192,22 @@ void main() {
       final totalSavingsBefore = poolBalance(
         beforeConvert,
         PoolKind.memberSavingsAsset,
-        savingsAssetRefId('legacy', FamilyMember.chong),
+        savingsAssetRefId('legacy', 'chong'),
       );
       final totalSavingsAfter = poolBalance(
             afterConvert,
             PoolKind.memberSavingsAsset,
-            savingsAssetRefId('legacy', FamilyMember.chong),
+            savingsAssetRefId('legacy', 'chong'),
           ) +
           poolBalance(
             afterConvert,
             PoolKind.memberSavingsAsset,
-            savingsAssetRefId('ngan_hang', FamilyMember.chong),
+            savingsAssetRefId('ngan_hang', 'chong'),
           );
 
       expect(totalSavingsAfter, totalSavingsBefore, reason: 'Tổng tiết kiệm Chồng không đổi khi tách asset type');
       expect(
-        poolBalance(afterConvert, PoolKind.memberSavingsAsset, savingsAssetRefId('ngan_hang', FamilyMember.chong)),
+        poolBalance(afterConvert, PoolKind.memberSavingsAsset, savingsAssetRefId('ngan_hang', 'chong')),
         70000000,
       );
       expect(

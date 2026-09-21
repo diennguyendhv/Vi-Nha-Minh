@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 
-import '../../domain/entities/family_member.dart';
 import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/savings_asset_type.dart' as domain;
 import '../../domain/errors/domain_exceptions.dart';
@@ -90,11 +89,8 @@ class LocalSavingsAssetTypeRepository implements SavingsAssetTypeRepository {
       throw SavingsAssetTypeNotDeletableException(assetTypeId);
     }
     final transactions = await _transactionRepository.watchTransactions().first;
-    for (final member in FamilyMember.values) {
-      final balance = computeMemberSavingsByAssetType(assetTypeId, member, transactions);
-      if (balance != 0) {
-        throw SavingsAssetTypeNotEmptyException(assetTypeId);
-      }
+    if (computeSavingsAssetTypeBalance(assetTypeId, transactions) != 0) {
+      throw SavingsAssetTypeNotEmptyException(assetTypeId);
     }
     await (_db.update(
       _db.savingsAssetTypeRows,
