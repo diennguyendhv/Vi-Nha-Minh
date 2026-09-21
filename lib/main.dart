@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/auth/firebase_bootstrap.dart';
+import 'data/local/wallet_registry_bootstrap.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/lock_gate.dart';
 import 'presentation/providers/app_lock_provider.dart';
 import 'presentation/providers/auth_providers.dart';
+import 'presentation/providers/database_provider.dart';
 import 'presentation/providers/explorer_sort_provider.dart';
 import 'presentation/providers/primary_fund_provider.dart';
 import 'presentation/widgets/tap_guard.dart';
@@ -41,9 +43,14 @@ Future<void> main() async {
   // Không bao giờ ném: thiếu/sai cấu hình ⇒ Auth tắt, app local vẫn chạy.
   final authRepository = await bootstrapAuth();
 
+  // Registry Wallet: đăng ký ví cục bộ hiện tại TẠI CHỖ (không di chuyển file, không
+  // gắn Account). Không bao giờ ném.
+  final walletRegistry = await bootstrapWalletRegistry();
+
   runApp(
     ProviderScope(
       overrides: [
+        walletRegistryProvider.overrideWithValue(walletRegistry),
         authRepositoryProvider.overrideWithValue(authRepository),
         appLockPlatformProvider.overrideWithValue(lockPlatform),
         deviceAuthenticatorProvider.overrideWithValue(
@@ -51,7 +58,10 @@ Future<void> main() async {
         ),
         appLockInitialStatusProvider.overrideWithValue(lockStatus),
         primaryFundIdProvider.overrideWith(
-          (ref) => createPersistentPrimaryFundController(prefs),
+          (ref) => createPersistentPrimaryFundController(
+            prefs,
+            ref.watch(activeWalletProvider),
+          ),
         ),
         explorerSortProvider.overrideWith(
           (ref) => createPersistentExplorerSortController(prefs),

@@ -7,10 +7,10 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P5 — Auth & môi trường — PASS** (nghiệm thu Pixel 2026-09-21: bản DEV `com.vinhamimh.vi_nha_minh.dev`, Google Sign-In → hiện danh tính → force-stop giữ phiên → đăng xuất; DB PROD không đổi). Phase kế tiếp (chưa bắt đầu): P6 cách ly Wallet/Account.
+**P6 — Cách ly Account/Wallet cục bộ — PASS** (2026-09-21). Phase kế tiếp (chưa bắt đầu): P7 phiên thiết bị độc quyền.
 
 ## Last Completed Phase
-P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
+P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
 **v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 và P4 KHÔNG đổi schema.
@@ -21,10 +21,12 @@ P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3
 - UI: thẻ Tài khoản đầu Cài đặt (`AccountSettingsCard`), đăng nhập TUỲ CHỌN, không claim/upload. Đăng xuất chỉ xoá phiên; Wallet cục bộ + App Lock giữ nguyên.
 - **Mạng (thay đổi quyền riêng tư):** từ P5 manifest có `INTERNET`, chỉ lưu lượng xác thực. Không import Firestore/Storage ở đâu trong `lib/` (test tĩnh). Financial data vẫn 100% local.
 
-## Local Wallet Architecture
-- 1 Wallet cục bộ hiện tại = 1 file SQLite `vi_nha_minh.sqlite` (không di chuyển).
-- `wallet_meta` singleton, `walletId` mờ và ổn định.
-- Chưa Account/Auth/Firebase. Registry nhiều Wallet vật lý hoãn lại (đích: 1 Wallet = 1 SQLite; UI v1 chỉ 1 ví).
+## Local Wallet Architecture (P6)
+- 1 Wallet = 1 file SQLite. Ví cục bộ hiện tại = `vi_nha_minh.sqlite` (không di chuyển), `wallet_meta` singleton, `walletId` mờ ổn định.
+- **Registry toàn app** `wallet_registry.json` (thư mục tài liệu, ghi nguyên tử; `WalletRegistry`, `data/local/wallet_registry.dart`): chỉ metadata (`walletId`, `kind`, `dbFileName` thuần, `createdAt`, `boundAccountId?`). `main` gọi `bootstrapWalletRegistry()` (không bao giờ ném) đăng ký ví cục bộ TẠI CHỖ, idempotent; registry hỏng ⇒ rỗng và tự đăng ký lại đúng walletId. Xoá registry không xoá ví.
+- **Phạm vi phiên** `WalletAccessScope` (local | account(uid)) từ `accountProvider` (chỉ uid). `WalletRegistryEntry.canOpen`: ví LOCAL chưa claim mở được ở mọi phạm vi; ví gắn Account CHỈ mở bởi đúng Account. `resolveActive` ưu tiên ví gắn Account, rồi ví cục bộ. Đăng nhập KHÔNG gắn/claim/đổi kind; không có code production nào gán `boundAccountId` (chỉ test — P8 claim).
+- `appDatabaseProvider` watch `activeWalletProvider`: đổi ví/Account ⇒ DB cũ đóng, mọi repository/stream dựng lại. `selectedWalletIdProvider`, `currentTabProvider`, `syncModeProvider`, `primaryFundIdProvider` gắn `walletSessionKeyProvider` nên reset khi đổi ví/đăng xuất. Đăng xuất chỉ xoá phiên; file ví, App Lock, prefs thiết bị giữ nguyên.
+- Prefs: primary fund = WALLET data, ví cục bộ giữ khoá cũ `primary_fund_id`, ví khác `primary_fund_id.<walletId>`; explorer sort/App Lock = DEVICE, không đổi.
 
 ## Financial Members
 Runtime = bảng `financial_member_rows` qua `MemberRepository` (`watchMembers/getMembers/getMemberById/createMember`), UI qua `memberDirectoryProvider` (`MemberDirectory`: nhãn, mặc định = đầu theo `displayOrder`, `otherThan`). Enum `FamilyMember` và `WalletMemberResolver` đã XOÁ; domain dùng `String memberId`.
@@ -74,7 +76,10 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Mã hoá DB cục bộ trước cloud pilot/Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
-## Testing (gate mới nhất — P5)
+## Testing (gate mới nhất — P6)
+P6: `flutter test --concurrency=1` 1022 pass, 3 skip; analyze 15 info có sẵn, 0 lỗi; không đổi schema (v8). Test: `test/wallet/*`. Pixel prod: DB sha256 trước/sau giống hệt (1.809 giao dịch, walletId `3cbd8878…`); registry tạo đúng 1 dòng local. DEV: phiên Auth giữ, registry không đổi khi đăng nhập/đăng xuất, sandbox tách biệt. Lưu ý: flavor prod chưa có `env/prod.json` ⇒ Auth prod "chưa cấu hình", nên đăng nhập chỉ thử trên DEV. Backup: `ViNhaMinh_backups/2026-09-21/p6_pre|p6_post`.
+Widget-local state (bộ lọc trong màn hình) chưa reset khi đổi ví — chưa có UI đổi ví ở v1.
+P5 (tham chiếu):
 P5: `flutter test --concurrency=1` 1005 pass, 3 skip; `flutter analyze` 15 info có sẵn, 0 lỗi; không đổi schema. Test P5: `test/auth/*`.
 P4 (tham chiếu): 977 pass. Test P4: `test/domain/financial_member_as_data_test.dart` (ID mờ + nhãn "Vợ", repo, directory), thêm ca P4 ở home/add/summary widget test; fixture `test/support/legacy_members.dart`.
 Pixel: DB trước/sau P4 giống byte-for-byte (1.809 giao dịch); walletId + `financial_member_rows` không đổi; integrity ok.
@@ -82,7 +87,7 @@ Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối ph
 
 ## Known Backlog
 - Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
-- Registry Wallet bền (P6); Auth (P5); phiên thiết bị độc quyền (P7).
+- Phiên thiết bị độc quyền (P7).
 - Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
 - Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
 - Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.

@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/default_funds.dart';
+import '../../data/local/wallet_descriptor.dart';
+import 'database_provider.dart';
 
 /// Lưu lựa chọn "quỹ chính" của Trang chủ.
 ///
@@ -16,14 +18,25 @@ class PrimaryFundStorage {
 
   static const key = 'primary_fund_id';
 
-  static String? load(SharedPreferences prefs) {
-    if (!prefs.containsKey(key)) return DefaultFunds.anUongId;
-    final value = prefs.getString(key);
+  /// Quỹ chính là WALLET DATA ⇒ khoá theo ví (P6). Ví cục bộ hiện tại GIỮ khoá trần
+  /// cũ (không di trú, không mất lựa chọn đã lưu); ví khác dùng `primary_fund_id.<walletId>`.
+  static String keyFor(WalletDescriptor wallet) =>
+      (wallet.dbFileName == WalletDescriptor.legacyLocal.dbFileName ||
+          wallet.walletId == null)
+      ? key
+      : '$key.${wallet.walletId}';
+
+  static String? load(SharedPreferences prefs, {String storageKey = key}) {
+    if (!prefs.containsKey(storageKey)) return DefaultFunds.anUongId;
+    final value = prefs.getString(storageKey);
     return (value == null || value.isEmpty) ? null : value;
   }
 
-  static Future<void> save(SharedPreferences prefs, String? id) =>
-      prefs.setString(key, id ?? '');
+  static Future<void> save(
+    SharedPreferences prefs,
+    String? id, {
+    String storageKey = key,
+  }) => prefs.setString(storageKey, id ?? '');
 }
 
 /// Id quỹ chính hiện tại (`null` = chưa chọn). Việc quỹ đó còn tồn tại/đang dùng
@@ -53,13 +66,21 @@ class PrimaryFundController extends StateNotifier<String?> {
 /// bằng bản đọc/ghi `shared_preferences` thật.
 final primaryFundIdProvider =
     StateNotifierProvider<PrimaryFundController, String?>(
-      (ref) => PrimaryFundController(),
+      (ref) {
+        ref.watch(walletSessionKeyProvider); // đổi ví ⇒ không giữ quỹ của ví trước
+        return PrimaryFundController();
+      },
     );
 
-/// Dựng controller lưu bền vững từ [prefs] — dùng ở `main()`.
+/// Dựng controller lưu bền vững từ [prefs] cho [wallet] — dùng ở `main()`.
 PrimaryFundController createPersistentPrimaryFundController(
-  SharedPreferences prefs,
-) => PrimaryFundController(
-  initialId: PrimaryFundStorage.load(prefs),
-  persist: (id) => PrimaryFundStorage.save(prefs, id),
-);
+  SharedPreferences prefs, [
+  WalletDescriptor wallet = WalletDescriptor.legacyLocal,
+]) {
+  final storageKey = PrimaryFundStorage.keyFor(wallet);
+  return PrimaryFundController(
+    initialId: PrimaryFundStorage.load(prefs, storageKey: storageKey),
+    persist: (id) =>
+        PrimaryFundStorage.save(prefs, id, storageKey: storageKey),
+  );
+}
