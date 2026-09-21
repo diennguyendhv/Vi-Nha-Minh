@@ -72,7 +72,10 @@ class LocalCategoryRepository implements CategoryRepository {
     }
     return categoryRows.map((c) {
       final statuses = (statusesByCategory[c.id] ?? <domain.Status>[])
-        ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+        ..sort((a, b) {
+          final byOrder = a.sortOrder.compareTo(b.sortOrder);
+          return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+        });
       return _categoryToDomain(c, statuses);
     }).toList();
   }

@@ -6,7 +6,6 @@ import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/category.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/transaction_type.dart';
-import '../../../domain/errors/domain_exceptions.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/status_providers.dart';
 import '../../providers/transaction_providers.dart';
@@ -136,6 +135,22 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   static String _norm(String value) =>
       value.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
 
+  /// Bước mới luôn nằm CUỐI (lớn hơn mọi thứ tự hiện có, kể cả bước đã ngừng).
+  int get _nextSortOrder =>
+      _statuses.fold<int>(-1, (m, s) => s.sortOrder > m ? s.sortOrder : m) + 1;
+
+  /// Kéo-thả trong nhóm "Đang sử dụng": chỉ đổi vị trí giữa các bước đang dùng,
+  /// bước đã ngừng giữ nguyên chỗ của chúng trong dãy thứ tự.
+  void _reorderActive(int oldIndex, int newIndex) {
+    final active = _statuses.where((s) => s.isActive).toList();
+    final moved = active.removeAt(oldIndex);
+    active.insert(newIndex, moved);
+    var next = 0;
+    setState(() {
+      _statuses = [for (final s in _statuses) s.isActive ? active[next++] : s];
+    });
+  }
+
   void _addStatus() {
     final name = _newStatusController.text.trim();
     if (name.isEmpty) return;
@@ -154,7 +169,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
           id: IdGenerator.generate(),
           categoryId: _categoryId,
           name: name,
-          sortOrder: _statuses.length,
+          sortOrder: _nextSortOrder,
         ),
       ];
       _newStatusController.clear();
@@ -317,44 +332,38 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// "Xóa hẳn" 1 bước đã ngừng và chưa từng dùng: xoá thật khỏi DB rồi bỏ khỏi
-  /// danh sách nháp (không cần bấm Lưu).
-  Future<void> _deleteStatusPermanently(Status status) async {
+  /// Xóa 1 bước (đang dùng hay đã ngừng). Chưa lưu → chỉ bỏ khỏi bản nháp. Đã lưu:
+  /// không ai dùng → xóa hẳn; đang được giao dịch dùng → hộp thoại đếm số giao
+  /// dịch + [Xem giao dịch] + [Chuyển về Không có trạng thái và xóa] (nguyên tử).
+  Future<void> _deleteStatus(Status status) async {
+    if (!_originalStatuses.any((o) => o.id == status.id)) {
+      setState(
+        () => _statuses = _statuses.where((s) => s.id != status.id).toList(),
+      );
+      return;
+    }
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Xóa hẳn "${status.name}"?'),
-        content: const Text('Trạng thái sẽ biến mất và không thể khôi phục.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Huỷ'),
-          ),
-          FilledButton(
-            key: const Key('confirm_delete_status'),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Xóa hẳn'),
-          ),
-        ],
-      ),
+      builder: (_) => _DeleteStatusDialog(status: status),
     );
     if (ok != true) return;
     try {
-      await ref.read(statusRepositoryProvider).deleteStatusPermanently(status.id);
-    } on StatusNotDeletableException {
+      await ref.read(statusRepositoryProvider).clearAndDeleteStatus(status.id);
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Trạng thái này vừa được dùng nên không thể xóa.'),
+            content: Text('Không xóa được trạng thái. Chưa có gì thay đổi.'),
           ),
         );
       }
       return;
     }
+    if (!mounted) return;
     setState(() {
       _statuses = _statuses.where((s) => s.id != status.id).toList();
       _originalStatuses = _originalStatuses
-          .where((s) => s.id != status.id)
+          .where((o) => o.id != status.id)
           .toList();
     });
   }
@@ -582,25 +591,6 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   List<Widget> _statusSection() {
     final active = _statuses.where((s) => s.isActive).toList();
     final stopped = _statuses.where((s) => !s.isActive).toList();
-    final deletable = ref.watch(deletableStatusIdsProvider);
-    // Chỉ bước ĐÃ LƯU là ngừng sử dụng mới có thể xoá hẳn (bước vừa bấm
-    // "Ngừng sử dụng" trong bản nháp thì phải Lưu trước).
-    bool canDelete(Status s) =>
-        deletable.contains(s.id) &&
-        _originalStatuses.any((o) => o.id == s.id && !o.isActive);
-    final categories =
-        ref.watch(categoriesStreamProvider).valueOrNull ?? const <Category>[];
-    final transactions = ref.watch(transactionsStreamProvider).valueOrNull ??
-        const <Transaction>[];
-    // Bước đã lưu + ngừng sử dụng nhưng chưa xóa hẳn được (còn giao dịch giữ).
-    final heldStopped = [
-      for (final s in stopped)
-        if (_originalStatuses.any((o) => o.id == s.id && !o.isActive) &&
-            !deletable.contains(s.id))
-          s,
-    ];
-    DeletionCheckResult checkOf(Status s) =>
-        checkStatusDeletion(s.id, categories, transactions);
     final duplicate = _duplicateStatusId == null
         ? null
         : _statuses.where((s) => s.id == _duplicateStatusId).firstOrNull;
@@ -611,26 +601,72 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
           'Đang sử dụng',
           style: TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
-        for (final s in active)
-          Padding(
-            key: Key('status_${s.id}'),
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                Expanded(child: Text(s.name)),
-                _StatusAction(
-                  key: Key('status_edit_${s.id}'),
-                  label: 'Sửa',
-                  onPressed: () => _renameStatus(s),
+        // "Không có trạng thái" là lựa chọn ảo luôn đứng đầu ở màn thêm/sửa giao
+        // dịch — không nằm ở đây, không kéo được. Các bước thật kéo-thả để đổi thứ
+        // tự (mỗi danh mục một thứ tự riêng).
+        ReorderableListView(
+          key: const Key('status_reorder_list'),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          onReorderItem: _reorderActive,
+          children: [
+            for (var i = 0; i < active.length; i++)
+              Padding(
+                key: Key('status_${active[i].id}'),
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        ReorderableDragStartListener(
+                          index: i,
+                          child: Padding(
+                            key: Key('status_drag_${active[i].id}'),
+                            padding: const EdgeInsets.only(right: 10),
+                            child: const Icon(
+                              Icons.drag_handle_rounded,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            active[i].name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 34),
+                      child: Wrap(
+                        children: [
+                          _StatusAction(
+                            key: Key('status_edit_${active[i].id}'),
+                            label: 'Sửa',
+                            onPressed: () => _renameStatus(active[i]),
+                          ),
+                          _StatusAction(
+                            key: Key('status_stop_${active[i].id}'),
+                            label: 'Ngừng sử dụng',
+                            onPressed: () => _stopUsingStatus(active[i]),
+                          ),
+                          _StatusAction(
+                            key: Key('status_delete_${active[i].id}'),
+                            label: 'Xóa',
+                            onPressed: () => _deleteStatus(active[i]),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                _StatusAction(
-                  key: Key('status_stop_${s.id}'),
-                  label: 'Ngừng sử dụng',
-                  onPressed: () => _stopUsingStatus(s),
-                ),
-              ],
-            ),
-          ),
+              ),
+          ],
+        ),
       ],
       Row(
         children: [
@@ -686,6 +722,8 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
           'Ngừng sử dụng (${stopped.length})',
           style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
+        // Bước đã ngừng giữ thứ tự riêng của chúng; vẫn hiện trên giao dịch cũ,
+        // chỉ không được chọn cho giao dịch MỚI.
         for (final s in stopped)
           Padding(
             key: Key('status_${s.id}'),
@@ -703,52 +741,84 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
                   label: 'Sử dụng lại',
                   onPressed: () => _reuseStatus(s),
                 ),
-                if (heldStopped.contains(s) &&
-                    checkOf(s).transactionBlockers.isNotEmpty)
-                  _StatusAction(
-                    key: Key('status_blockers_${s.id}'),
-                    label: 'Xem giao dịch',
-                    onPressed: () => showBlockingTransactions(
-                      context,
-                      title: 'Chưa thể xóa "${s.name}"',
-                      message:
-                          'Trạng thái này đang được ${checkOf(s).transactionBlockers.length} giao dịch sử dụng.',
-                      blockers: checkOf(s).blockers,
-                    ),
-                  ),
-                if (heldStopped.contains(s) && checkOf(s).hasHiddenHistory)
-                  _StatusAction(
-                    key: Key('status_purge_${s.id}'),
-                    label: 'Dọn lịch sử đã xóa',
-                    onPressed: () => ref
-                        .read(transactionRepositoryProvider)
-                        .purgeDeletedHistoryForStatus(s.id),
-                  ),
-                if (canDelete(s))
-                  _StatusAction(
-                    key: Key('status_delete_${s.id}'),
-                    label: 'Xóa hẳn',
-                    onPressed: () => _deleteStatusPermanently(s),
-                  ),
+                _StatusAction(
+                  key: Key('status_delete_${s.id}'),
+                  label: 'Xóa',
+                  onPressed: () => _deleteStatus(s),
+                ),
               ],
-            ),
-          ),
-        if (heldStopped.isNotEmpty)
-          Padding(
-            key: const Key('status_used_note'),
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              heldStopped.any((s) => checkOf(s).transactionBlockers.isNotEmpty)
-                  ? 'Bước đang được giao dịch sử dụng chưa thể xóa hẳn — bấm "Xem giao dịch" để mở và sửa.'
-                  : 'Còn lịch sử đã xóa/sửa trước đây (đang ẩn) — dọn lịch sử để xóa hẳn.',
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: AppColors.textMuted,
-              ),
             ),
           ),
       ],
     ];
+  }
+}
+
+/// Hộp thoại xóa 1 trạng thái. Đọc số giao dịch đang dùng TRỰC TIẾP từ dữ liệu đang
+/// xem (cập nhật ngay khi người dùng vừa mở/sửa giao dịch từ [Xem giao dịch]).
+class _DeleteStatusDialog extends ConsumerWidget {
+  const _DeleteStatusDialog({required this.status});
+
+  final Status status;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories =
+        ref.watch(categoriesStreamProvider).valueOrNull ?? const <Category>[];
+    final transactions =
+        ref.watch(transactionsStreamProvider).valueOrNull ??
+        const <Transaction>[];
+    final check = checkStatusDeletion(status.id, categories, transactions);
+    final used = check.transactionBlockers.length;
+
+    if (used == 0) {
+      return AlertDialog(
+        title: Text('Xóa "${status.name}"?'),
+        content: const Text('Trạng thái sẽ biến mất và không thể khôi phục.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_status'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      );
+    }
+    return AlertDialog(
+      key: const Key('delete_used_status_dialog'),
+      title: Text('Xóa "${status.name}"?'),
+      content: Text(
+        'Trạng thái "${status.name}" đang được sử dụng bởi $used giao dịch.\n\n'
+        'Nếu tiếp tục, các giao dịch này sẽ được chuyển về '
+        '"Không có trạng thái".\n\n'
+        'Số tiền, danh mục, ngày và nội dung giao dịch không thay đổi.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Hủy'),
+        ),
+        TextButton(
+          key: const Key('status_view_transactions'),
+          onPressed: () => showBlockingTransactions(
+            context,
+            title: 'Giao dịch đang dùng "${status.name}"',
+            message: 'Trạng thái này đang được $used giao dịch sử dụng.',
+            blockers: check.blockers,
+          ),
+          child: const Text('Xem giao dịch'),
+        ),
+        FilledButton(
+          key: const Key('confirm_clear_delete_status'),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Chuyển về Không có trạng thái và xóa'),
+        ),
+      ],
+    );
   }
 }
 

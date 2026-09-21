@@ -318,7 +318,15 @@ void main() {
       await expectDbHealthy(db);
     });
 
-    test('Bước đang dùng (chưa ngừng) → không xoá hẳn', () async {
+    test('Bước đang hoạt động nhưng KHÔNG giao dịch nào dùng → xoá hẳn được (không cần ngừng trước)', () async {
+      expect(await deletableStatuses(), contains('cho_di_chua_chuan_bi'));
+      await statuses.deleteStatusPermanently('cho_di_chua_chuan_bi');
+      expect(await statusExists('cho_di_chua_chuan_bi'), isFalse);
+    });
+
+    test('Bước đang hoạt động VÀ có giao dịch dùng → deleteStatusPermanently vẫn bị chặn (phải gỡ tham chiếu)', () async {
+      await fundWife();
+      await transactions.addTransaction(spend('t1', 'cho_di', statusId: 'cho_di_chua_chuan_bi'));
       expect(await deletableStatuses(), isNot(contains('cho_di_chua_chuan_bi')));
       await expectLater(
         statuses.deleteStatusPermanently('cho_di_chua_chuan_bi'),

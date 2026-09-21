@@ -4,7 +4,7 @@ import '../entities/fund.dart';
 import '../entities/transaction.dart';
 import 'deletion_check.dart';
 
-/// Id các bước trạng thái ĐÃ NGỪNG và không có giao dịch nào (đang tồn tại
+/// Id các bước trạng thái (đang dùng hay đã ngừng) không có giao dịch nào (đang tồn tại
 /// trong sổ) tham chiếu `statusId` — an toàn để hiện "Xóa hẳn". Chỉ để HIỂN
 /// THỊ, suy ra từ dữ liệu đang xem nên luôn khớp màn hình ngay khi vừa xóa /
 /// sửa / ngừng; việc xóa thật vẫn được kiểm tra lại trong DB.
@@ -19,7 +19,7 @@ Set<String> computeDeletableStatusIds(
   return {
     for (final c in categories)
       for (final s in c.statuses)
-        if (!s.isActive && !used.contains(s.id)) s.id,
+        if (!used.contains(s.id)) s.id,
   };
 }
 

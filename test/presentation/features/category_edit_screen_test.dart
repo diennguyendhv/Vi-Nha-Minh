@@ -64,6 +64,11 @@ class _FakeStatusRepository implements StatusRepository {
   @override
   Future<void> deleteStatusPermanently(String statusId) async =>
       calls.add('purge:$statusId');
+  @override
+  Future<int> clearAndDeleteStatus(String statusId) async {
+    calls.add('clearDelete:$statusId');
+    return 0;
+  }
 }
 
 /// Nếu màn này chạm vào ledger (ghi giao dịch) test sẽ ném lỗi ngay.
@@ -643,56 +648,94 @@ void main() {
       expect(repos.cats.updated.single.statuses.where((s) => s.id == 'cho_di_da_gui').single.isActive, isTrue);
     });
 
-    testWidgets('Xóa hẳn: chỉ hiện ở bước ĐÃ NGỪNG + chưa từng dùng; bước đã dùng chỉ có [Sử dụng lại] + 1 dòng giải thích', (tester) async {
+    testWidgets('Nút [Xóa] có ở MỌI bước đã lưu (đang dùng hay đã ngừng, đã dùng hay chưa); không còn dòng giải thích bị chặn', (tester) async {
       await pumpChoDi(
         tester,
         stopped: {'cho_di_chua_chuan_bi', 'cho_di_da_gui'},
         used: {'cho_di_chua_chuan_bi'},
       );
 
-      expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsOneWidget);
-      expect(find.byKey(const Key('status_delete_cho_di_chua_chuan_bi')), findsNothing, reason: 'đã dùng lịch sử');
-      expect(find.byKey(const Key('status_reuse_cho_di_chua_chuan_bi')), findsOneWidget);
-      expect(find.byKey(const Key('status_used_note')), findsOneWidget);
-      expect(find.byKey(const Key('status_delete_cho_di_da_chuan_bi')), findsNothing, reason: 'còn đang dùng');
-      expect(find.textContaining('foreign'), findsNothing);
-      expect(find.textContaining('constraint'), findsNothing);
+      for (final id in ['cho_di_chua_chuan_bi', 'cho_di_da_chuan_bi', 'cho_di_da_gui']) {
+        expect(find.byKey(Key('status_delete_$id')), findsOneWidget, reason: id);
+      }
+      expect(find.byKey(const Key('status_used_note')), findsNothing);
     });
 
-    testWidgets('Xóa hẳn: xác nhận → purge đúng id, biến khỏi danh sách, KHÔNG ghi ledger; Huỷ thì không xoá', (tester) async {
-      final repos = await pumpChoDi(
-        tester,
-        stopped: {'cho_di_da_gui'},
-      );
+    testWidgets('Xóa bước KHÔNG ai dùng: xác nhận → clearAndDelete đúng id, biến khỏi danh sách; Hủy thì không xoá', (tester) async {
+      final repos = await pumpChoDi(tester, stopped: {'cho_di_da_gui'});
 
       await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Huỷ'));
+      await tester.tap(find.text('Hủy'));
       await tester.pumpAndSettle();
-      expect(repos.statuses.calls.where((c) => c.startsWith('purge:')), isEmpty);
+      expect(repos.statuses.calls.where((c) => c.startsWith('clearDelete:')), isEmpty);
       expect(find.byKey(const Key('status_cho_di_da_gui')), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
       await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delete_used_status_dialog')), findsNothing);
       await tester.tap(find.byKey(const Key('confirm_delete_status')));
       await tester.pumpAndSettle();
 
-      expect(repos.statuses.calls, contains('purge:cho_di_da_gui'));
+      expect(repos.statuses.calls, contains('clearDelete:cho_di_da_gui'));
       expect(find.byKey(const Key('status_cho_di_da_gui')), findsNothing);
-      expect(find.textContaining('Ngừng sử dụng ('), findsNothing);
 
       await _tapSave(tester);
-      expect(repos.statuses.calls.where((c) => c.contains('cho_di_da_gui') && !c.startsWith('purge:')), isEmpty);
+      expect(repos.statuses.calls.where((c) => c.contains('cho_di_da_gui') && !c.startsWith('clearDelete:')), isEmpty);
       expect(repos.cats.updated.single.statuses.map((s) => s.id), isNot(contains('cho_di_da_gui')));
     });
 
-    testWidgets('Bước vừa bấm "Ngừng sử dụng" trong bản nháp (chưa Lưu) KHÔNG có Xóa hẳn dù id nằm trong danh sách an toàn', (tester) async {
+    testWidgets('Xóa bước ĐANG được giao dịch dùng: hộp thoại nói đúng số giao dịch + 3 nút; [Xem giao dịch] liệt kê; xác nhận → clearAndDelete', (tester) async {
+      final repos = await pumpChoDi(tester, used: {'cho_di_da_gui'});
+
+      await tester.tap(find.byKey(const Key('status_delete_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('delete_used_status_dialog')), findsOneWidget);
+      expect(find.textContaining('đang được sử dụng bởi 1 giao dịch'), findsOneWidget);
+      expect(find.textContaining('Số tiền, danh mục, ngày và nội dung giao dịch không thay đổi.'), findsOneWidget);
+      expect(find.text('Hủy'), findsOneWidget);
+      expect(find.text('Xem giao dịch'), findsOneWidget);
+      expect(find.text('Chuyển về Không có trạng thái và xóa'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('status_view_transactions')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('blocking_transactions_dialog')), findsOneWidget);
+      expect(find.byKey(const Key('blocker_used-cho_di_da_gui')), findsOneWidget);
+      await tester.tap(find.text('Đóng'));
+      await tester.pumpAndSettle();
+
+      expect(repos.statuses.calls.where((c) => c.startsWith('clearDelete:')), isEmpty, reason: 'chưa xác nhận');
+      await tester.tap(find.byKey(const Key('confirm_clear_delete_status')));
+      await tester.pumpAndSettle();
+      expect(repos.statuses.calls, contains('clearDelete:cho_di_da_gui'));
+      expect(find.byKey(const Key('status_cho_di_da_gui')), findsNothing);
+    });
+
+    testWidgets('Kéo-thả: đưa bước cuối lên đầu → lưu ghi thứ tự mới; bước ngừng sử dụng giữ chỗ', (tester) async {
+      final repos = await pumpChoDi(tester);
+
+      await tester.ensureVisible(find.byKey(const Key('status_drag_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      final handle = find.byKey(const Key('status_drag_cho_di_da_gui'));
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.moveBy(const Offset(0, -240));
+      await tester.pump(const Duration(milliseconds: 100));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+
+      expect(repos.statuses.calls, contains('reorder'));
+      expect(repos.cats.updated.single.statuses.map((s) => s.id).first, 'cho_di_da_gui');
+    });
+
+    testWidgets('Bước vừa bấm "Ngừng sử dụng" trong bản nháp (chưa Lưu) vẫn có [Xóa] (mở hộp thoại xác nhận)', (tester) async {
       await pumpChoDi(tester);
 
       await tester.tap(find.byKey(const Key('status_stop_cho_di_da_gui')));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('status_reuse_cho_di_da_gui')), findsOneWidget);
-      expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsNothing);
+      expect(find.byKey(const Key('status_delete_cho_di_da_gui')), findsOneWidget);
     });
 
     testWidgets('Đổi tên (Sửa) → chỉ renameStatus với ĐÚNG id cũ, không add/ngừng', (tester) async {
@@ -742,6 +785,12 @@ void main() {
       await _tapSave(tester);
 
       expect(repos.statuses.calls, contains('add:Chờ xác nhận'));
+      final saved = repos.cats.updated.single.statuses;
+      expect(saved.last.name, 'Chờ xác nhận', reason: 'bước mới luôn nằm CUỐI');
+      expect(
+        saved.last.sortOrder,
+        greaterThan(saved.take(saved.length - 1).map((s) => s.sortOrder).reduce((a, b) => a > b ? a : b)),
+      );
     });
 
     testWidgets('Thêm tên TRÙNG bước đã ngừng sử dụng → KHÔNG tạo duplicate, hiện thông báo + [Sử dụng lại]', (tester) async {

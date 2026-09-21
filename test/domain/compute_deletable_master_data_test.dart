@@ -66,14 +66,14 @@ void main() {
     expect(d, contains('c3'));
   });
 
-  test('Bước trạng thái: đã ngừng + không giao dịch nào dùng → xóa hẳn được; đang dùng / đang được giao dịch giữ → không', () {
+  test('Bước trạng thái: không giao dịch nào dùng → xóa hẳn được (đang dùng hay đã ngừng); còn giao dịch giữ → không', () {
     const stopped = Status(id: 's_stop', categoryId: 'c1', name: 'A', sortOrder: 0, isActive: false);
     const held = Status(id: 's_held', categoryId: 'c1', name: 'B', sortOrder: 1, isActive: false);
     const live = Status(id: 's_live', categoryId: 'c1', name: 'C', sortOrder: 2);
     final cats = [_c('c1', active: true, statuses: [stopped, held, live])];
     final d = computeDeletableStatusIds(cats, [_t('a', statusId: 's_held')]);
-    expect(d, {'s_stop'});
-    expect(computeDeletableStatusIds(cats, const []), {'s_stop', 's_held'}, reason: 'giao dịch cuối cùng đã bị xóa thật');
+    expect(d, {'s_stop', 's_live'});
+    expect(computeDeletableStatusIds(cats, const []), {'s_stop', 's_held', 's_live'}, reason: 'giao dịch cuối cùng đã bị xóa thật');
   });
 
   group('Lịch sử ẩn (dữ liệu của cơ chế cũ)', () {
