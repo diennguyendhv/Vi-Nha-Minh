@@ -854,4 +854,113 @@ void main() {
       expect(find.byKey(const Key('status_duplicate_notice')), findsNothing);
     });
   });
+
+  group('Vùng an toàn phía dưới: nút "Lưu danh mục" luôn nằm TRÊN thanh điều hướng / cử chỉ', () {
+    const screenH = 2400.0;
+
+    void setInsets(WidgetTester tester, {double bottom = 0, double keyboard = 0}) {
+      // Android: `padding` = viewPadding trừ phần bàn phím che (0 khi bàn phím mở).
+      tester.view.viewPadding = FakeViewPadding(bottom: bottom);
+      tester.view.padding = FakeViewPadding(bottom: keyboard > 0 ? 0 : bottom);
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+      addTearDown(tester.view.resetViewPadding);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.view.resetViewInsets);
+    }
+
+    Future<Rect> scrollToBottomAndGetSave(WidgetTester tester) async {
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -6000));
+      await tester.pumpAndSettle();
+      return tester.getRect(find.byKey(const Key('category_save')));
+    }
+
+    Category manyStatuses(int n) => DefaultCategories.choDi.copyWith(
+      statuses: [
+        for (var i = 0; i < n; i++)
+          Status(id: 'st$i', categoryId: 'cho_di', name: 'Bước $i', sortOrder: i),
+      ],
+    );
+
+    for (final inset in [48.0, 96.0, 144.0]) {
+      testWidgets('Sửa danh mục, inset dưới $inset: nút nằm trọn phía trên vùng hệ thống và bấm được', (tester) async {
+        final repos = await _pump(tester, categoryId: 'cho_di');
+        setInsets(tester, bottom: inset);
+        await tester.pumpAndSettle();
+        final r = await scrollToBottomAndGetSave(tester);
+        expect(r.bottom, lessThanOrEqualTo(screenH - inset + 0.5), reason: 'không chồng lên vùng hệ thống ($inset)');
+        await tester.tap(find.byKey(const Key('category_save')));
+        await tester.pumpAndSettle();
+        expect(repos.cats.updated, hasLength(1), reason: 'chạm trúng nút (không bị che)');
+        expect(tester.takeException(), isNull);
+      });
+    }
+
+    testWidgets('Thêm danh mục dùng chung bố cục: cùng đảm bảo', (tester) async {
+      await _pump(tester);
+      setInsets(tester, bottom: 96);
+      await tester.pumpAndSettle();
+      final r = await scrollToBottomAndGetSave(tester);
+      expect(r.bottom, lessThanOrEqualTo(screenH - 96 + 0.5));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Danh sách trạng thái DÀI (30 bước): cuối danh sách, "+ Thêm trạng thái" và nút Lưu đều cuộn tới được, không tràn', (tester) async {
+      await _pump(
+        tester,
+        categoryId: 'cho_di',
+        categories: [for (final c in DefaultCategories.all) c.id == 'cho_di' ? manyStatuses(30) : c],
+      );
+      setInsets(tester, bottom: 96);
+      await tester.pumpAndSettle();
+      final r = await scrollToBottomAndGetSave(tester);
+      expect(r.bottom, lessThanOrEqualTo(screenH - 96 + 0.5));
+      expect(find.byKey(const Key('status_add_field')), findsOneWidget);
+      expect(find.byKey(const Key('status_st29')), findsOneWidget, reason: 'bước cuối vẫn dựng được khi cuộn tới');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Bàn phím mở (viewInsets 800): nút vẫn với tới được, KHÔNG cộng đôi vùng an toàn, không tràn', (tester) async {
+      // Danh sách dài để nội dung tràn: nút Lưu nằm cuối vùng cuộn, sát mép bàn phím.
+      await _pump(
+        tester,
+        categoryId: 'cho_di',
+        categories: [for (final c in DefaultCategories.all) c.id == 'cho_di' ? manyStatuses(30) : c],
+      );
+      setInsets(tester, bottom: 96, keyboard: 800);
+      await tester.pumpAndSettle();
+      final r = await scrollToBottomAndGetSave(tester);
+      const keyboardTop = screenH - 800;
+      expect(r.bottom, lessThanOrEqualTo(keyboardTop + 0.5), reason: 'không nằm dưới bàn phím');
+      expect(keyboardTop - r.bottom, lessThan(40), reason: 'chỉ chừa lề 20 (không cộng thêm inset 96 lần nữa)');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Cỡ chữ lớn (1.6x) + inset dưới: nút vẫn nằm trên vùng hệ thống', (tester) async {
+      await _pump(tester, categoryId: 'cho_di');
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      setInsets(tester, bottom: 96);
+      await tester.pumpAndSettle();
+      final r = await scrollToBottomAndGetSave(tester);
+      expect(r.bottom, lessThanOrEqualTo(screenH - 96 + 0.5));
+    });
+
+    testWidgets('Kéo-thả thứ tự trạng thái vẫn chạy khi có inset dưới (không hỏng ReorderableListView)', (tester) async {
+      final repos = await _pump(tester, categoryId: 'cho_di');
+      setInsets(tester, bottom: 96);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('status_drag_cho_di_da_gui')));
+      await tester.pumpAndSettle();
+      final g = await tester.startGesture(tester.getCenter(find.byKey(const Key('status_drag_cho_di_da_gui'))));
+      await tester.pump(const Duration(milliseconds: 100));
+      await g.moveBy(const Offset(0, -240));
+      await tester.pump(const Duration(milliseconds: 100));
+      await g.up();
+      await tester.pumpAndSettle();
+      await _tapSave(tester);
+      expect(repos.statuses.calls, contains('reorder'));
+      expect(repos.cats.updated.single.statuses.first.id, 'cho_di_da_gui');
+    });
+  });
+
 }

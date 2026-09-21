@@ -397,7 +397,16 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        // `ListView` với padding tường minh KHÔNG tự cộng inset hệ thống, và Scaffold
+        // không có thanh dưới để cộng hộ (Android edge-to-edge) → nút "Lưu danh mục"
+        // (phần tử cuối) bị thanh điều hướng/cử chỉ che. Cộng đúng padding hệ thống
+        // phía dưới (Scaffold đã trừ phần bàn phím nên không cộng đôi khi gõ phím).
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.paddingOf(context).bottom,
+        ),
         children: [
           const Text(
             'Tên danh mục',
