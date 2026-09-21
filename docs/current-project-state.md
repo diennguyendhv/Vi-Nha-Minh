@@ -7,7 +7,7 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P5 — Auth & môi trường — code + test xong; nghiệm thu Pixel đăng nhập Google CHỜ cấu hình Firebase thật của chủ dự án** (xem mục Auth & Environments). Phase kế tiếp (chưa bắt đầu): P6 cách ly Wallet/Account.
+**P5 — Auth & môi trường — PASS** (nghiệm thu Pixel 2026-09-21: bản DEV `com.vinhamimh.vi_nha_minh.dev`, Google Sign-In → hiện danh tính → force-stop giữ phiên → đăng xuất; DB PROD không đổi). Phase kế tiếp (chưa bắt đầu): P6 cách ly Wallet/Account.
 
 ## Last Completed Phase
 P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
