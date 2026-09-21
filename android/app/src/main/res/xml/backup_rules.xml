@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 6–11 (fullBackupContent). allowBackup="false" đã tắt sao lưu; file này là
+     lớp phòng thủ thứ hai: loại trừ MỌI dữ liệu (DB ví, SharedPreferences, khoá ứng dụng). -->
+<full-backup-content>
+    <exclude domain="root" path="."/>
+    <exclude domain="file" path="."/>
+    <exclude domain="database" path="."/>
+    <exclude domain="sharedpref" path="."/>
+    <exclude domain="external" path="."/>
+</full-backup-content>
