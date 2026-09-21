@@ -144,7 +144,8 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             member: m.member,
             income: m.income,
             balance: m.financials.balance,
-            savings: m.financials.savingsTotal,
+            // Trang chủ chỉ hiện phần CHƯA PHÂN BỔ; tổng + phân bổ ở màn Tiết kiệm.
+            savings: m.financials.savingsUnallocated,
             onSavings: () => _once(
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -336,7 +337,7 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-/// Vợ / Chồng: 3 dòng — Thu nhập tháng này, Số dư hiện tại, Tiết kiệm. Không
+/// Vợ / Chồng: 3 dòng — Thu nhập tháng này, Số dư hiện tại, Tiết kiệm chưa phân bổ. Không
 /// phải nút (chỉ là số), nên không có hành động chạm.
 class _MemberCard extends StatelessWidget {
   const _MemberCard({
@@ -352,7 +353,7 @@ class _MemberCard extends StatelessWidget {
   final int balance;
   final int savings;
 
-  /// Chạm dòng "Tiết kiệm" → màn Tiết kiệm của đúng thành viên.
+  /// Chạm dòng "Tiết kiệm chưa phân bổ" → màn Tiết kiệm của đúng thành viên.
   final VoidCallback onSavings;
 
   @override
@@ -380,7 +381,7 @@ class _MemberCard extends StatelessWidget {
           const SizedBox(height: 10),
           _StatRow(
             valueKey: Key('home_savings_$key'),
-            label: 'Tiết kiệm',
+            label: 'Tiết kiệm chưa phân bổ',
             value: savings,
             onTap: onSavings,
             rowKey: Key('home_savings_row_$key'),

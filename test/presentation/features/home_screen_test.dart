@@ -23,6 +23,7 @@ import 'package:vi_nha_minh/domain/repositories/fund_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/obligation_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
+import 'package:vi_nha_minh/domain/usecases/compute_financial_summary.dart';
 import 'package:vi_nha_minh/domain/usecases/compute_grouped_totals.dart';
 import 'package:vi_nha_minh/domain/usecases/explore_transactions.dart';
 import 'package:vi_nha_minh/presentation/features/add_transaction/add_transaction_sheet.dart';
@@ -382,7 +383,8 @@ void main() {
     expect(_text(tester, 'home_balance_vo'), '1.500.000 đ',
         reason: 'KHÔNG phải Thu nhập (4tr): Chuyển/Tiết kiệm/Quỹ đã rời khỏi số dư');
     expect(_text(tester, 'home_balance_chong'), '2.700.000 đ');
-    expect(_text(tester, 'home_savings_vo'), '2.000.000 đ');
+    // 2tr đã gửi vào 1 loại ĐÃ PHÂN BỔ → Home (chỉ hiện phần chưa phân bổ) = 0; tổng 2tr nằm ở màn Tiết kiệm.
+    expect(_text(tester, 'home_savings_vo'), '0 đ');
     expect(_text(tester, 'home_savings_chong'), '0 đ');
 
     // Chi tiêu gia đình = CHỈ nhóm Chi tiêu: không Chi phí KD (1tr), không Chuyển/Tiết kiệm/Quỹ.
@@ -539,7 +541,7 @@ void main() {
         final screen = tester.widget<SavingsScreen>(find.byType(SavingsScreen));
         expect(screen.initialMember?.name, m);
         expect(find.text('TIẾT KIỆM ${m == 'vo' ? 'VỢ' : 'CHỒNG'}'), findsOneWidget);
-        // Tổng trên màn Tiết kiệm = số Tiết kiệm trên Home của người đó.
+        // Màn Tiết kiệm luôn hiện TỔNG (gồm cả phần đã phân bổ), khác số "chưa phân bổ" trên Home.
         expect(
           _text(tester, 'savings_total'),
           m == 'vo' ? '2.000.000 đ' : '0 đ',
@@ -552,7 +554,7 @@ void main() {
       }
     });
 
-    testWidgets('Số Tiết kiệm trên Home LUÔN = Savings Total (kể cả tiền ở "Chưa phân bổ")', (tester) async {
+    testWidgets('Toàn bộ tiết kiệm CHƯA phân bổ → Home (Tiết kiệm chưa phân bổ) = Savings Total', (tester) async {
       await pumpWith(tester, [
         _income(3000000, memberRefId: 'chong'),
         _tx(
@@ -569,6 +571,65 @@ void main() {
       expect(_text(tester, 'home_savings_chong'), '1.000.000 đ');
       expect(_text(tester, 'home_balance_chong'), '2.000.000 đ');
       expect(_text(tester, 'home_savings_vo'), '0 đ');
+    });
+
+    Transaction intoSavings(String member, String asset, int amount) => _tx(
+      type: TransactionType.income,
+      categoryId: DefaultCategories.thuNhap.id,
+      from: PoolKind.external,
+      to: PoolKind.memberSavingsAsset,
+      toRef: savingsAssetRefId(asset, FamilyMember.values.firstWhere((m) => m.name == member)),
+      amount: amount,
+    );
+
+    testWidgets('Chồng: Chưa phân bổ 5tr + Gửi ngân hàng 70tr → Home CHỈ hiện 5tr (nhãn "Tiết kiệm chưa phân bổ"); màn Tiết kiệm vẫn 75tr = 5tr + 70tr; Tổng tài sản không đổi', (tester) async {
+      final ledger = [
+        intoSavings('chong', SystemSavingsAssets.unallocatedId, 5000000),
+        intoSavings('chong', DefaultSavingsAssetTypes.bankId, 70000000),
+        intoSavings('vo', SystemSavingsAssets.unallocatedId, 4740000),
+      ];
+      final assetsBefore = computeFinancialSummary(
+        ledger,
+        categories: DefaultCategories.all,
+        funds: const [],
+        assetTypes: [SystemSavingsAssets.unallocated, ...DefaultSavingsAssetTypes.all],
+      ).totalAssets;
+      expect(assetsBefore, 79740000, reason: '5tr + 70tr + 4,74tr — tiền đã phân bổ VẪN là tài sản');
+
+      await pumpWith(tester, ledger);
+      expect(_text(tester, 'home_savings_chong'), '5.000.000 đ');
+      expect(_text(tester, 'home_savings_vo'), '4.740.000 đ');
+      expect(find.text('Tiết kiệm chưa phân bổ'), findsNWidgets(2));
+
+      final onTap = tester.widget<InkWell>(find.byKey(const Key('home_savings_row_chong'))).onTap!;
+      onTap();
+      await tester.pumpAndSettle();
+      expect(_text(tester, 'savings_total'), '75.000.000 đ');
+      expect(_text(tester, 'savings_balance_${SystemSavingsAssets.unallocatedId}'), '5.000.000 đ');
+      expect(_text(tester, 'savings_balance_${DefaultSavingsAssetTypes.bankId}'), '70.000.000 đ');
+    });
+
+    testWidgets('Chưa phân bổ = 0, đã phân bổ > 0 → Home hiện 0; màn Tiết kiệm vẫn thấy khoản đã phân bổ; Tổng tài sản không đổi', (tester) async {
+      final ledger = [intoSavings('chong', DefaultSavingsAssetTypes.bankId, 70000000)];
+      expect(
+        computeFinancialSummary(
+          ledger,
+          categories: DefaultCategories.all,
+          funds: const [],
+          assetTypes: [SystemSavingsAssets.unallocated, ...DefaultSavingsAssetTypes.all],
+        ).totalAssets,
+        70000000,
+      );
+
+      await pumpWith(tester, ledger);
+      expect(_text(tester, 'home_savings_chong'), '0 đ');
+      expect(_text(tester, 'home_savings_vo'), '0 đ');
+
+      final onTap = tester.widget<InkWell>(find.byKey(const Key('home_savings_row_chong'))).onTap!;
+      onTap();
+      await tester.pumpAndSettle();
+      expect(_text(tester, 'savings_total'), '70.000.000 đ');
+      expect(_text(tester, 'savings_balance_${DefaultSavingsAssetTypes.bankId}'), '70.000.000 đ');
     });
 
     testWidgets('"Xem chi tiết" → chuyển sang tab Tổng hợp', (tester) async {

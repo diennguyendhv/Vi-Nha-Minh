@@ -51,9 +51,27 @@ void main() {
     final b = computeMemberSavingsBreakdown(vo, ledger, types);
     expect(b.total, 1200000);
     expect(b.rows.fold<int>(0, (a, r) => a + r.balance), b.total, reason: 'không có tiền nào không hiện');
-    expect(computeMemberFinancials(vo, ledger).savingsTotal, b.total, reason: 'Home = Savings Total tầng 1');
+    expect(computeMemberFinancials(vo, ledger).savingsTotal, b.total, reason: 'savingsTotal = tổng mọi pool (Engine, không đổi)');
+    expect(computeMemberFinancials(vo, ledger).savingsUnallocated, 400000, reason: 'Trang chủ chỉ hiện phần Chưa phân bổ');
     // Vợ / Chồng tách riêng.
     expect(computeMemberSavingsBreakdown(chong, ledger, types).total, 9000000);
+  });
+
+  test('savingsUnallocated (Trang chủ) chỉ là phần Chưa phân bổ; savingsTotal + Tổng tài sản không đổi', () {
+    final ledger = [
+      _into(chong, SystemSavingsAssets.unallocatedId, 5000000),
+      _into(chong, DefaultSavingsAssetTypes.bankId, 70000000),
+      _into(vo, SystemSavingsAssets.unallocatedId, 4740000),
+    ];
+    final c = computeMemberFinancials(chong, ledger);
+    expect((c.savingsTotal, c.savingsUnallocated), (75000000, 5000000));
+    final v = computeMemberFinancials(vo, ledger);
+    expect((v.savingsTotal, v.savingsUnallocated), (4740000, 4740000), reason: 'toàn bộ chưa phân bổ → Home = Total');
+    // Chưa phân bổ = 0, đã phân bổ > 0 → Home 0, Total vẫn còn.
+    final onlyBank = [_into(chong, DefaultSavingsAssetTypes.bankId, 70000000)];
+    final o = computeMemberFinancials(chong, onlyBank);
+    expect((o.savingsTotal, o.savingsUnallocated), (70000000, 0));
+    expect(computeMemberSavingsBreakdown(chong, onlyBank, types).total, 70000000);
   });
 
   test('Loại ĐÃ NGỪNG: số dư 0 → ẩn; còn số dư → hiện + đánh dấu ngừng sử dụng', () {

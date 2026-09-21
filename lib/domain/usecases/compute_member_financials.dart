@@ -1,9 +1,15 @@
 import '../entities/family_member.dart';
+import '../entities/savings_asset_type.dart';
 import '../entities/transaction.dart';
 import 'compute_pool_balance.dart';
 
 class MemberFinancials {
-  const MemberFinancials({required this.member, required this.balance, required this.savingsTotal});
+  const MemberFinancials({
+    required this.member,
+    required this.balance,
+    required this.savingsTotal,
+    required this.savingsUnallocated,
+  });
 
   final FamilyMember member;
   final int balance;
@@ -12,6 +18,11 @@ class MemberFinancials {
   /// khoán...) — xem breakdown từng loại qua `savings_screen.dart` /
   /// `compute_pool_balance.computeMemberSavingsByAssetType`.
   final int savingsTotal;
+
+  /// CHỈ phần "Chưa phân bổ" (`savings_unallocated`) của [savingsTotal]. Đây là con
+  /// số Trang chủ hiển thị (chỉ để trình bày; [savingsTotal] và Tổng tài sản
+  /// không đổi — tiền đã phân bổ vẫn là tài sản, xem ở màn Tiết kiệm).
+  final int savingsUnallocated;
 }
 
 /// Số dư & tổng tiết kiệm riêng cho 1 người — Financial Core V2: đọc thẳng
@@ -26,5 +37,10 @@ MemberFinancials computeMemberFinancials(
     member: member,
     balance: computeMemberAvailableBalance(member, transactions),
     savingsTotal: computeMemberSavingsTotal(member, transactions),
+    savingsUnallocated: computeMemberSavingsByAssetType(
+      SystemSavingsAssets.unallocatedId,
+      member,
+      transactions,
+    ),
   );
 }
