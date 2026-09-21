@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/usecases/selectable_categories.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/pool_kind.dart';
@@ -334,12 +335,13 @@ class _TransactionDetailScreenState
     for (final c in categories) {
       if (c.id == _categoryId) selectedCategory = c;
     }
-    final sameTypeCategories = categories
-        .where(
-          (c) =>
-              c.type == transaction.type && (c.isActive || c.id == _categoryId),
-        )
-        .toList();
+    // Chỉ đề nghị danh mục thường đang dùng; danh mục hiện tại của giao dịch (kể cả
+    // đã ngừng / hệ thống từ dữ liệu cũ) vẫn hiện để hiển thị đúng, không bị đổi ngầm.
+    final sameTypeCategories = selectableCategories(
+      categories,
+      type: transaction.type,
+      currentCategoryId: _categoryId,
+    );
     final canEditCategory = transaction.type != TransactionType.transfer;
     final canEditMember = _currentMember(transaction) != null;
 

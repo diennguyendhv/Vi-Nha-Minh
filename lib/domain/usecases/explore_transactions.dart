@@ -354,7 +354,7 @@ class ExplorerOption {
   final bool active;
 }
 
-/// Danh mục có thể lọc: mọi danh mục ĐANG DÙNG (trừ danh mục hệ thống nâng cao)
+/// Danh mục có thể lọc: mọi danh mục ĐANG DÙNG (danh mục hệ thống nâng cao chỉ khi còn giao dịch)
 /// + danh mục đã ngừng nhưng còn giao dịch (để tìm lại lịch sử). Danh mục ngừng
 /// không còn giao dịch thì không hiện để đỡ rối. Nhóm hiển thị theo nhóm chính.
 List<ExplorerOption> explorerCategoryOptions(
@@ -365,14 +365,18 @@ List<ExplorerOption> explorerCategoryOptions(
   final used = {for (final t in transactions) if (isVisible(t)) t.categoryId};
   final out = <ExplorerOption>[];
   for (final c in categories) {
-    if (hiddenCategoryIds.contains(c.id)) continue;
+    // Danh mục hệ thống nâng cao chỉ hiện khi CÒN giao dịch dùng nó (để không có
+    // lịch sử nào không tìm lại được); không dùng thì ẩn cho khỏi rối.
+    if (hiddenCategoryIds.contains(c.id) && !used.contains(c.id)) continue;
     if (!c.isActive && !used.contains(c.id)) continue;
     final group = categoryGroupOf(c, hiddenCategoryIds);
     out.add(
       ExplorerOption(
         id: c.id,
         label: c.isActive ? c.name : '${c.name} (đã ngừng)',
-        groupLabel: group?.label ?? 'Chuyển',
+        groupLabel:
+            group?.label ??
+            (hiddenCategoryIds.contains(c.id) ? 'Nâng cao' : 'Chuyển'),
         active: c.isActive,
       ),
     );

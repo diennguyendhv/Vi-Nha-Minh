@@ -1311,4 +1311,65 @@ void main() {
       },
     );
   });
+
+  group('Bộ chọn Hạng mục khi SỬA giao dịch — không rò danh mục hệ thống (theo ID, không theo tên)', () {
+    late _FakeTransactionRepository fakeRepo;
+    setUp(() => fakeRepo = _FakeTransactionRepository());
+
+    final hiddenExpense = [DefaultCategories.traNo];
+    final hiddenIncome = [DefaultCategories.vayNo, DefaultCategories.laiChoVay, DefaultCategories.hoanTienThuHoi];
+    final infra = [
+      DefaultCategories.choVay,
+      DefaultCategories.chuyenTienThanhVien,
+      DefaultCategories.napQuy,
+      DefaultCategories.tietKiem,
+    ];
+
+    Future<void> openCategoryPicker(WidgetTester tester) async {
+      await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('Giao dịch Chi thường: KHÔNG có Trả nợ / Cho vay / Chuyển / Nạp quỹ / Tiết kiệm; vẫn có danh mục thường', (tester) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      await openCategoryPicker(tester);
+      for (final c in [...hiddenExpense, ...infra]) {
+        expect(find.text(c.name), findsNothing, reason: c.id);
+      }
+      for (final c in [DefaultCategories.sinhHoat, DefaultCategories.choDi, DefaultCategories.dangHien]) {
+        expect(find.text(c.name), findsWidgets, reason: c.id);
+      }
+    });
+
+    testWidgets('Giao dịch Thu thường: KHÔNG có Vay nợ / Lãi cho vay / Hoàn tiền-Thu hồi; vẫn có danh mục Thu thường', (tester) async {
+      fakeRepo.seed([_incomeTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'income1');
+      await openCategoryPicker(tester);
+      for (final c in [...hiddenIncome, ...infra]) {
+        expect(find.text(c.name), findsNothing, reason: c.id);
+      }
+      expect(find.text(DefaultCategories.thuNhap.name), findsWidgets);
+    });
+
+    testWidgets('Bật tính năng nâng cao KHÔNG làm danh mục hệ thống lọt vào bộ chọn Sửa thường', (tester) async {
+      fakeRepo.seed([_expenseTx()]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1', advancedFeatures: true);
+      await openCategoryPicker(tester);
+      expect(find.text(DefaultCategories.traNo.name), findsNothing);
+    });
+
+    testWidgets('Giao dịch CŨ mang danh mục hệ thống: vẫn HIỂN THỊ giá trị hiện tại (không đổi ngầm), danh mục hệ thống khác không được đề nghị', (tester) async {
+      fakeRepo.seed([_expenseTx(categoryId: DefaultCategories.traNo.id)]);
+      await _pumpDetail(tester, fakeRepo: fakeRepo, transactionId: 'tx1');
+      expect(find.text(DefaultCategories.traNo.name), findsOneWidget, reason: 'giá trị hiện tại hiển thị trong ô chọn');
+      await openCategoryPicker(tester);
+      for (final c in [DefaultCategories.choVay, DefaultCategories.napQuy, DefaultCategories.tietKiem]) {
+        expect(find.text(c.name), findsNothing, reason: c.id);
+      }
+      expect(find.text(DefaultCategories.sinhHoat.name), findsWidgets);
+      expect(fakeRepo.updateCalls, isEmpty, reason: 'chỉ hiển thị, không ghi gì');
+    });
+  });
+
 }

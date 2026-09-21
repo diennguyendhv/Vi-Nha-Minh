@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/commands/create_transaction_command.dart';
-import '../../../core/constants/advanced_system_categories.dart';
 import '../../../core/constants/default_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/usecases/selectable_categories.dart';
 import '../../../domain/entities/family_member.dart';
 import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/pool_kind.dart';
@@ -554,7 +554,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
     // Bộ chọn chỉ liệt kê danh mục thường: bỏ tính năng nâng cao (Vay,
     // Hoàn tiền…) và lọc theo nhóm chính đang chọn.
     final activeCategories = categories
-        .where((c) => c.isActive && !AdvancedSystemCategories.contains(c.id))
+        .where(isOrdinarySelectableCategory)
         .toList();
     final incomeCategories = activeCategories
         .where(

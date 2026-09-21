@@ -646,6 +646,14 @@ void main() {
       expect(opts.last.active, isFalse);
     });
 
+    test('Danh mục hệ thống nâng cao: ẩn khi KHÔNG còn giao dịch dùng; còn lịch sử thì vẫn tìm lại được (nhóm "Nâng cao")', () {
+      final cats = [_cat('a_live', TransactionType.expense), _cat('hoan_tien_thu_hoi', TransactionType.income), _cat('vay_no', TransactionType.income)];
+      final txs = [_in('hoan_tien_thu_hoi', 1000)];
+      final opts = explorerCategoryOptions(cats, txs, hiddenCategoryIds: _hidden);
+      expect(opts.map((o) => o.id), ['a_live', 'hoan_tien_thu_hoi'], reason: 'vay_no không có giao dịch nên vẫn ẩn');
+      expect(opts.last.groupLabel, 'Nâng cao');
+    });
+
     test('Bộ chọn trạng thái: trạng thái ngừng chỉ hiện khi còn giao dịch dùng; độc lập với danh mục đã chọn', () {
       final txs = [_out('cho_di', 1000, id: 'u', statusId: 'st_cu')];
       final opts = explorerStatusOptions(_cats, txs);
