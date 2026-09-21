@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
-import '../../providers/app_state_providers.dart';
+import '../security/security_settings_section.dart';
 import '../fund/fund_list_screen.dart';
 import '../savings/savings_screen.dart';
 import 'debug_import_screen.dart';
@@ -13,8 +13,6 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final biometricLock = ref.watch(biometricLockProvider);
-
     // Màn này được push thành route riêng từ avatar ở Trang chủ (không còn
     // nằm dưới `Scaffold` của `AppShell`), nên PHẢI tự có `Scaffold` — nếu
     // không `InkWell` của từng dòng ném "No Material widget found" (F23).
@@ -148,11 +146,7 @@ class SettingsScreen extends ConsumerWidget {
                 const Divider(height: 1, color: AppColors.divider),
                 const _SettingsRow(label: 'Ngân sách theo tháng'),
                 const Divider(height: 1, color: AppColors.divider),
-                _BiometricRow(
-                  enabled: biometricLock,
-                  onChanged: (value) =>
-                      ref.read(biometricLockProvider.notifier).state = value,
-                ),
+                const SecuritySettingsSection(),
                 // Công cụ dev tạm thời (V2-2C): CHỈ có trong bản debug, không
                 // bao giờ xuất hiện ở release.
                 if (kDebugMode) ...[
@@ -204,46 +198,6 @@ class _SettingsRow extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _BiometricRow extends StatelessWidget {
-  const _BiometricRow({required this.enabled, required this.onChanged});
-
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Khoá vân tay',
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  'Yêu cầu xác thực khi mở app',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: enabled,
-            onChanged: onChanged,
-            activeThumbColor: Colors.white,
-            activeTrackColor: AppColors.accent,
-          ),
-        ],
       ),
     );
   }

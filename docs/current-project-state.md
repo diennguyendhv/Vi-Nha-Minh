@@ -7,11 +7,10 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Chưa có Account/Auth/Firebase/cloud.
 
 ## Current Phase
-**P3 — Local App Security + Android Backup Hardening — IN PROGRESS**
-Worktree đã có code Dart + native (App Lock, backup rules) chưa commit; còn thiếu test tự động, gate, nghiệm thu Pixel.
+**P3 — Local Security — PASS** (nghiệm thu Pixel 2026-09-21). Phase kế tiếp (chưa bắt đầu, chờ duyệt): **P4 — FinancialMember là dữ liệu**.
 
 ## Last Completed Phase
-**P2 — Local Wallet Identity Foundation — PASS** (commits `22560a1` docs, `7dc8e9d` code).
+P3 (App Lock + tắt Android Auto Backup). Trước đó: P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
 **v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 KHÔNG đổi schema.
@@ -56,9 +55,11 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Category/Status/Quỹ/Loại tiết kiệm do gia đình tạo; hạng mục không hardcode theo id.
 
 ## Current Security State
-- Trước P3: công tắc "Khoá vân tay" cũ KHÔNG bảo mật thật (đã bị thay thế trong worktree).
-- P3 (đang làm): App Lock thật (PIN 6 số, verifier Keystore, sinh trắc tuỳ chọn, khoá lạnh/≥30s nền, throttle, FLAG_SECURE ở Recents), tắt Auto Backup.
-- SQLCipher/mã hoá DB: chưa làm — vẫn là gate bắt buộc tương lai.
+- **App Lock thật (P3):** PIN 6 số; verifier = HMAC-SHA256(khoá Android Keystore không xuất được, PBKDF2(pin, salt ngẫu nhiên, 210k vòng)) trong `AppLockBridge.kt`, lưu ở SharedPreferences native `app_lock_secure` (không phải SQLite/prefs Flutter). API 24–25 chỉ dùng PBKDF2WithHmacSHA1 làm KDF dự phòng, vẫn HMAC Keystore.
+- Chặn dò PIN từ lần sai thứ 5 (30s→30p), lưu bền. Quên PIN = xác minh khóa màn hình hệ thống rồi đặt PIN mới; không cửa hậu, không xoá dữ liệu.
+- Sinh trắc tuỳ chọn (chỉ mở khoá phiên). Trạng thái mở khoá chỉ trong RAM; khởi động lạnh/nền ≥30s ⇒ khoá; `LockGate` không dựng nội dung tài chính khi khoá; `FLAG_SECURE` khi rời foreground.
+- **Android Auto Backup TẮT:** `allowBackup=false` + `backup_rules.xml` + `data_extraction_rules.xml` (loại trừ mọi domain, cloud & device-transfer).
+- **SQLCipher/mã hoá DB: CHƯA làm — vẫn BẮT BUỘC trước cloud pilot/Play.** App Lock không bảo vệ DB-at-rest.
 
 ## Release Gates
 - Gỡ/vô hiệu hoá cứng debug real-data importer trước Play (CLAUDE.md §19).
@@ -67,17 +68,18 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Mã hoá DB cục bộ trước cloud pilot/Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
-## Testing (kết quả P2 — KHÔNG phải kết quả P3)
-P2: 909 pass, 3 skip; Golden 24/24; `flutter analyze` 15 issue có sẵn; SQLite integrity ok; FK rỗng.
+## Testing (kết quả P3 — gate mới nhất)
+`flutter test --concurrency=1`: 958 pass, 3 skip; Golden 24/24; `flutter analyze` 15 issue có sẵn, 0 lỗi; không đổi schema. Test bảo mật: `test/presentation/security/`, `test/security/android_security_config_test.dart`.
+Pixel: DB trước/sau P3 giống field-for-field (chỉ +1 giao dịch do chủ máy tự nhập lúc nghiệm thu); walletId + financial_member_rows không đổi; integrity ok; FK rỗng.
 Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối phase; Golden chỉ khi UI ảnh hưởng.
 
 ## Known Backlog
-- P3: test tự động App Lock, nghiệm thu Pixel, gate.
+- Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
 - FinancialMember enum → dữ liệu (P4); registry Wallet bền (P6); Auth (P5); phiên thiết bị độc quyền (P7).
 - Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
 - Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
 - Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.
 
 ## Next Planned Phases (docs/account-wallet-security-foundation.md §31)
-P3 Local Security → P4 Thành viên là dữ liệu → P5 Nền Auth & môi trường → P6 Cách ly Account/Wallet → P7 Phiên thiết bị độc quyền → P8 Claim + Pro sao lưu/khôi phục → P9 Đồng bộ Personal → P10 Membership Family.
+P3 ✅ → P4 Thành viên là dữ liệu → P5 Nền Auth & môi trường → P6 Cách ly Account/Wallet → P7 Phiên thiết bị độc quyền → P8 Claim + Pro sao lưu/khôi phục → P9 Đồng bộ Personal → P10 Membership Family.
 Mỗi phase kết thúc: test → nghiệm thu Pixel → sao lưu → DỪNG chờ duyệt.

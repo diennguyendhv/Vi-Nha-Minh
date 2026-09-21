@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
+import 'package:vi_nha_minh/presentation/providers/app_lock_provider.dart';
 import 'package:vi_nha_minh/presentation/providers/database_provider.dart';
+import 'support/fake_app_lock.dart';
 
 import 'package:vi_nha_minh/main.dart';
 
@@ -18,6 +20,8 @@ void main() {
   // gắn ở `MigrationStrategy.beforeOpen`, không phụ thuộc executor thật.
   ProviderContainer buildOverrides() => ProviderContainer(
     overrides: [
+      appLockPlatformProvider.overrideWithValue(FakeAppLockPlatform()),
+      deviceAuthenticatorProvider.overrideWithValue(FakeDeviceAuthenticator()),
       appDatabaseProvider.overrideWithValue(
         AppDatabase.forTesting(NativeDatabase.memory()),
       ),

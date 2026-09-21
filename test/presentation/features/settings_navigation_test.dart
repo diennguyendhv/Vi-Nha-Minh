@@ -16,6 +16,8 @@ import 'package:vi_nha_minh/domain/repositories/obligation_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/savings_asset_type_repository.dart';
 import 'package:vi_nha_minh/domain/repositories/transaction_repository.dart';
 import 'package:vi_nha_minh/main.dart';
+import 'package:vi_nha_minh/presentation/providers/app_lock_provider.dart';
+import '../../support/fake_app_lock.dart';
 import 'package:vi_nha_minh/presentation/features/fund/fund_list_screen.dart';
 import 'package:vi_nha_minh/presentation/features/savings/savings_screen.dart';
 import 'package:vi_nha_minh/presentation/features/settings/settings_screen.dart';
@@ -80,6 +82,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          appLockPlatformProvider.overrideWithValue(FakeAppLockPlatform()),
+          deviceAuthenticatorProvider.overrideWithValue(FakeDeviceAuthenticator()),
           transactionRepositoryProvider.overrideWithValue(_EmptyTransactionRepository()),
           categoryRepositoryProvider.overrideWithValue(_StaticCategoryRepository()),
           fundRepositoryProvider.overrideWithValue(_StaticFundRepository()),
@@ -110,7 +114,7 @@ void main() {
     // Các dòng cài đặt hiển thị bình thường (InkWell cần Material tổ tiên).
     expect(find.text('Quỹ'), findsOneWidget);
     expect(find.text('Tiết kiệm'), findsOneWidget);
-    expect(find.text('Khoá vân tay'), findsOneWidget);
+    expect(find.text('Khóa ứng dụng'), findsOneWidget);
   });
 
   testWidgets('Settings → Tiết kiệm mở được; Back về Settings', (tester) async {

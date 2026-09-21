@@ -6,5 +6,3 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum AppTab { home, transactions, categories, summary }
 
 final currentTabProvider = StateProvider<AppTab>((ref) => AppTab.home);
-
-final biometricLockProvider = StateProvider<bool>((ref) => true);
