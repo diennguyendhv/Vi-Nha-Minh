@@ -43,6 +43,7 @@ class TransactionDetailScreen extends ConsumerStatefulWidget {
 class _TransactionDetailScreenState
     extends ConsumerState<TransactionDetailScreen> {
   final _amountController = TextEditingController();
+  final _amount = ValueNotifier<int>(0);
   final _noteController = TextEditingController();
   bool _initialized = false;
 
@@ -81,6 +82,7 @@ class _TransactionDetailScreenState
 
   @override
   void dispose() {
+    _amount.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -121,11 +123,11 @@ class _TransactionDetailScreenState
   }
 
   /// Số tiền đang nhập (0 nếu trống/không hợp lệ) — Lưu bị khoá khi <= 0.
-  int get _enteredAmount =>
-      int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0;
+  int get _enteredAmount => _amount.value;
 
   void _initFrom(Transaction t) {
     _amountController.text = t.amountMinor.toString();
+    _amount.value = t.amountMinor;
     _noteController.text = t.note;
     _categoryId = t.categoryId;
     _transactionDate = t.transactionDate;
@@ -161,8 +163,8 @@ class _TransactionDetailScreenState
   Future<void> _save(Transaction current) async {
     if (!_canMutateGeneric(current)) return;
     if (_submitting) return; // chặn double-tap.
-    final newAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
-    if (newAmount == null || newAmount <= 0) return;
+    final newAmount = _enteredAmount;
+    if (newAmount <= 0) return;
 
     setState(() => _submitting = true);
     try {
@@ -239,8 +241,8 @@ class _TransactionDetailScreenState
     final ids = error is DeleteWouldOverdrawException
         ? error.blockingTransactionIds
         : (error is ChangeWouldOverdrawException
-            ? error.blockingTransactionIds
-            : const <String>[]);
+              ? error.blockingTransactionIds
+              : const <String>[]);
     final blockers = blockersFromTransactionIds(
       ids,
       ref.read(transactionsStreamProvider).valueOrNull ?? const [],
@@ -430,14 +432,18 @@ class _TransactionDetailScreenState
             controller: _amountController,
             keyboardType: TextInputType.number,
             inputFormatters: const [AmountInputFormatter()],
-            onChanged: (_) => setState(() {}),
+            onChanged: (value) =>
+                _amount.value = int.tryParse(value.isEmpty ? '0' : value) ?? 0,
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               suffixText: 'đ',
             ),
           ),
-          AmountPreview(amountMinor: _enteredAmount),
+          ValueListenableBuilder<int>(
+            valueListenable: _amount,
+            builder: (_, amount, _) => AmountPreview(amountMinor: amount),
+          ),
           const SizedBox(height: 16),
           const Text(
             'GHI CHÚ',
@@ -469,7 +475,10 @@ class _TransactionDetailScreenState
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: _directory.members
-                  .map((m) => ButtonSegment(value: m.memberId, label: Text(m.label)))
+                  .map(
+                    (m) =>
+                        ButtonSegment(value: m.memberId, label: Text(m.label)),
+                  )
                   .toList(),
               selected: {_member ?? _directory.defaultMemberId!},
               onSelectionChanged: (s) => setState(() => _member = s.first),
@@ -541,16 +550,19 @@ class _TransactionDetailScreenState
               ),
           ],
           const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: (_submitting || _enteredAmount <= 0)
-                ? null
-                : () => _save(transaction),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+          ValueListenableBuilder<int>(
+            valueListenable: _amount,
+            builder: (_, amount, _) => ElevatedButton(
+              onPressed: (_submitting || amount <= 0)
+                  ? null
+                  : () => _save(transaction),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: Text(_submitting ? 'Đang lưu...' : 'Lưu thay đổi'),
             ),
-            child: Text(_submitting ? 'Đang lưu...' : 'Lưu thay đổi'),
           ),
           if (canRecover) ...[
             const SizedBox(height: 10),
@@ -621,7 +633,10 @@ class _TransactionDetailScreenState
           _ReadOnlyRow(label: 'Ghi chú', value: transaction.note),
           if (member != null) ...[
             const SizedBox(height: 16),
-            _ReadOnlyRow(label: 'Người tiêu', value: _directory.labelOf(member) ?? ''),
+            _ReadOnlyRow(
+              label: 'Người tiêu',
+              value: _directory.labelOf(member) ?? '',
+            ),
           ],
           if (statuses != null && statuses.isNotEmpty) ...[
             const SizedBox(height: 16),

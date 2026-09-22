@@ -5,19 +5,21 @@ import '../../../core/constants/advanced_system_categories.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/entities/category.dart';
+import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/wallet_identity.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
-import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/usecases/compute_financial_summary.dart';
 import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/explore_transactions.dart';
 import '../../../domain/usecases/time_selection.dart';
 import '../../providers/explorer_sort_provider.dart';
+import '../../providers/fund_providers.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/member_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
-import '../../widgets/category_label.dart';
+import '../../widgets/transaction_row.dart';
 import '../transactions/transaction_detail_screen.dart';
 
 /// Màn "Tổng hợp" — hai phần rõ ràng:
@@ -25,7 +27,7 @@ import '../transactions/transaction_detail_screen.dart';
 /// - **TỔNG QUAN**: vài con số nhìn nhanh (Thu nhập ròng của Vợ / Chồng, Chi
 ///   tiêu gia đình) theo KỲ THỜI GIAN đang chọn.
 /// - **GIAO DỊCH** (Transaction Explorer): mọi giao dịch đang hiệu lực, lọc kiểu
-///   Excel — Thời gian (Ngày/Tháng/Năm/Tất cả) · Vợ/Chồng · nhiều
+///   Excel — Thời gian (Ngày/Tháng/Năm) · Vợ/Chồng · nhiều
 ///   Danh mục · nhiều Trạng thái (kể cả "Không có trạng thái") · Ghi chú — và sắp xếp
 ///   nhiều tầng (kể cả theo Số tiền). OR trong cùng 1 chiều, AND giữa các chiều; các
 ///   chiều độc lập, chọn theo thứ tự nào cũng ra cùng kết quả.
@@ -63,8 +65,7 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
   }
 
   bool get _isDefaultView =>
-      _time == TimeSelection.month(DateTime.now()) &&
-      !_filter.hasNonDateFilter;
+      _time == TimeSelection.month(DateTime.now()) && !_filter.hasNonDateFilter;
 
   void _clearAll() {
     _searchController.clear();
@@ -174,7 +175,28 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                 value: spending,
               ),
               const SizedBox(height: 20),
-              const _SectionTitle('Giao dịch'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const _SectionTitle('Giao dịch'),
+                  TextButton.icon(
+                    key: const Key('summary_statistics'),
+                    onPressed: () => _showStatistics(
+                      context,
+                      transactions: transactions,
+                      categories: categories,
+                      members: directory.members,
+                      funds:
+                          ref.read(fundsStreamProvider).valueOrNull ??
+                          const <Fund>[],
+                      assetTypes: savingsAssetTypes,
+                      period: _time,
+                    ),
+                    icon: const Icon(Icons.insights_rounded, size: 18),
+                    label: const Text('Số liệu'),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
               _ResultHeader(
                 key: const Key('summary_result_header'),
@@ -273,7 +295,8 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                   onCategories: (ids) =>
                       setState(() => _filter = _filter.withCategories(ids)),
                   onStatuses: (ids, none) => setState(
-                    () => _filter = _filter.withStatuses(ids, includeNone: none),
+                    () =>
+                        _filter = _filter.withStatuses(ids, includeNone: none),
                   ),
                 ),
               const SizedBox(height: 4),
@@ -311,12 +334,19 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               itemCount: result.rows.length,
               itemBuilder: (context, i) {
                 final t = result.rows[i];
-                return _ExplorerRow(
+                return TransactionRow(
                   key: ValueKey(t.id),
                   transaction: t,
                   category: categoryById[t.categoryId],
                   assetTypes: savingsAssetTypes,
                   members: directory.members,
+                  showDate: true,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          TransactionDetailScreen(transactionId: t.id),
+                    ),
+                  ),
                 );
               },
             ),
@@ -326,9 +356,79 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     );
   }
 
-  static String _sortLabel(ExplorerSort sort) => [
-    for (final r in sort.rules) '${r.key.label} ${r.ascending ? '↑' : '↓'}',
-  ].join(' · ');
+  void _showStatistics(
+    BuildContext context, {
+    required List<Transaction> transactions,
+    required List<Category> categories,
+    required List<FinancialMember> members,
+    required List<Fund> funds,
+    required List<SavingsAssetType> assetTypes,
+    required TimeSelection period,
+  }) {
+    final totals = computeGroupedTotals(
+      transactions,
+      categories,
+      from: period.from,
+      to: period.to,
+    );
+    final financial = computeFinancialSummary(
+      transactions,
+      categories: categories,
+      funds: funds.where((fund) => fund.isActive).toList(),
+      assetTypes: assetTypes.where((type) => type.isActive).toList(),
+      members: members,
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          children: [
+            const Text(
+              'Số liệu',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              'Dòng tiền · ${timeSelectionLabel(period)}',
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 16),
+            _StatisticsSection('Dòng tiền', [
+              ('Chi tiêu gia đình', totals.spending),
+              ('Thu nhập ròng', totals.netIncome),
+              ('Doanh thu', totals.revenue),
+              ('Khoản thu khác', totals.otherInflow),
+              ('Chi phí kinh doanh', totals.businessExpense),
+            ]),
+            _StatisticsSection('Thành viên', [
+              for (final member in members)
+                (
+                  '${member.label} khả dụng',
+                  financial.availableByMember[member.memberId] ?? 0,
+                ),
+            ]),
+            _StatisticsSection('Tiết kiệm & tài sản', [
+              for (final member in members)
+                (
+                  'Tiết kiệm chưa phân bổ của ${member.label}',
+                  financial.savingsByMemberAndAssetType[member.memberId]?[SystemSavingsAssets.unallocatedId] ?? 0,
+                ),
+              ('Tổng tiết kiệm', financial.totalSavings),
+              for (final fund in funds.where((fund) => fund.isActive))
+                (fund.name, financial.fundBalances[fund.id] ?? 0),
+              ('Tổng tài sản', financial.totalAssets),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _sortLabel(ExplorerSort sort) =>
+      [for (final r in sort.rules) '${r.key.label} ${r.ascending ? '↑' : '↓'}']
+          .join(' · ');
 
   /// Mở bảng Sắp xếp. Chỉ khi bấm OK (trả về cấu hình mới) mới áp dụng; Hủy / Back /
   /// vuốt đóng đều bỏ thay đổi đang chờ và giữ cấu hình đã áp dụng.
@@ -358,6 +458,43 @@ class _SectionTitle extends StatelessWidget {
       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
     );
   }
+}
+
+class _StatisticsSection extends StatelessWidget {
+  const _StatisticsSection(this.title, this.rows);
+
+  final String title;
+  final List<(String, int)> rows;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        for (final row in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    row.$1,
+                    style: const TextStyle(color: AppColors.textSecondary),
+                  ),
+                ),
+                Text(
+                  Formatters.amount(row.$2),
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class _NetIncomeCard extends StatelessWidget {
@@ -488,12 +625,10 @@ String timeSelectionLabel(TimeSelection s) {
       return 'Tháng ${s.anchor.month}/${s.anchor.year}';
     case TimeKind.year:
       return 'Năm ${s.anchor.year}';
-    case TimeKind.all:
-      return 'Mọi thời gian';
   }
 }
 
-/// Thời gian: [Ngày] [Tháng] [Năm] [Tất cả]. Bấm 1 chip = về KỲ HIỆN TẠI (hôm
+/// Thời gian: [Ngày] [Tháng] [Năm]. Bấm 1 chip = về KỲ HIỆN TẠI (hôm
 /// nay / tháng này / năm nay); mũi tên lùi/tiến để sang kỳ khác, bấm nhãn để chọn
 /// ngày cụ thể.
 class _TimeBar extends StatelessWidget {
@@ -517,8 +652,6 @@ class _TimeBar extends StatelessWidget {
         onChanged(TimeSelection.month(picked));
       case TimeKind.year:
         onChanged(TimeSelection.year(picked));
-      case TimeKind.all:
-        break;
     }
   }
 
@@ -537,7 +670,8 @@ class _TimeBar extends StatelessWidget {
       );
     }
 
-    final navigable = selection.kind == TimeKind.day ||
+    final navigable =
+        selection.kind == TimeKind.day ||
         selection.kind == TimeKind.month ||
         selection.kind == TimeKind.year;
 
@@ -575,15 +709,13 @@ class _TimeBar extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 2),
-        // Xuống dòng thay vì cuộn ngang: mọi kiểu thời gian (kể cả "Tất cả")
-        // luôn nhìn thấy, không phải đoán là có thể vuốt.
+        // Xuống dòng thay vì cuộn ngang: mọi kiểu thời gian luôn nhìn thấy.
         Wrap(
           runSpacing: 6,
           children: [
             chip('day', 'Ngày', TimeKind.day),
             chip('month', 'Tháng', TimeKind.month),
             chip('year', 'Năm', TimeKind.year),
-            chip('all', 'Tất cả', TimeKind.all),
           ],
         ),
       ],
@@ -709,7 +841,9 @@ class _FilterPanel extends StatelessWidget {
                 onChanged: onStatuses,
               ),
             ),
-            onClear: filter.hasStatusFilter ? () => onStatuses({}, false) : null,
+            onClear: filter.hasStatusFilter
+                ? () => onStatuses({}, false)
+                : null,
           ),
         ],
       ),
@@ -804,7 +938,9 @@ class _MultiSelectSheetState extends State<_MultiSelectSheet> {
       keys.sort((a, b) {
         final ia = order.indexOf(a);
         final ib = order.indexOf(b);
-        return (ia < 0 ? order.length : ia).compareTo(ib < 0 ? order.length : ib);
+        return (ia < 0 ? order.length : ia).compareTo(
+          ib < 0 ? order.length : ib,
+        );
       });
     }
     final height = MediaQuery.of(context).size.height * 0.75;
@@ -1039,7 +1175,10 @@ class _SortSheetState extends State<_SortSheet> {
               padding: EdgeInsets.fromLTRB(20, 4, 20, 0),
               child: Text(
                 'Cần giữ ít nhất một khóa sắp xếp.',
-                style: TextStyle(fontSize: 12.5, color: AppColors.expenseAmount),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.expenseAmount,
+                ),
               ),
             ),
           Padding(
@@ -1071,7 +1210,11 @@ class _SortSheetState extends State<_SortSheet> {
 /// + kỳ đang xem, và Thu / Chi của CHÍNH tập đã lọc (2 ô riêng, không gộp thành
 /// 1 con số Net mơ hồ; Chuyển không tính vào Thu/Chi).
 class _ResultHeader extends StatelessWidget {
-  const _ResultHeader({super.key, required this.result, required this.selection});
+  const _ResultHeader({
+    super.key,
+    required this.result,
+    required this.selection,
+  });
 
   final ExplorerResult result;
   final TimeSelection selection;
@@ -1169,133 +1312,3 @@ class _ResultHeader extends StatelessWidget {
     );
   }
 }
-
-/// Dòng giao dịch: ngày · Vợ/Chồng · Nhóm · Danh mục · số tiền · ghi chú ·
-/// trạng thái. Chuyển hiện đời thường ("Vợ → Chồng"). Không lộ enum/pool/cờ.
-class _ExplorerRow extends StatelessWidget {
-  const _ExplorerRow({
-    super.key,
-    required this.transaction,
-    required this.category,
-    this.assetTypes = const [],
-    this.members = const [],
-  });
-
-  final Transaction transaction;
-  final Category? category;
-
-  /// Để hiện tên loại tài sản trong dòng Tiết kiệm (không bắt buộc).
-  final List<SavingsAssetType> assetTypes;
-
-  /// [FinancialMember] để tra nhãn người.
-  final List<FinancialMember> members;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = transaction;
-    final memberLabel = transactionMemberLabel(t, members);
-    final isTransfer = t.type == TransactionType.transfer;
-    final savingsLabel = savingsTransferLabel(t, assetTypes);
-    final title = savingsLabel != null
-        ? [memberLabel, savingsLabel].whereType<String>().join(' · ')
-        : (isTransfer && memberLabel != null && memberLabel.contains('→'))
-        ? memberLabel
-        : [
-            memberLabel,
-            categoryDisplayLabel(category),
-          ].whereType<String>().join(' · ');
-    final status = category?.statusById(t.statusId)?.name;
-    final isIncome = t.type == TransactionType.income;
-    final amountColor = isTransfer
-        ? AppColors.textSecondary
-        : (isIncome ? AppColors.accent : AppColors.textPrimary);
-    final sign = isTransfer ? '⇄' : (isIncome ? '+' : '-');
-
-    return InkWell(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => TransactionDetailScreen(transactionId: t.id),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.divider)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 44,
-              child: Text(
-                Formatters.dayMonth(t.transactionDate),
-                key: Key('explorer_date_${t.id}'),
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  if (t.note.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        t.note,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  if (status != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.chipBackground,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          status,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '$sign ${Formatters.amount(t.amountMinor)}',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w800,
-                color: amountColor,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

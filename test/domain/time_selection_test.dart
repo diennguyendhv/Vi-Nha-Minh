@@ -21,7 +21,12 @@ Transaction _tx(String id, DateTime date, {int amount = 1000}) => Transaction(
 );
 
 final _cats = [
-  Category(id: 'sinh_hoat', name: 'Sinh hoạt', color: Colors.grey, type: TransactionType.expense),
+  Category(
+    id: 'sinh_hoat',
+    name: 'Sinh hoạt',
+    color: Colors.grey,
+    type: TransactionType.expense,
+  ),
 ];
 
 Set<String> _ids(List<Transaction> txs, TimeSelection sel) {
@@ -49,37 +54,52 @@ void main() {
 
   test('Ngày: đúng ngày đó (bỏ giờ)', () {
     expect(_ids(txs, TimeSelection.day(DateTime(2026, 9, 20))), {'sep20'});
-    expect(_ids(txs, TimeSelection.day(DateTime(2026, 12, 31, 8))), {'y26_end'});
+    expect(_ids(txs, TimeSelection.day(DateTime(2026, 12, 31, 8))), {
+      'y26_end',
+    });
   });
 
   test('Tháng: đủ ngày đầu/cuối tháng, không lấn sang tháng bên cạnh', () {
-    expect(_ids(txs, TimeSelection.month(DateTime(2026, 9, 15))), {'sep1', 'sep20', 'sep30'});
+    expect(_ids(txs, TimeSelection.month(DateTime(2026, 9, 15))), {
+      'sep1',
+      'sep20',
+      'sep30',
+    });
     expect(_ids(txs, TimeSelection.month(DateTime(2026, 2))), {'feb'});
   });
 
   test('Năm: toàn bộ giao dịch năm đó, đúng biên 31/12 ↔ 01/01', () {
-    expect(
-      _ids(txs, TimeSelection.year(DateTime(2026, 6, 6))),
-      {'y26_start', 'feb', 'aug_end', 'sep1', 'sep20', 'sep30', 'oct1', 'y26_end'},
-    );
+    expect(_ids(txs, TimeSelection.year(DateTime(2026, 6, 6))), {
+      'y26_start',
+      'feb',
+      'aug_end',
+      'sep1',
+      'sep20',
+      'sep30',
+      'oct1',
+      'y26_end',
+    });
     expect(_ids(txs, TimeSelection.year(DateTime(2025))), {'y25_end'});
     expect(_ids(txs, TimeSelection.year(DateTime(2027))), {'y27'});
   });
 
-  test('Tất cả thời gian: không giới hạn ngày', () {
-    final all = TimeSelection.all(DateTime(2026, 9, 20));
-    expect(all.from, isNull);
-    expect(all.to, isNull);
-    expect(_ids(txs, all).length, txs.length);
-  });
-
-  test('shift: lùi/tiến ngày, tháng (qua năm), năm; "Tất cả" không dịch', () {
-    expect(TimeSelection.day(DateTime(2026, 3, 1)).shift(-1).from, DateTime(2026, 2, 28));
-    expect(TimeSelection.month(DateTime(2026, 1)).shift(-1).from, DateTime(2025, 12, 1));
-    expect(TimeSelection.month(DateTime(2026, 12)).shift(1).to, DateTime(2027, 1, 31));
-    expect(TimeSelection.year(DateTime(2026)).shift(1).from, DateTime(2027, 1, 1));
-    final all = TimeSelection.all(DateTime(2026, 9, 20));
-    expect(all.shift(1), all);
+  test('shift: lùi/tiến ngày, tháng (qua năm), năm', () {
+    expect(
+      TimeSelection.day(DateTime(2026, 3, 1)).shift(-1).from,
+      DateTime(2026, 2, 28),
+    );
+    expect(
+      TimeSelection.month(DateTime(2026, 1)).shift(-1).from,
+      DateTime(2025, 12, 1),
+    );
+    expect(
+      TimeSelection.month(DateTime(2026, 12)).shift(1).to,
+      DateTime(2027, 1, 31),
+    );
+    expect(
+      TimeSelection.year(DateTime(2026)).shift(1).from,
+      DateTime(2027, 1, 1),
+    );
   });
 
   test('Bấm chip = KỲ HIỆN TẠI: Ngày → hôm nay, Tháng → tháng này, Năm → năm nay (không giữ mốc cũ)', () {
@@ -93,12 +113,9 @@ void main() {
     final year = TimeSelection.current(TimeKind.year, today);
     expect(year.from, DateTime(2026, 1, 1));
     expect(year.to, DateTime(2026, 12, 31));
-    final all = TimeSelection.current(TimeKind.all, today);
-    expect(all.from, isNull);
-    expect(all.to, isNull);
   });
 
-  test('Chỉ còn 4 kiểu thời gian: Ngày / Tháng / Năm / Tất cả (không khoảng ngày)', () {
-    expect(TimeKind.values, [TimeKind.day, TimeKind.month, TimeKind.year, TimeKind.all]);
+  test('Chỉ có ba khoảng ngày bị giới hạn: Ngày / Tháng / Năm', () {
+    expect(TimeKind.values, [TimeKind.day, TimeKind.month, TimeKind.year]);
   });
 }

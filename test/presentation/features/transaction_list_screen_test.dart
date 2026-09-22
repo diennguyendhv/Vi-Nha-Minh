@@ -102,11 +102,13 @@ void main() {
     ]);
 
     expect(find.textContaining('Doanh thu · Thu nhập'), findsOneWidget);
-    expect(find.text('HP lop Excel · Vợ'), findsOneWidget);
+    expect(find.text('HP lop Excel'), findsOneWidget);
+    expect(find.text('Vợ'), findsNWidgets(2));
     expect(find.textContaining('Chi phí kinh doanh · Lương nhân viên'), findsOneWidget);
-    expect(find.text('Luong co Bich · Chồng'), findsOneWidget);
+    expect(find.text('Luong co Bich'), findsOneWidget);
+    expect(find.text('Chồng'), findsOneWidget);
     expect(find.textContaining('Chi tiêu · Sinh hoạt'), findsOneWidget);
-    expect(find.text('Vợ'), findsOneWidget, reason: 'không có ghi chú → chỉ hiện Vợ');
+    expect(find.text('Vợ'), findsNWidgets(2), reason: 'có ghi chú và dòng không ghi chú đều hiện thành viên');
   });
 
   testWidgets('Chuyển giữa 2 thành viên hiện "Vợ → Chồng"; giao dịch cũ (Vay) vẫn hiển thị', (tester) async {

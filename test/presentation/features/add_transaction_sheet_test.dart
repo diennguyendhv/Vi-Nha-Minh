@@ -1333,6 +1333,16 @@ void main() {
       expect(amountText(tester), '123456789');
     });
 
+    testWidgets('gõ số chỉ cập nhật preview, chưa ghi Repository', (tester) async {
+      await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.thu);
+      await tester.enterText(amountField(), '1200000');
+      await tester.pump();
+
+      expect(find.text('1.200.000 đ'), findsOneWidget);
+      expect(fakeRepo.addedClientTxIds, isEmpty);
+      expect(fakeRepo.lastAdded, isNull);
+    });
+
     testWidgets('empty và 0 → Lưu bị khoá; 007 → 7 và được lưu đúng 7', (tester) async {
       await _pumpSheet(tester, fakeRepo: fakeRepo, initialType: EntryType.thu);
       await _selectDropdown(tester, 'Chọn danh mục', 'Thu nhập');

@@ -116,6 +116,7 @@ class AddTransactionSheet extends ConsumerStatefulWidget {
   final String? initialFundId;
   final SavingsAction? initialSavingsAction;
   final String? initialSavingsAssetTypeId;
+
   /// `memberId` mở sẵn; không thuộc Wallet/null → thành viên mặc định (đầu tiên).
   final String? initialMemberId;
 
@@ -158,8 +159,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
       _directory.resolveOrDefault(_transferFromSel) ?? '';
 
   /// Người nhận mặc định = người khác người gửi (suy từ danh sách thành viên).
-  String get _transferTo =>
-      _directory.contains(_transferToSel)
+  String get _transferTo => _directory.contains(_transferToSel)
       ? _transferToSel!
       : (_directory.firstOtherThan(_transferFrom) ?? '');
   late String? _transferFundId =
@@ -172,7 +172,10 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   late String? _savingsAssetTypeId = widget.initialSavingsAssetTypeId;
   String? _savingsTargetAssetTypeId;
 
-  String _amountDigits = '';
+  /// Số tiền là trạng thái cục bộ, tách khỏi `setState` của cả biểu mẫu.
+  /// Gõ một chữ số chỉ dựng lại ô tiền, dòng xem trước và nút Lưu; các picker,
+  /// balance preview và provider của sheet không chạy lại theo từng phím.
+  final _amount = ValueNotifier<int>(0);
   String _note = '';
 
   /// Nhóm chính đang chọn (2 lựa chọn mỗi loại): Thu = Doanh thu | Khoản thu
@@ -189,12 +192,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   final _noteController = TextEditingController();
 
   /// Ô số tiền dùng bàn phím số của hệ điều hành (không keypad tự vẽ).
-  /// `_amountDigits` luôn là bản sao đã qua [AmountInputFormatter] (chỉ chữ
-  /// số, không số 0 đứng đầu) của controller này.
   final _amountController = TextEditingController();
 
   @override
   void dispose() {
+    _amount.dispose();
     _amountController.dispose();
     _noteController.dispose();
     super.dispose();
@@ -222,8 +224,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   /// thật của Repository (`clientTxId`, đã frozen từ Phase 3).
   bool _submitting = false;
 
-  int get _amount =>
-      int.tryParse(_amountDigits.isEmpty ? '0' : _amountDigits) ?? 0;
+  int get _amountMinor => _amount.value;
 
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
@@ -377,7 +378,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
   /// từ trước (Thu/Chi/Chuyển × thành viên/quỹ/tiết kiệm) — không đổi hành
   /// vi nghiệp vụ nào, chỉ đổi kiểu dữ liệu trả về.
   _TransactionIntent? _buildLogicalIntent(List<Category> categories) {
-    if (_amount <= 0 || _directory.isEmpty) return null;
+    if (_amountMinor <= 0 || _directory.isEmpty) return null;
 
     // Phase 8.6 — chế độ "Hoàn tiền / Thu hồi": intent riêng, KHÔNG đi qua
     // category picker thường (khoá cứng `hoanTienThuHoi`), gắn thêm
@@ -392,7 +393,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         sourceRefId: null,
         destinationKind: PoolKind.memberAvailable,
         destinationRefId: _member,
-        amountMinor: _amount,
+        amountMinor: _amountMinor,
         transactionDate: _transactionDate,
         note: _note.trim(),
         statusId: null,
@@ -414,7 +415,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           sourceRefId: null,
           destinationKind: PoolKind.memberAvailable,
           destinationRefId: _member,
-          amountMinor: _amount,
+          amountMinor: _amountMinor,
           transactionDate: _transactionDate,
           note: _note.trim(),
           statusId: category.hasStatus ? _statusId : null,
@@ -435,7 +436,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
           sourceRefId: fundId ?? _member,
           destinationKind: PoolKind.external,
           destinationRefId: null,
-          amountMinor: _amount,
+          amountMinor: _amountMinor,
           transactionDate: _transactionDate,
           note: _note.trim(),
           statusId: category.hasStatus ? _statusId : null,
@@ -458,7 +459,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               sourceRefId: _transferFrom,
               destinationKind: PoolKind.memberAvailable,
               destinationRefId: _transferTo,
-              amountMinor: _amount,
+              amountMinor: _amountMinor,
               transactionDate: _transactionDate,
               note: _note.trim(),
               statusId: null,
@@ -477,7 +478,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceRefId: _member,
                   destinationKind: PoolKind.fund,
                   destinationRefId: fundId,
-                  amountMinor: _amount,
+                  amountMinor: _amountMinor,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
                   statusId: null,
@@ -492,7 +493,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceRefId: fundId,
                   destinationKind: PoolKind.memberAvailable,
                   destinationRefId: _member,
-                  amountMinor: _amount,
+                  amountMinor: _amountMinor,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
                   statusId: null,
@@ -520,7 +521,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                     SystemSavingsAssets.unallocatedId,
                     member,
                   ),
-                  amountMinor: _amount,
+                  amountMinor: _amountMinor,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
                   statusId: null,
@@ -535,7 +536,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceRefId: savingsAssetRefId(assetTypeId!, member),
                   destinationKind: PoolKind.memberAvailable,
                   destinationRefId: member,
-                  amountMinor: _amount,
+                  amountMinor: _amountMinor,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
                   statusId: null,
@@ -552,7 +553,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                   sourceRefId: savingsAssetRefId(assetTypeId!, member),
                   destinationKind: PoolKind.memberSavingsAsset,
                   destinationRefId: savingsAssetRefId(targetId, member),
-                  amountMinor: _amount,
+                  amountMinor: _amountMinor,
                   transactionDate: _transactionDate,
                   note: _note.trim(),
                   statusId: null,
@@ -595,10 +596,6 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
         .toList();
     final activeFunds = funds.where((f) => f.isActive).toList();
     final activeAssetTypes = assetTypes.where((a) => a.isActive).toList();
-
-    final currentIntent = _buildLogicalIntent(categories);
-    final canSave = !_submitting && currentIntent != null;
-    final showError = _errorText != null && _errorIntent == currentIntent;
 
     // Nâng sheet lên trên bàn phím hệ thống khi đang nhập Ghi chú.
     return PopScope(
@@ -702,20 +699,23 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                                 isDense: true,
                                 border: OutlineInputBorder(),
                               ),
-                              onChanged: (v) =>
-                                  setState(() => _amountDigits = v),
+                              onChanged: (v) => _amount.value =
+                                  int.tryParse(v.isEmpty ? '0' : v) ?? 0,
                             ),
                           ),
                         ),
                         const SizedBox(height: 6),
                         Center(
-                          child: Text(
-                            key: const Key('add_amount_preview'),
-                            Formatters.amount(_amount),
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted,
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: _amount,
+                            builder: (_, amount, _) => Text(
+                              key: const Key('add_amount_preview'),
+                              Formatters.amount(amount),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                           ),
                         ),
@@ -765,31 +765,55 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (showError) ...[
-                          SheetErrorBanner(message: _errorText!),
-                          const SizedBox(height: 12),
-                        ],
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: canSave ? () => _save(categories) : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accent,
-                              disabledBackgroundColor: AppColors.disabledButton,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(15),
+                        ValueListenableBuilder<int>(
+                          valueListenable: _amount,
+                          builder: (_, _, _) {
+                            final showError =
+                                _errorText != null &&
+                                _errorIntent == _buildLogicalIntent(categories);
+                            if (!showError) return const SizedBox.shrink();
+                            return Column(
+                              children: [
+                                SheetErrorBanner(message: _errorText!),
+                                const SizedBox(height: 12),
+                              ],
+                            );
+                          },
+                        ),
+                        ValueListenableBuilder<int>(
+                          valueListenable: _amount,
+                          builder: (_, _, _) {
+                            final canSave =
+                                !_submitting &&
+                                _buildLogicalIntent(categories) != null;
+                            return SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: canSave
+                                    ? () => _save(categories)
+                                    : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accent,
+                                  disabledBackgroundColor:
+                                      AppColors.disabledButton,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                  ),
+                                ),
+                                child: Text(
+                                  _submitting ? 'Đang lưu...' : 'Lưu giao dịch',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              _submitting ? 'Đang lưu...' : 'Lưu giao dịch',
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -926,7 +950,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             walletLabel: 'Ví của $_memberLabel',
             funds: funds,
             selectedFundId: _sourceFundId,
-            amount: _amount,
+            amount: _amountMinor,
             transactions: transactions,
             onSelect: (fundId) => setState(() => _sourceFundId = fundId),
           ),
@@ -998,7 +1022,7 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             walletLabel: null,
             funds: funds,
             selectedFundId: _transferFundId,
-            amount: isWithdraw ? _amount : 0,
+            amount: isWithdraw ? _amountMinor : 0,
             transactions: transactions,
             onSelect: (fundId) => setState(() => _transferFundId = fundId),
           ),
@@ -1021,7 +1045,8 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
             if (!r.isInactive && r.assetTypeId != _savingsAssetTypeId) r,
         ];
         SavingsAssetType labelled(SavingsAllocationRow r) {
-          final base = r.asset ??
+          final base =
+              r.asset ??
               SavingsAssetType(
                 id: r.assetTypeId,
                 name: 'Loại tài sản khác',

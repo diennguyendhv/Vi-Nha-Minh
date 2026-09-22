@@ -4,16 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../domain/engine/financial_engine.dart';
-import '../../../domain/entities/category.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
-import '../../../domain/entities/wallet_identity.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/member_providers.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
-import '../../widgets/category_label.dart';
+import '../../widgets/transaction_row.dart';
 import 'transaction_detail_screen.dart';
 
 /// Màn "Danh sách" (`docs/design.html` màn 10) — nhóm theo ngày kèm tổng
@@ -55,14 +53,6 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
             )
             .toList()
           ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
-
-    // STT theo đúng thứ tự thời gian ghi trong tháng (cũ nhất = 1), dù danh
-    // sách hiển thị mới nhất lên đầu — khớp cách đánh số 1 sổ ghi chép thật.
-    final chronological = [...inMonth]
-      ..sort((a, b) => a.transactionDate.compareTo(b.transactionDate));
-    final sttById = {
-      for (var i = 0; i < chronological.length; i++) chronological[i].id: i + 1,
-    };
 
     final grouped = <DateTime, List<Transaction>>{};
     for (final t in inMonth) {
@@ -146,12 +136,18 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                               ],
                             ),
                             for (final t in dayTransactions)
-                              _TransactionTile(
+                              TransactionRow(
                                 transaction: t,
                                 category: categoryById[t.categoryId],
                                 assetTypes: assetTypes,
-                                stt: sttById[t.id],
                                 members: members,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => TransactionDetailScreen(
+                                      transactionId: t.id,
+                                    ),
+                                  ),
+                                ),
                               ),
                           ],
                         ),
@@ -171,71 +167,4 @@ int _signedAmount(Transaction t) {
     TransactionType.expense => -t.amountMinor,
     TransactionType.transfer => 0,
   };
-}
-
-/// "ghi chú · Vợ" (hoặc chỉ ghi chú / chỉ Vợ/Chồng / "Vợ → Chồng" khi chuyển).
-String? _subtitle(Transaction t, List<FinancialMember> members) {
-  final member = transactionMemberLabel(t, members);
-  final note = t.note;
-  if (note.isEmpty) return member;
-  return member == null ? note : '$note · $member';
-}
-
-class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({
-    required this.transaction,
-    required this.category,
-    this.assetTypes = const [],
-    this.stt,
-    this.members = const [],
-  });
-
-  final List<FinancialMember> members;
-
-  /// Để hiện tên loại tài sản trong dòng Tiết kiệm.
-  final List<SavingsAssetType> assetTypes;
-
-  final Transaction transaction;
-  final Category? category;
-
-  /// Số thứ tự theo thời gian ghi trong tháng — chỉ để hiển thị, không
-  /// lưu vào `Transaction` (tính lại mỗi lần render từ danh sách hiện có).
-  final int? stt;
-
-  @override
-  Widget build(BuildContext context) {
-    final signed = _signedAmount(transaction);
-    final color = signed > 0
-        ? AppColors.accent
-        : (signed < 0 ? AppColors.textPrimary : AppColors.textSecondary);
-    final sign = signed > 0 ? '+' : (signed < 0 ? '-' : '⇄');
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: CircleAvatar(
-        backgroundColor: category?.color ?? AppColors.textMuted,
-        child: Text(
-          (category?.name.isNotEmpty ?? false)
-              ? category!.name.substring(0, 1)
-              : '?',
-          style: const TextStyle(color: Colors.white, fontSize: 12),
-        ),
-      ),
-      title: Text(
-        '${stt != null ? '$stt. ' : ''}${savingsTransferLabel(transaction, assetTypes) ?? categoryDisplayLabel(category)}',
-      ),
-      subtitle: _subtitle(transaction, members) == null
-          ? null
-          : Text(_subtitle(transaction, members)!),
-      trailing: Text(
-        '$sign ${Formatters.amount(transaction.amountMinor)}',
-        style: TextStyle(fontWeight: FontWeight.w800, color: color),
-      ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) =>
-              TransactionDetailScreen(transactionId: transaction.id),
-        ),
-      ),
-    );
-  }
 }

@@ -7,7 +7,7 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P6 — Cách ly Account/Wallet cục bộ — PASS** (2026-09-21). Phase kế tiếp (chưa bắt đầu): P7 phiên thiết bị độc quyền.
+**P6.1 — Transaction / Summary UX + amount input — PASS** (2026-09-22). P6 về Cách ly Account/Wallet cục bộ vẫn PASS. P7 chưa bắt đầu.
 
 ## Last Completed Phase
 P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
@@ -76,7 +76,9 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Mã hoá DB cục bộ trước cloud pilot/Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
-## Testing (gate mới nhất — P6)
+## Testing (gate mới nhất — P6.1 đang nghiệm thu)
+P6.1: Summary chỉ có Ngày/Tháng/Năm, không còn All time; Transaction/Summary dùng chung `TransactionRow`; trường số tiền Add/Edit dùng state cục bộ để gõ không ghi DB. `Số liệu` dùng `computeFinancialSummary` cho số dư/tổng tài sản. `flutter test --concurrency=1` pass; `flutter analyze` có 15 info deprecated có sẵn, 0 error. PROD updated in place bằng APK ký tương thích (không uninstall/clear). Pixel: Summary mới đúng, có `Số liệu`, dòng giao dịch mới, nhập tiền + preview/bàn phím hệ thống hoạt động và form đóng không lưu. PROD trước/sau: SHA-256 `803de56…420771eb6`, integrity ok, FK rỗng, 1.822 giao dịch, schema v8, walletId `3cbd8878…` không đổi. Backup: `Documents/ViNhaMinh_backups/2026-09-22/p6_1_pre`.
+
 P6: `flutter test --concurrency=1` 1022 pass, 3 skip; analyze 15 info có sẵn, 0 lỗi; không đổi schema (v8). Test: `test/wallet/*`. Pixel prod: DB sha256 trước/sau giống hệt (1.809 giao dịch, walletId `3cbd8878…`); registry tạo đúng 1 dòng local. DEV: phiên Auth giữ, registry không đổi khi đăng nhập/đăng xuất, sandbox tách biệt. Lưu ý: flavor prod chưa có `env/prod.json` ⇒ Auth prod "chưa cấu hình", nên đăng nhập chỉ thử trên DEV. Backup: `ViNhaMinh_backups/2026-09-21/p6_pre|p6_post`.
 Widget-local state (bộ lọc trong màn hình) chưa reset khi đổi ví — chưa có UI đổi ví ở v1.
 P5 (tham chiếu):

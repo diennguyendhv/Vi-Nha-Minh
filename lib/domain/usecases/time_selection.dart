@@ -1,7 +1,7 @@
 /// Kiểu chọn thời gian của Summary / Transaction Explorer.
-enum TimeKind { day, month, year, all }
+enum TimeKind { day, month, year }
 
-/// Lựa chọn thời gian: 1 ngày, 1 tháng, 1 năm hoặc mọi thời gian. Chỉ là cách
+/// Lựa chọn thời gian: 1 ngày, 1 tháng hoặc 1 năm. Chỉ là cách
 /// người dùng CHỌN; bộ lọc chỉ cần [from]/[to]. Ngày so theo ngày lịch địa
 /// phương (không có múi giờ/giờ phút).
 ///
@@ -18,7 +18,8 @@ class TimeSelection {
 
   static DateTime _d(DateTime v) => DateTime(v.year, v.month, v.day);
 
-  factory TimeSelection.day(DateTime date) => TimeSelection._(TimeKind.day, _d(date));
+  factory TimeSelection.day(DateTime date) =>
+      TimeSelection._(TimeKind.day, _d(date));
 
   factory TimeSelection.month(DateTime date) =>
       TimeSelection._(TimeKind.month, DateTime(date.year, date.month));
@@ -26,10 +27,8 @@ class TimeSelection {
   factory TimeSelection.year(DateTime date) =>
       TimeSelection._(TimeKind.year, DateTime(date.year));
 
-  factory TimeSelection.all(DateTime today) => TimeSelection._(TimeKind.all, _d(today));
-
-  /// Kỳ HIỆN TẠI của [kind] tính từ [today]: Ngày → hôm nay, Tháng → tháng này,
-  /// Năm → năm nay, Tất cả → không giới hạn.
+  /// Kỳ HIỆN TẠI của [kind] tính từ [today]. Mọi lựa chọn đều có khoảng ngày
+  /// hữu hạn để Explorer không bao giờ tải lịch sử không giới hạn.
   factory TimeSelection.current(TimeKind kind, DateTime today) {
     switch (kind) {
       case TimeKind.day:
@@ -38,13 +37,11 @@ class TimeSelection {
         return TimeSelection.month(today);
       case TimeKind.year:
         return TimeSelection.year(today);
-      case TimeKind.all:
-        return TimeSelection.all(today);
     }
   }
 
-  /// Ngày đầu (bao gồm) — `null` khi [TimeKind.all].
-  DateTime? get from {
+  /// Ngày đầu (bao gồm).
+  DateTime get from {
     switch (kind) {
       case TimeKind.day:
         return anchor;
@@ -52,13 +49,11 @@ class TimeSelection {
         return DateTime(anchor.year, anchor.month);
       case TimeKind.year:
         return DateTime(anchor.year);
-      case TimeKind.all:
-        return null;
     }
   }
 
-  /// Ngày cuối (bao gồm) — `null` khi [TimeKind.all].
-  DateTime? get to {
+  /// Ngày cuối (bao gồm).
+  DateTime get to {
     switch (kind) {
       case TimeKind.day:
         return anchor;
@@ -66,12 +61,10 @@ class TimeSelection {
         return DateTime(anchor.year, anchor.month + 1, 0);
       case TimeKind.year:
         return DateTime(anchor.year, 12, 31);
-      case TimeKind.all:
-        return null;
     }
   }
 
-  /// Lùi/tiến 1 đơn vị (ngày/tháng/năm). "Tất cả" không dịch.
+  /// Lùi/tiến 1 đơn vị (ngày/tháng/năm).
   TimeSelection shift(int step) {
     switch (kind) {
       case TimeKind.day:
@@ -82,8 +75,6 @@ class TimeSelection {
         return TimeSelection.month(DateTime(anchor.year, anchor.month + step));
       case TimeKind.year:
         return TimeSelection.year(DateTime(anchor.year + step));
-      case TimeKind.all:
-        return this;
     }
   }
 
