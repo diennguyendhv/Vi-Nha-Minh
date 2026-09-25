@@ -9,6 +9,8 @@
 ## Current Phase
 **P6.1 — Transaction / Summary UX + amount input — PASS** (2026-09-22). P6 về Cách ly Account/Wallet cục bộ vẫn PASS. P7 chưa bắt đầu.
 
+> P6.1 follow-up (2026-09-25): shared Fund/Savings transaction history, creation-time display/sorting, conditional Summary filters, and unallocated-savings display fix are included in the user-requested commit. Summary/explorer: 110 tests passed; latest PROD debug APK installed in place on Pixel 7a. `docs/p6-1-codex-handoff.md` preserves the earlier handoff and remaining edit-flow limitations. P7 has not started.
+
 ## Last Completed Phase
 P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 

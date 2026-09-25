@@ -1,5 +1,19 @@
 <meta charset="utf-8">
 <title>Bản Vẽ Ví Nhà Mình</title>
+<!-- Filter UX polish (2026-09-25): giữ hàng thành viên Tất cả | Vợ | Chồng.
+     Nhóm Quỹ/Tiết kiệm mang nhãn "Liên quan đến", khớp nguồn HOẶC đích.
+     "Quỹ cụ thể" chỉ hiện khi chọn Quỹ; bỏ Quỹ xoá luôn chọn quỹ cụ thể.
+     Danh mục/trạng thái chỉ cung cấp lựa chọn thuộc loại giao dịch đã chọn;
+     đổi loại bỏ các lựa chọn không còn phù hợp, ẩn trạng thái nếu không có.
+     Không chọn = mọi giao dịch trong kỳ; Chi + Quỹ = chi từ quỹ;
+     Chuyển + Quỹ = nạp/rút quỹ; chọn quỹ cụ thể khớp đúng id và kind.
+     Không thêm bộ lọc con Tiết kiệm hay đổi bố cục lớn. -->
+<!-- TransactionRow (2026-09-25): dưới ngữ cảnh mỗi giao dịch hiển thị biểu
+     tượng lịch sử + createdAt theo giờ địa phương (dd/MM/yyyy HH:mm:ss).
+     Đây là thời điểm nhập, tách biệt ngày phát sinh ở cột trái.
+     Sắp xếp Ngày/Số tiền theo thứ tự ưu tiên đã chọn; khi mọi khóa bằng nhau,
+     createdAt theo chiều Ngày (hoặc chiều Số tiền nếu chỉ bật Số tiền),
+     cuối cùng id cùng chiều để xác định thứ tự. Không sửa dữ liệu. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">

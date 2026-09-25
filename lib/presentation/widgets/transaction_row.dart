@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../domain/entities/category.dart';
+import '../../domain/entities/pool_kind.dart';
 import '../../domain/entities/savings_asset_type.dart';
 import '../../domain/entities/transaction.dart';
 import '../../domain/entities/transaction_type.dart';
+import '../../domain/entities/transfer_kind.dart';
 import '../../domain/entities/wallet_identity.dart';
 import 'category_label.dart';
 
@@ -31,10 +34,12 @@ class TransactionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
     final t = transaction;
     final member = transactionMemberLabel(t, members);
-    final savingsLabel = savingsTransferLabel(t, assetTypes);
-    final title = savingsLabel ?? categoryDisplayLabel(category);
+    final title = transactionPrimaryLabel(t, category, assetTypes);
+    final contextLabel = transactionContextLabel(t, members, assetTypes);
+    final secondary = contextLabel ?? member;
     final status = category?.statusById(t.statusId)?.name;
     final isIncome = t.type == TransactionType.income;
     final isTransfer = t.type == TransactionType.transfer;
@@ -105,11 +110,11 @@ class TransactionRow extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (member != null)
+                  if (secondary != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        member,
+                        secondary,
                         key: Key('transaction_member_${t.id}'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -119,6 +124,32 @@ class TransactionRow extends StatelessWidget {
                         ),
                       ),
                     ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.history,
+                          size: 13,
+                          color: AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            DateFormat(
+                              'dd/MM/yyyy HH:mm:ss',
+                              locale,
+                            ).format(t.createdAt.toLocal()),
+                            key: Key('transaction_created_at_${t.id}'),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   if (status != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 5),
@@ -148,4 +179,56 @@ class TransactionRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String transactionPrimaryLabel(
+  Transaction t,
+  Category? category,
+  Iterable<SavingsAssetType> assetTypes,
+) {
+  final savings = savingsTransferLabel(t, assetTypes);
+  if (savings != null) return savings;
+  switch (t.transferKind) {
+    case TransferKind.fundTopup:
+      return 'Nạp quỹ';
+    case TransferKind.fundWithdraw:
+      return 'Rút từ quỹ';
+    case TransferKind.memberToMember:
+      return 'Chuyển tiền thành viên';
+    default:
+      return categoryDisplayLabel(category);
+  }
+}
+
+String? transactionContextLabel(
+  Transaction t,
+  Iterable<FinancialMember> members,
+  Iterable<SavingsAssetType> assetTypes,
+) {
+  String poolLabel(PoolKind kind, String? refId) {
+    if (kind == PoolKind.memberAvailable) {
+      return members.where((m) => m.memberId == refId).firstOrNull?.label ??
+          'Ví';
+    }
+    if (kind == PoolKind.memberSavingsAsset && refId != null) {
+      final parsed = parseSavingsAssetRefId(refId);
+      final asset = parsed == null
+          ? null
+          : resolveSavingsAsset(parsed.assetTypeId, assetTypes);
+      final member = parsed == null
+          ? null
+          : members.where((m) => m.memberId == parsed.memberId).firstOrNull;
+      return '${member?.label ?? 'Thành viên'} · ${asset?.name ?? 'Tiết kiệm'}';
+    }
+    if (kind == PoolKind.fund) return 'Quỹ';
+    if (kind == PoolKind.receivable) return 'Khoản vay';
+    return 'Bên ngoài';
+  }
+
+  if (t.type == TransactionType.transfer) {
+    return '${poolLabel(t.sourceKind, t.sourceRefId)} → '
+        '${poolLabel(t.destinationKind, t.destinationRefId)}';
+  }
+  if (t.sourceKind == PoolKind.fund) return 'Chi từ Quỹ';
+  return null;
 }

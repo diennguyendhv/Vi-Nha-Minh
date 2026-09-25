@@ -187,6 +187,7 @@ Future<void> _pump(
   WidgetTester tester,
   List<Transaction> ledger, {
   List<FinancialMember>? members,
+  List<Fund> funds = const [],
 }) async {
   tester.view.physicalSize = const Size(1080, 3200);
   tester.view.devicePixelRatio = 1.0;
@@ -208,7 +209,7 @@ Future<void> _pump(
         counterpartiesStreamProvider.overrideWith(
           (ref) => Stream.value(const []),
         ),
-        fundsStreamProvider.overrideWith((ref) => Stream.value(const <Fund>[])),
+        fundsStreamProvider.overrideWith((ref) => Stream.value(funds)),
       ],
       child: const MaterialApp(home: Scaffold(body: SummaryScreen())),
     ),
@@ -400,6 +401,123 @@ void main() {
       );
     },
   );
+
+  testWidgets('Fund sub-filter is conditional and clears with its parent', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      [
+        _move('tiet_kiem', 100000, to: 'food', toKind: PoolKind.fund),
+        _move('tiet_kiem', 200000, to: 'travel', toKind: PoolKind.fund),
+        _in('hoc_phi', 300000),
+      ],
+      funds: const [
+        Fund(id: 'food', name: 'Quỹ tiền ăn', color: Colors.green),
+        Fund(id: 'travel', name: 'Du lịch', color: Colors.blue),
+      ],
+    );
+    await _openFilters(tester);
+    expect(find.text('Liên quan đến'), findsOneWidget);
+    expect(find.text('Nguồn / đích'), findsNothing);
+    expect(find.text('Quỹ cụ thể'), findsNothing);
+    expect(find.byKey(const Key('summary_member_vo')), findsOneWidget);
+    expect(find.byKey(const Key('summary_member_chong')), findsOneWidget);
+    await _tapKey(tester, 'summary_pool_fund');
+    expect(find.text('Quỹ cụ thể'), findsOneWidget);
+    expect(_header(tester), contains('2 giao dịch'));
+    await _tapKey(tester, 'summary_fund_food');
+    expect(_header(tester), contains('1 giao dịch'));
+    await _tapKey(tester, 'summary_pool_fund');
+    expect(find.text('Quỹ cụ thể'), findsNothing);
+    expect(find.byKey(const Key('summary_chip_funds')), findsNothing);
+    expect(_header(tester), contains('3 giao dịch'));
+    await _tapKey(tester, 'summary_pool_fund');
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('summary_fund_food')))
+          .selected,
+      isFalse,
+    );
+    await _tapKey(tester, 'summary_fund_food');
+    final chip = find.byKey(const Key('summary_chip_pool_kinds'));
+    tester.widget<InputChip>(chip).onDeleted!();
+    await tester.pumpAndSettle();
+    expect(find.text('Quỹ cụ thể'), findsNothing);
+    expect(find.byKey(const Key('summary_chip_funds')), findsNothing);
+    expect(_header(tester), contains('3 giao dịch'));
+  });
+
+  testWidgets(
+    'Type changes scope category/status choices and clear irrelevant selections',
+    (tester) async {
+      await _pump(tester, [
+        _out('cho_di', 10000, statusId: 'st_chua'),
+        _in('hoc_phi', 20000),
+      ]);
+      await _pickCategories(tester, ['cho_di']);
+      await _openPicker(tester, 'summary_pick_statuses');
+      await _toggleOption(tester, 'st_chua');
+      await _closeSheet(tester);
+      await _tapKey(tester, 'summary_type_income');
+      expect(find.byKey(const Key('summary_pick_statuses')), findsNothing);
+      expect(find.byKey(const Key('summary_chip_statuses')), findsNothing);
+      expect(find.byKey(const Key('summary_chip_categories')), findsNothing);
+      expect(_header(tester), contains('1 giao dịch'));
+      await _tapKey(tester, 'summary_pick_categories');
+      expect(find.byKey(const Key('multi_hoc_phi')), findsOneWidget);
+      expect(find.byKey(const Key('multi_cho_di')), findsNothing);
+      await _closeSheet(tester);
+      await _tapKey(tester, 'summary_type_expense');
+      expect(find.byKey(const Key('summary_pick_statuses')), findsOneWidget);
+      expect(_header(tester), contains('2 giao dịch'));
+    },
+  );
+
+  testWidgets('Số liệu includes virtual unallocated savings for each member', (
+    tester,
+  ) async {
+    await _pump(tester, [
+      _in('hoc_phi', 10000000),
+      _in('lap_trinh', 20000000, to: 'chong'),
+      _move(
+        'tiet_kiem',
+        4740000,
+        to: savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'vo'),
+        toKind: PoolKind.memberSavingsAsset,
+      ),
+      _move(
+        'tiet_kiem',
+        5000000,
+        from: 'chong',
+        to: savingsAssetRefId(SystemSavingsAssets.unallocatedId, 'chong'),
+        toKind: PoolKind.memberSavingsAsset,
+      ),
+      _move(
+        'tiet_kiem',
+        7000000,
+        from: 'chong',
+        to: savingsAssetRefId('savings_bank', 'chong'),
+        toKind: PoolKind.memberSavingsAsset,
+      ),
+    ]);
+    await _tapKey(tester, 'summary_statistics');
+    final sheet = find.byType(BottomSheet);
+    for (final entry in {
+      'Tiết kiệm chưa phân bổ của Vợ': '4.740.000 đ',
+      'Tiết kiệm chưa phân bổ của Chồng': '5.000.000 đ',
+      'Tổng tiết kiệm': '16.740.000 đ',
+      'Tổng tài sản': '30.000.000 đ',
+    }.entries) {
+      final label = find.descendant(of: sheet, matching: find.text(entry.key));
+      await tester.ensureVisible(label);
+      final row = find.ancestor(of: label, matching: find.byType(Row)).first;
+      expect(
+        find.descendant(of: row, matching: find.text(entry.value)),
+        findsOneWidget,
+      );
+    }
+  });
 
   testWidgets('Số liệu mở bảng chi tiết dòng tiền, thành viên và tài sản', (
     tester,
@@ -786,12 +904,12 @@ void main() {
     }
 
     const dateDesc = [
-      'd20-20',
-      'd20-100',
       'd20-600',
-      'd19-50',
+      'd20-100',
+      'd20-20',
       'd19-800',
-    ]; // tie-break cố định trong ngày
+      'd19-50',
+    ]; // thời điểm nhập giảm trong ngày
     const amountDesc = ['d19-800', 'd20-600', 'd20-100', 'd19-50', 'd20-20'];
 
     testWidgets(
@@ -1532,4 +1650,54 @@ void main() {
       expect(find.text('HP husband'), findsNothing);
     },
   );
+
+  test('Bộ lọc loại và ngữ cảnh giữ transfer trong lịch sử nhưng không cộng Thu/Chi', () {
+    final fundTransfer = _move(
+      'tiet_kiem',
+      200000,
+      to: 'fund-1',
+      toKind: PoolKind.fund,
+    );
+    final savingsTransfer = _move(
+      'tiet_kiem',
+      300000,
+      to: savingsAssetRefId('asset-1', 'vo'),
+      toKind: PoolKind.memberSavingsAsset,
+    );
+    final income = _in('hoc_phi', 400000);
+    final ledger = [fundTransfer, savingsTransfer, income];
+
+    final transfers = exploreTransactions(
+      ledger,
+      _cats,
+      const TransactionFilter(types: {TransactionType.transfer}),
+    );
+    expect(
+      transfers.rows.map((t) => t.id),
+      containsAll([fundTransfer.id, savingsTransfer.id]),
+    );
+    expect(transfers.inflow, 0);
+    expect(transfers.outflow, 0);
+
+    final savings = exploreTransactions(
+      ledger,
+      _cats,
+      const TransactionFilter(poolKinds: {PoolKind.memberSavingsAsset}),
+    );
+    expect(savings.rows.map((t) => t.id), [savingsTransfer.id]);
+
+    final fund = exploreTransactions(
+      ledger,
+      _cats,
+      const TransactionFilter(poolKinds: {PoolKind.fund}),
+    );
+    expect(fund.rows.map((t) => t.id), [fundTransfer.id]);
+
+    final specificFund = exploreTransactions(
+      ledger,
+      _cats,
+      const TransactionFilter(fundIds: {'fund-1'}),
+    );
+    expect(specificFund.rows.map((t) => t.id), [fundTransfer.id]);
+  });
 }

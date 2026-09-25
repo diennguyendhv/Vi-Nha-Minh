@@ -6,12 +6,16 @@ import '../../../core/utils/formatters.dart';
 import '../../../domain/engine/financial_engine.dart';
 import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/pool_kind.dart';
-import '../../../domain/entities/transaction.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_pool_balance.dart';
+import '../../providers/category_providers.dart';
+import '../../providers/member_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/fund_providers.dart';
 import '../../providers/transaction_providers.dart';
+import '../../widgets/transaction_row.dart';
 import '../add_transaction/add_transaction_sheet.dart';
+import '../transactions/transaction_detail_screen.dart';
 
 /// Màn "Quỹ — Chi tiết" (`docs/design.html` màn 15). Chỉ xem số dư + lịch
 /// sử — "Nạp quỹ"/"Ghi khoản mua" mở thẳng màn Thêm giao dịch điền sẵn,
@@ -26,6 +30,11 @@ class FundDetailScreen extends ConsumerWidget {
     final funds = ref.watch(fundsStreamProvider).valueOrNull ?? [];
     final transactions =
         ref.watch(transactionsStreamProvider).valueOrNull ?? [];
+    final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? [];
+    final categoryById = {for (final c in categories) c.id: c};
+    final members = ref.watch(memberDirectoryProvider).members;
+    final assetTypes =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? const [];
     Fund? fund;
     for (final f in funds) {
       if (f.id == fundId) fund = f;
@@ -102,7 +111,22 @@ class FundDetailScreen extends ConsumerWidget {
               ),
             )
           else
-            ...history.map((t) => _EntryRow(transaction: t, fundId: fundId)),
+            ...history.map(
+              (t) => TransactionRow(
+                key: Key('fund_transaction_${t.id}'),
+                transaction: t,
+                category: categoryById[t.categoryId],
+                members: members,
+                assetTypes: assetTypes,
+                showDate: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        TransactionDetailScreen(transactionId: t.id),
+                  ),
+                ),
+              ),
+            ),
           const SizedBox(height: 24),
           TextButton(
             key: const Key('fund_stop'),
@@ -143,7 +167,9 @@ class FundDetailScreen extends ConsumerWidget {
       ),
     );
     if (name == null || name.isEmpty || name == fund.name) return;
-    await ref.read(fundRepositoryProvider).updateFund(fund.copyWith(name: name));
+    await ref
+        .read(fundRepositoryProvider)
+        .updateFund(fund.copyWith(name: name));
   }
 
   Future<void> _deleteFund(
@@ -225,65 +251,6 @@ class _BalanceCard extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: -0.2,
               color: AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EntryRow extends StatelessWidget {
-  const _EntryRow({required this.transaction, required this.fundId});
-
-  final Transaction transaction;
-  final String fundId;
-
-  @override
-  Widget build(BuildContext context) {
-    final isTopUp = transaction.destinationRefId == fundId;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            isTopUp ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded,
-            size: 18,
-            color: isTopUp ? AppColors.accent : AppColors.expenseAmount,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  transaction.note.isEmpty
-                      ? (isTopUp ? 'Nạp quỹ' : 'Ghi khoản mua')
-                      : transaction.note,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                  ),
-                ),
-                Text(
-                  Formatters.dayMonth(transaction.transactionDate),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            '${isTopUp ? '+' : '-'} ${Formatters.amount(transaction.amountMinor)}',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13.5,
-              color: isTopUp ? AppColors.accent : AppColors.textPrimary,
             ),
           ),
         ],

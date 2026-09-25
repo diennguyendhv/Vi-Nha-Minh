@@ -89,6 +89,7 @@ Transaction _out(
   int amount, {
   String from = 'vo',
   DateTime? date,
+  DateTime? createdAt,
   String note = '',
   String? statusId,
   String? reversedBy,
@@ -109,7 +110,7 @@ Transaction _out(
     note: note,
     statusId: statusId,
     transactionDate: d,
-    createdAt: d.add(Duration(seconds: _n)),
+    createdAt: createdAt ?? d.add(Duration(seconds: _n)),
     clientTxId: 'c-out-$_n',
     reversedByTxId: reversedBy,
     reversalOfTxId: reversalOf,
@@ -140,6 +141,33 @@ ExplorerResult _run(List<Transaction> t, [TransactionFilter f = const Transactio
     exploreTransactions(t, _cats, f, hiddenCategoryIds: _hidden);
 
 void main() {
+  test('Fund filters match either endpoint, exact kind/id and selected type', () {
+    Transaction tx(String id, TransactionType type, PoolKind source, String? sourceId,
+        PoolKind destination, String? destinationId) => Transaction(
+      id: id, type: type,
+      categoryId: type == TransactionType.expense ? 'sinh_hoat' : 'tiet_kiem',
+      sourceKind: source, sourceRefId: sourceId,
+      destinationKind: destination, destinationRefId: destinationId,
+      amountMinor: 10000, transactionDate: DateTime(2026, 9, 10),
+      createdAt: DateTime(2026, 9, 10), clientTxId: id,
+    );
+    final ledger = [
+      tx('topup', TransactionType.transfer, PoolKind.memberAvailable, 'vo', PoolKind.fund, 'food'),
+      tx('withdraw', TransactionType.transfer, PoolKind.fund, 'food', PoolKind.memberAvailable, 'vo'),
+      tx('spend', TransactionType.expense, PoolKind.fund, 'food', PoolKind.external, null),
+      tx('other-fund', TransactionType.expense, PoolKind.fund, 'travel', PoolKind.external, null),
+      tx('same-id-other-kind', TransactionType.expense, PoolKind.memberAvailable, 'food', PoolKind.external, null),
+      _in('hoc_phi', 20000),
+    ];
+    Set<String> ids(TransactionFilter filter) => _run(ledger, filter).rows.map((t) => t.id).toSet();
+    expect(ids(const TransactionFilter()), ledger.map((t) => t.id).toSet());
+    expect(ids(const TransactionFilter(poolKinds: {PoolKind.fund})), {'topup', 'withdraw', 'spend', 'other-fund'});
+    expect(ids(const TransactionFilter(types: {TransactionType.expense}, poolKinds: {PoolKind.fund})), {'spend', 'other-fund'});
+    expect(ids(const TransactionFilter(types: {TransactionType.transfer}, poolKinds: {PoolKind.fund})), {'topup', 'withdraw'});
+    expect(ids(const TransactionFilter(fundIds: {'food'})), {'topup', 'withdraw', 'spend'});
+    expect(ids(const TransactionFilter(types: {TransactionType.expense}, poolKinds: {PoolKind.fund}, fundIds: {'food'})), {'spend'});
+  });
+
   group('Thu nhập ròng theo thành viên (yêu cầu bắt buộc)', () {
     final ledger = [
       _in('hoc_phi', 10000000, to: 'vo'),
@@ -487,13 +515,13 @@ void main() {
       expect(ExplorerSort.defaultSort.isDefault, isTrue);
       expect(ExplorerSort.defaultSort.rules, [const SortRule(SortKey.date)]);
       expect(const TransactionFilter().sort.isDefault, isTrue);
-      expect(_run(twoDays()).rows.map((t) => t.id).toList(), ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800'],
-          reason: 'trong cùng ngày: tie-break cố định (giờ ↑), KHÔNG dùng số tiền');
+      expect(_run(twoDays()).rows.map((t) => t.id).toList(), ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50'],
+          reason: 'trong cùng ngày: thời điểm nhập giảm, KHÔNG dùng số tiền');
     });
 
     group('Ma trận 12 cấu hình', () {
       final cases = <String, (List<(SortKey, bool)>, List<String>)>{
-        '1. Ngày ↓ only': ([(dateKey, desc)], ['d20-20', 'd20-100', 'd20-600', 'd19-50', 'd19-800']),
+        '1. Ngày ↓ only': ([(dateKey, desc)], ['d20-600', 'd20-100', 'd20-20', 'd19-800', 'd19-50']),
         '2. Ngày ↑ only': ([(dateKey, asc)], ['d19-50', 'd19-800', 'd20-20', 'd20-100', 'd20-600']),
         '3. Số tiền ↓ only': ([(amountKey, desc)], ['d19-800', 'd20-600', 'd20-100', 'd19-50', 'd20-20']),
         '4. Số tiền ↑ only': ([(amountKey, asc)], ['d20-20', 'd19-50', 'd20-100', 'd20-600', 'd19-800']),
@@ -554,8 +582,8 @@ void main() {
     test('Khóa KHÔNG bật không được ngầm làm khóa phụ (chỉ Ngày: đổi số tiền không làm đổi thứ tự trong ngày)', () {
       final day20 = twoDays().where((t) => t.transactionDate.day == 20).toList();
       final dateOnlyDesc = order(day20, sortOf([(dateKey, desc)]));
-      expect(dateOnlyDesc, ['d20-20', 'd20-100', 'd20-600'], reason: 'tie-break cố định giờ ↑');
-      expect(order(day20, sortOf([(dateKey, asc)])), dateOnlyDesc, reason: 'chiều Ngày không đổi thứ tự BÊN TRONG ngày');
+      expect(dateOnlyDesc, ['d20-600', 'd20-100', 'd20-20'], reason: 'thời điểm nhập giảm');
+      expect(order(day20, sortOf([(dateKey, asc)])), dateOnlyDesc.reversed.toList(), reason: 'chiều Ngày đổi cả thứ tự nhập BÊN TRONG ngày');
       expect(order(day20, sortOf([(dateKey, desc), (amountKey, desc)])), ['d20-600', 'd20-100', 'd20-20']);
     });
 
@@ -567,7 +595,7 @@ void main() {
       expect(order(t, sortOf([(dateKey, desc), (amountKey, desc)])), ['early-big', 'late-small']);
     });
 
-    test('Cùng mọi khóa bật: tie-break CỐ ĐỊNH (giờ ↑, giờ tạo ↑, id), không đổi theo chiều; xác định', () {
+    test('Cùng mọi khóa bật: thời điểm nhập theo chiều sắp xếp; xác định', () {
       final t = [
         _out('sinh_hoat', 100, id: 'c', date: DateTime(2026, 9, 20, 10)),
         _out('sinh_hoat', 100, id: 'a', date: DateTime(2026, 9, 20, 8)),
@@ -579,8 +607,20 @@ void main() {
         sortOf([(amountKey, desc)]),
         sortOf([(amountKey, asc), (dateKey, desc)]),
       ]) {
-        expect(order(t, s), ['a', 'b', 'c']);
+        final ascending = s.ascendingOf(dateKey) ?? s.rules.first.ascending;
+        expect(order(t, s), ascending ? ['a', 'b', 'c'] : ['c', 'b', 'a']);
         expect(order(t, s), order(t.reversed.toList(), s), reason: 'không phụ thuộc thứ tự đầu vào');
+      }
+    });
+
+    test('Ngày và tiền đều dùng thời điểm nhập khi trùng khóa, không dùng giờ phát sinh', () {
+      final rows = [
+        _out('sinh_hoat', 100, id: 'first', date: DateTime(2026, 9, 20, 23), createdAt: DateTime(2026, 9, 25, 8)),
+        _out('sinh_hoat', 100, id: 'second', date: DateTime(2026, 9, 20, 1), createdAt: DateTime(2026, 9, 25, 9)),
+      ];
+      for (final key in [dateKey, amountKey]) {
+        expect(order(rows, sortOf([(key, asc)])), ['first', 'second']);
+        expect(order(rows, sortOf([(key, desc)])), ['second', 'first']);
       }
     });
 

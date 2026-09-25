@@ -370,6 +370,15 @@ class _TransactionDetailScreenState
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          _ReadOnlyRow(
+            label: 'Loại giao dịch',
+            value: switch (transaction.type) {
+              TransactionType.income => 'Thu',
+              TransactionType.expense => 'Chi',
+              TransactionType.transfer => 'Chuyển',
+            },
+          ),
+          const SizedBox(height: 16),
           const Text(
             'HẠNG MỤC',
             style: TextStyle(

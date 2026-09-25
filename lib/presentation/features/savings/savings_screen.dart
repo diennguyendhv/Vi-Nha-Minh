@@ -5,15 +5,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/entities/savings_asset_type.dart';
+import '../../../domain/entities/pool_kind.dart';
+import '../../../domain/engine/financial_engine.dart';
 import '../../../domain/errors/domain_exceptions.dart';
 import '../../../domain/usecases/compute_savings_breakdown.dart';
 import '../../../domain/usecases/deletion_check.dart';
 import '../../providers/category_providers.dart';
 import '../../providers/member_providers.dart';
 import '../../widgets/stopped_item_tile.dart';
+import '../../widgets/transaction_row.dart';
 import '../../providers/savings_asset_type_providers.dart';
 import '../../providers/transaction_providers.dart';
 import '../add_transaction/add_transaction_sheet.dart';
+import '../transactions/transaction_detail_screen.dart';
 
 const _assetColors = <Color>[
   Color(0xFF12805C),
@@ -100,6 +104,16 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
       transactions,
       assetTypes,
     );
+    final history = transactions.where((t) {
+      if (!isVisible(t)) return false;
+      bool belongsToMember(PoolKind kind, String? refId) {
+        if (kind != PoolKind.memberSavingsAsset || refId == null) return false;
+        return parseSavingsAssetRefId(refId)?.memberId == memberId;
+      }
+      return belongsToMember(t.sourceKind, t.sourceRefId) ||
+          belongsToMember(t.destinationKind, t.destinationRefId);
+    }).toList()..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+    final categoryById = {for (final c in categories) c.id: c};
     // Loại đã ngừng và KHÔNG còn tiền ở cả 2 thành viên → khu "Ngừng sử dụng".
     final allBreakdowns = [
       for (final id in directory.ids)
@@ -249,6 +263,37 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          const Text(
+            'Lịch sử tiết kiệm',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          if (history.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                'Chưa có giao dịch tiết kiệm',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          else
+            for (final transaction in history)
+              TransactionRow(
+                key: Key('savings_transaction_${transaction.id}'),
+                transaction: transaction,
+                category: categoryById[transaction.categoryId],
+                members: directory.members,
+                assetTypes: assetTypes,
+                showDate: true,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => TransactionDetailScreen(
+                      transactionId: transaction.id,
+                    ),
+                  ),
+                ),
+              ),
         ],
       ),
     );

@@ -9,6 +9,8 @@ import '../../../domain/entities/fund.dart';
 import '../../../domain/entities/wallet_identity.dart';
 import '../../../domain/entities/savings_asset_type.dart';
 import '../../../domain/entities/transaction.dart';
+import '../../../domain/entities/transaction_type.dart';
+import '../../../domain/entities/pool_kind.dart';
 import '../../../domain/usecases/compute_financial_summary.dart';
 import '../../../domain/usecases/compute_grouped_totals.dart';
 import '../../../domain/usecases/explore_transactions.dart';
@@ -81,6 +83,35 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
     });
   }
 
+  void _setPoolKinds(Set<PoolKind> kinds) {
+    setState(() {
+      _filter = _filter.withPoolKinds(kinds);
+      if (!kinds.contains(PoolKind.fund)) {
+        _filter = _filter.withFunds({});
+      }
+    });
+  }
+
+  void _setTypes(Set<TransactionType> types, List<Category> categories) {
+    final relevant = categories.where(
+      (category) => types.isEmpty || types.contains(category.type),
+    );
+    final categoryIds = relevant.map((category) => category.id).toSet();
+    final statusIds = relevant
+        .expand((category) => category.statuses)
+        .map((status) => status.id)
+        .toSet();
+    setState(() {
+      _filter = _filter
+          .withTypes(types)
+          .withCategories(_filter.categoryIds.intersection(categoryIds))
+          .withStatuses(
+            _filter.statusIds.intersection(statusIds),
+            includeNone: statusIds.isNotEmpty && _filter.includeNoStatus,
+          );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final transactionsAsync = ref.watch(transactionsStreamProvider);
@@ -129,12 +160,22 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
       _filter,
       hiddenCategoryIds: _hidden,
     );
+    final relevantCategories = categories
+        .where(
+          (category) =>
+              _filter.types.isEmpty || _filter.types.contains(category.type),
+        )
+        .toList();
     final categoryOptions = explorerCategoryOptions(
-      categories,
+      relevantCategories,
       transactions,
       hiddenCategoryIds: _hidden,
     );
-    final statusOptions = explorerStatusOptions(categories, transactions);
+    final statusOptions = explorerStatusOptions(
+      relevantCategories,
+      transactions,
+    );
+    final funds = ref.watch(fundsStreamProvider).valueOrNull ?? const <Fund>[];
 
     return CustomScrollView(
       slivers: [
@@ -286,6 +327,10 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                     setState(() => _filter = _filter.withCategories({})),
                 onClearStatuses: () =>
                     setState(() => _filter = _filter.withStatuses({})),
+                onClearTypes: () => _setTypes({}, categories),
+                onClearPoolKinds: () => _setPoolKinds({}),
+                onClearFunds: () =>
+                    setState(() => _filter = _filter.withFunds({})),
               ),
               if (_showFilters)
                 _FilterPanel(
@@ -298,6 +343,11 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
                     () =>
                         _filter = _filter.withStatuses(ids, includeNone: none),
                   ),
+                  onTypes: (types) => _setTypes(types, categories),
+                  onPoolKinds: _setPoolKinds,
+                  funds: funds,
+                  onFunds: (ids) =>
+                      setState(() => _filter = _filter.withFunds(ids)),
                 ),
               const SizedBox(height: 4),
             ]),
@@ -375,7 +425,13 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
       transactions,
       categories: categories,
       funds: funds.where((fund) => fund.isActive).toList(),
-      assetTypes: assetTypes.where((type) => type.isActive).toList(),
+      assetTypes: [
+        // The virtual unallocated pool is not stored in the asset repository.
+        SystemSavingsAssets.unallocated,
+        ...assetTypes.where(
+          (type) => type.isActive && !SystemSavingsAssets.isSystem(type.id),
+        ),
+      ],
       members: members,
     );
     showModalBottomSheet<void>(
@@ -413,7 +469,9 @@ class _SummaryScreenState extends ConsumerState<SummaryScreen> {
               for (final member in members)
                 (
                   'Tiết kiệm chưa phân bổ của ${member.label}',
-                  financial.savingsByMemberAndAssetType[member.memberId]?[SystemSavingsAssets.unallocatedId] ?? 0,
+                  financial.savingsByMemberAndAssetType[member
+                          .memberId]?[SystemSavingsAssets.unallocatedId] ??
+                      0,
                 ),
               ('Tổng tiết kiệm', financial.totalSavings),
               for (final fund in funds.where((fund) => fund.isActive))
@@ -728,11 +786,17 @@ class _ActiveChips extends StatelessWidget {
     required this.filter,
     required this.onClearCategories,
     required this.onClearStatuses,
+    required this.onClearTypes,
+    required this.onClearPoolKinds,
+    required this.onClearFunds,
   });
 
   final TransactionFilter filter;
   final VoidCallback onClearCategories;
   final VoidCallback onClearStatuses;
+  final VoidCallback onClearTypes;
+  final VoidCallback onClearPoolKinds;
+  final VoidCallback onClearFunds;
 
   @override
   Widget build(BuildContext context) {
@@ -756,6 +820,33 @@ class _ActiveChips extends StatelessWidget {
         ),
       );
     }
+    if (filter.types.isNotEmpty) {
+      chips.add(
+        InputChip(
+          key: const Key('summary_chip_types'),
+          label: Text('Loại: ${filter.types.length}'),
+          onDeleted: onClearTypes,
+        ),
+      );
+    }
+    if (filter.poolKinds.isNotEmpty) {
+      chips.add(
+        InputChip(
+          key: const Key('summary_chip_pool_kinds'),
+          label: Text('Liên quan đến: ${filter.poolKinds.length}'),
+          onDeleted: onClearPoolKinds,
+        ),
+      );
+    }
+    if (filter.fundIds.isNotEmpty) {
+      chips.add(
+        InputChip(
+          key: const Key('summary_chip_funds'),
+          label: Text('Quỹ: ${filter.fundIds.length}'),
+          onDeleted: onClearFunds,
+        ),
+      );
+    }
     if (chips.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
@@ -764,8 +855,7 @@ class _ActiveChips extends StatelessWidget {
   }
 }
 
-/// Bảng bộ lọc: Danh mục (nhiều) · Trạng thái (nhiều) · Số tiền. Mỗi chiều độc
-/// lập với chiều còn lại.
+/// Compact filters with category/status choices scoped to transaction types.
 class _FilterPanel extends StatelessWidget {
   const _FilterPanel({
     required this.filter,
@@ -773,6 +863,10 @@ class _FilterPanel extends StatelessWidget {
     required this.statusOptions,
     required this.onCategories,
     required this.onStatuses,
+    required this.onTypes,
+    required this.onPoolKinds,
+    required this.funds,
+    required this.onFunds,
   });
 
   final TransactionFilter filter;
@@ -780,6 +874,10 @@ class _FilterPanel extends StatelessWidget {
   final List<ExplorerOption> statusOptions;
   final ValueChanged<Set<String>> onCategories;
   final void Function(Set<String> ids, bool includeNone) onStatuses;
+  final ValueChanged<Set<TransactionType>> onTypes;
+  final ValueChanged<Set<PoolKind>> onPoolKinds;
+  final List<Fund> funds;
+  final ValueChanged<Set<String>> onFunds;
 
   static const _categoryGroupOrder = [
     'Doanh thu',
@@ -801,6 +899,78 @@ class _FilterPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const Text(
+            'Loại giao dịch',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final type in TransactionType.values)
+                FilterChip(
+                  key: Key('summary_type_${type.name}'),
+                  label: Text(switch (type) {
+                    TransactionType.income => 'Thu',
+                    TransactionType.expense => 'Chi',
+                    TransactionType.transfer => 'Chuyển',
+                  }),
+                  selected: filter.types.contains(type),
+                  onSelected: (selected) {
+                    final value = {...filter.types};
+                    selected ? value.add(type) : value.remove(type);
+                    onTypes(value);
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Liên quan đến',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final kind in const [
+                PoolKind.fund,
+                PoolKind.memberSavingsAsset,
+              ])
+                FilterChip(
+                  key: Key('summary_pool_${kind.name}'),
+                  label: Text(kind == PoolKind.fund ? 'Quỹ' : 'Tiết kiệm'),
+                  selected: filter.poolKinds.contains(kind),
+                  onSelected: (selected) {
+                    final value = {...filter.poolKinds};
+                    selected ? value.add(kind) : value.remove(kind);
+                    onPoolKinds(value);
+                  },
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (filter.poolKinds.contains(PoolKind.fund) && funds.isNotEmpty) ...[
+            const Text(
+              'Quỹ cụ thể',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+            Wrap(
+              spacing: 6,
+              children: [
+                for (final fund in funds)
+                  FilterChip(
+                    key: Key('summary_fund_${fund.id}'),
+                    label: Text(fund.name),
+                    selected: filter.fundIds.contains(fund.id),
+                    onSelected: (selected) {
+                      final value = {...filter.fundIds};
+                      selected ? value.add(fund.id) : value.remove(fund.id);
+                      onFunds(value);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
           _PickerRow(
             key: const Key('summary_pick_categories'),
             label: 'Danh mục',
@@ -821,30 +991,32 @@ class _FilterPanel extends StatelessWidget {
             ),
             onClear: filter.categoryIds.isEmpty ? null : () => onCategories({}),
           ),
-          const SizedBox(height: 10),
-          _PickerRow(
-            key: const Key('summary_pick_statuses'),
-            label: 'Trạng thái',
-            summary: !filter.hasStatusFilter
-                ? 'Tất cả'
-                : '${filter.statusIds.length + (filter.includeNoStatus ? 1 : 0)} đã chọn',
-            onTap: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              showDragHandle: true,
-              builder: (_) => _MultiSelectSheet(
-                title: 'Trạng thái',
-                options: statusOptions,
-                initial: filter.statusIds,
-                noneLabel: 'Không có trạng thái',
-                initialNone: filter.includeNoStatus,
-                onChanged: onStatuses,
+          if (statusOptions.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _PickerRow(
+              key: const Key('summary_pick_statuses'),
+              label: 'Trạng thái',
+              summary: !filter.hasStatusFilter
+                  ? 'Tất cả'
+                  : '${filter.statusIds.length + (filter.includeNoStatus ? 1 : 0)} đã chọn',
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                showDragHandle: true,
+                builder: (_) => _MultiSelectSheet(
+                  title: 'Trạng thái',
+                  options: statusOptions,
+                  initial: filter.statusIds,
+                  noneLabel: 'Không có trạng thái',
+                  initialNone: filter.includeNoStatus,
+                  onChanged: onStatuses,
+                ),
               ),
+              onClear: filter.hasStatusFilter
+                  ? () => onStatuses({}, false)
+                  : null,
             ),
-            onClear: filter.hasStatusFilter
-                ? () => onStatuses({}, false)
-                : null,
-          ),
+          ],
         ],
       ),
     );

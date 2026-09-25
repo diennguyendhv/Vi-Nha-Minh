@@ -3,6 +3,7 @@ import '../engine/financial_engine.dart';
 import '../entities/category.dart';
 import '../entities/transaction.dart';
 import '../entities/transaction_type.dart';
+import '../entities/pool_kind.dart';
 import 'compute_grouped_totals.dart';
 import 'compute_reportable_income.dart';
 
@@ -74,7 +75,8 @@ class SortRule {
 /// đúng 1 chiều (↑/↓). Khóa không bật KHÔNG được ngầm làm khóa phụ.
 ///
 /// Khóa Ngày so theo NGÀY LỊCH (giờ trong ngày không lấn khóa sau). Khi mọi khóa
-/// bật đều bằng nhau dùng tie-break cố định, ẩn, xác định (giờ ↑, giờ tạo ↑, id).
+/// bật đều bằng nhau dùng thời điểm nhập, rồi id, theo chiều Ngày (hoặc
+/// chiều khóa đầu nếu không bật Ngày).
 ///
 /// Mặc định: chỉ Ngày ↓ (mới nhất trước).
 class ExplorerSort {
@@ -99,9 +101,9 @@ class ExplorerSort {
   }
 
   /// Dạng lưu bền: "date:desc,amount:asc" (theo thứ tự ưu tiên).
-  String encode() => [
-    for (final r in rules) '${r.key.name}:${r.ascending ? 'asc' : 'desc'}',
-  ].join(',');
+  String encode() =>
+      [for (final r in rules) '${r.key.name}:${r.ascending ? 'asc' : 'desc'}']
+          .join(',');
 
   /// Đọc lại [encode]. Sai định dạng / rỗng / trùng khóa → [defaultSort].
   static ExplorerSort decode(String? raw) {
@@ -111,7 +113,8 @@ class ExplorerSort {
       final kv = part.split(':');
       if (kv.length != 2) return defaultSort;
       final key = SortKey.values.where((k) => k.name == kv[0]).firstOrNull;
-      if (key == null || (kv[1] != 'asc' && kv[1] != 'desc')) return defaultSort;
+      if (key == null || (kv[1] != 'asc' && kv[1] != 'desc'))
+        return defaultSort;
       if (rules.any((r) => r.key == key)) return defaultSort;
       rules.add(SortRule(key, ascending: kv[1] == 'asc'));
     }
@@ -141,6 +144,9 @@ class TransactionFilter {
     this.memberId,
     this.categoryIds = const {},
     this.statusIds = const {},
+    this.types = const {},
+    this.poolKinds = const {},
+    this.fundIds = const {},
     this.includeNoStatus = false,
     this.query = '',
     this.sort = ExplorerSort.defaultSort,
@@ -152,6 +158,17 @@ class TransactionFilter {
   final String? memberId;
   final Set<String> categoryIds;
   final Set<String> statusIds;
+
+  /// Main financial type, kept distinct from report category groups.
+  final Set<TransactionType> types;
+
+  /// Contextual source/destination filter (Fund, Savings, …). A transaction
+  /// matches when either endpoint uses one of these pools.
+  final Set<PoolKind> poolKinds;
+
+  /// Specific Fund identifiers. Kept separate from [poolKinds] so a user can
+  /// find one Fund without hiding other canonical transfer rows by default.
+  final Set<String> fundIds;
 
   /// Chọn cả các giao dịch KHÔNG có trạng thái (`statusId == null`).
   final bool includeNoStatus;
@@ -170,6 +187,9 @@ class TransactionFilter {
     Object? memberId = _keep,
     Set<String>? categoryIds,
     Set<String>? statusIds,
+    Set<TransactionType>? types,
+    Set<PoolKind>? poolKinds,
+    Set<String>? fundIds,
     bool? includeNoStatus,
     String? query,
     ExplorerSort? sort,
@@ -179,6 +199,9 @@ class TransactionFilter {
     memberId: identical(memberId, _keep) ? this.memberId : memberId as String?,
     categoryIds: categoryIds ?? this.categoryIds,
     statusIds: statusIds ?? this.statusIds,
+    types: types ?? this.types,
+    poolKinds: poolKinds ?? this.poolKinds,
+    fundIds: fundIds ?? this.fundIds,
     includeNoStatus: includeNoStatus ?? this.includeNoStatus,
     query: query ?? this.query,
     sort: sort ?? this.sort,
@@ -197,6 +220,15 @@ class TransactionFilter {
   TransactionFilter withStatuses(Set<String> ids, {bool includeNone = false}) =>
       copyWith(statusIds: {...ids}, includeNoStatus: includeNone);
 
+  TransactionFilter withTypes(Set<TransactionType> value) =>
+      copyWith(types: {...value});
+
+  TransactionFilter withPoolKinds(Set<PoolKind> value) =>
+      copyWith(poolKinds: {...value});
+
+  TransactionFilter withFunds(Set<String> value) =>
+      copyWith(fundIds: {...value});
+
   TransactionFilter withQuery(String value) => copyWith(query: value);
 
   TransactionFilter withSort(ExplorerSort value) => copyWith(sort: value);
@@ -207,13 +239,20 @@ class TransactionFilter {
   bool get hasNonDateFilter =>
       memberId != null ||
       categoryIds.isNotEmpty ||
+      types.isNotEmpty ||
+      poolKinds.isNotEmpty ||
+      fundIds.isNotEmpty ||
       hasStatusFilter ||
       query.trim().isNotEmpty ||
       !sort.isDefault;
 
   /// Số điều kiện "nâng cao" (danh mục/trạng thái) — hiện trên nút Bộ lọc.
   int get advancedCount =>
-      (categoryIds.isNotEmpty ? 1 : 0) + (hasStatusFilter ? 1 : 0);
+      (categoryIds.isNotEmpty ? 1 : 0) +
+      (hasStatusFilter ? 1 : 0) +
+      (types.isNotEmpty ? 1 : 0) +
+      (poolKinds.isNotEmpty ? 1 : 0) +
+      (fundIds.isNotEmpty ? 1 : 0);
 }
 
 /// Nhóm chính của 1 DANH MỤC (dùng để lọc danh sách danh mục theo nhóm).
@@ -285,7 +324,21 @@ ExplorerResult exploreTransactions(
     );
     if (filter.from != null && day.isBefore(filter.from!)) continue;
     if (filter.to != null && day.isAfter(filter.to!)) continue;
-    if (filter.memberId != null && !involvesMember(t, filter.memberId!)) continue;
+    if (filter.memberId != null && !involvesMember(t, filter.memberId!))
+      continue;
+    if (filter.types.isNotEmpty && !filter.types.contains(t.type)) continue;
+    if (filter.poolKinds.isNotEmpty &&
+        !filter.poolKinds.contains(t.sourceKind) &&
+        !filter.poolKinds.contains(t.destinationKind)) {
+      continue;
+    }
+    if (filter.fundIds.isNotEmpty &&
+        !((t.sourceKind == PoolKind.fund &&
+                filter.fundIds.contains(t.sourceRefId)) ||
+            (t.destinationKind == PoolKind.fund &&
+                filter.fundIds.contains(t.destinationRefId)))) {
+      continue;
+    }
     if (filter.categoryIds.isNotEmpty &&
         !filter.categoryIds.contains(t.categoryId)) {
       continue;
@@ -312,8 +365,8 @@ ExplorerResult exploreTransactions(
 }
 
 /// Sắp xếp theo [ExplorerSort.rules] theo đúng thứ tự ưu tiên. Chỉ các khóa ĐANG BẬT
-/// tham gia; khi tất cả bằng nhau dùng tie-break cố định (giờ ↑, giờ tạo ↑, id),
-/// không phụ thuộc chiều Ngày/Số tiền nên kết quả luôn xác định.
+/// tham gia; khi tất cả bằng nhau dùng createdAt rồi id theo chiều Ngày,
+/// hoặc chiều khóa đầu nếu không bật Ngày. Giờ phát sinh không phải giờ nhập.
 void _sortRows(List<Transaction> rows, ExplorerSort sort) {
   DateTime dayOf(Transaction t) => DateTime(
     t.transactionDate.year,
@@ -329,10 +382,11 @@ void _sortRows(List<Transaction> rows, ExplorerSort sort) {
       };
       if (c != 0) return rule.ascending ? c : -c;
     }
-    final byTime = a.transactionDate.compareTo(b.transactionDate);
-    if (byTime != 0) return byTime;
     final byCreated = a.createdAt.compareTo(b.createdAt);
-    return byCreated != 0 ? byCreated : a.id.compareTo(b.id);
+    final tie = byCreated != 0 ? byCreated : a.id.compareTo(b.id);
+    final ascending = sort.ascendingOf(SortKey.date) ??
+        (sort.rules.isEmpty ? false : sort.rules.first.ascending);
+    return ascending ? tie : -tie;
   });
 }
 
@@ -361,7 +415,10 @@ List<ExplorerOption> explorerCategoryOptions(
   List<Transaction> transactions, {
   Set<String> hiddenCategoryIds = const {},
 }) {
-  final used = {for (final t in transactions) if (isVisible(t)) t.categoryId};
+  final used = {
+    for (final t in transactions)
+      if (isVisible(t)) t.categoryId,
+  };
   final out = <ExplorerOption>[];
   for (final c in categories) {
     // Danh mục hệ thống nâng cao chỉ hiện khi CÒN giao dịch dùng nó (để không có
