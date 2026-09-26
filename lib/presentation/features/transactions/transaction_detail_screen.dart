@@ -297,6 +297,9 @@ class _TransactionDetailScreenState
           ? 'Giao dịch này thuộc một khoản vay / cho vay nên chưa thể xóa ở đây.'
           : 'Giao dịch này liên quan đến một khoản hoàn tiền / thu hồi nên chưa thể xóa ở đây.';
     }
+    if (error is MainGroupChangeException) {
+      return 'Không thể đổi giao dịch sang nhóm Thu / Chi / Chuyển khác.';
+    }
     if (error is InvalidStatusForCategoryException) {
       return 'Trạng thái đã chọn không thuộc danh mục này — vui lòng chọn lại.';
     }

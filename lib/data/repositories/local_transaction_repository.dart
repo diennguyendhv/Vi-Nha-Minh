@@ -525,6 +525,14 @@ class LocalTransactionRepository implements TransactionRepository {
         // (hoặc lưu lại 1 giao dịch cũ đã lệch) mà không chỉ định trạng thái
         // hợp lệ → XOÁ trạng thái cũ (không để nó "mắc kẹt" ở danh mục khác).
         final effectiveCategoryId = categoryId ?? original.categoryId;
+        if (categoryId != null && categoryId != original.categoryId) {
+          final target = await (_db.select(
+            _db.categoryRows,
+          )..where((r) => r.id.equals(categoryId))).getSingleOrNull();
+          if (target != null && target.type != original.type.name) {
+            throw MainGroupChangeException(transactionId, categoryId);
+          }
+        }
         // Xóa trạng thái vốn đã trống = không làm gì (không đụng statusUpdatedAt).
         var clearStatus = explicitClear && original.statusId != null;
         if (statusId != null) {

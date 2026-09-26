@@ -219,6 +219,19 @@ class InvalidStatusForCategoryException implements Exception {
       'InvalidStatusForCategoryException: trạng thái $statusId không thuộc danh mục $categoryId';
 }
 
+/// Ném ra khi sửa giao dịch sang danh mục thuộc nhóm chính khác (Thu / Chi /
+/// Chuyển). Nhóm chính của 1 giao dịch bất biến khi sửa.
+class MainGroupChangeException implements Exception {
+  const MainGroupChangeException(this.transactionId, this.categoryId);
+
+  final String transactionId;
+  final String categoryId;
+
+  @override
+  String toString() =>
+      'MainGroupChangeException: danh mục $categoryId khác nhóm chính của giao dịch $transactionId';
+}
+
 /// Ném ra khi `amountMinor` không hợp lệ — Invariant 12
 /// (`docs/financial-core-v2.md` mục 18): luôn phải dương, không chấp nhận 0
 /// hay số âm. Đây là validate THẬT ở tầng Financial Engine (không bị strip

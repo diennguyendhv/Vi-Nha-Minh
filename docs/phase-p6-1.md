@@ -52,3 +52,13 @@ and [Wallet statistics semantics](https://support.budgetbakers.com/hc/en-us/arti
 - The installed PROD binary predates P6.1 (it still shows an `All` time chip
   and the previous row layout), so it cannot visually accept the new UI unless
   a P6.1 PROD build is installed. No PROD update was attempted.
+
+## Extended review — canonical transaction unification (2026-09-26)
+
+Audit result: Summary's base iteration filters only `isVisible` (no source/destination kind, transfer kind, category or type exclusion), so every canonical Transaction is discoverable; `computeGroupedTotals` and `ExplorerResult` count only Income/Expense, so Transfer never inflates Thu/Chi. A Fund-backed Expense is an ordinary `EXPENSE` (real category, `sourceKind = FUND`) and matches the Fund filter through either endpoint. Fund and Savings history rows open `TransactionDetailScreen(transactionId)`, which drives the single `updateTransaction` / `deleteTransaction` use cases. The reported gaps were presentation-only (the old Fund-only `_EntryRow` had no tap target; Summary lacked Fund context filters) and are fixed by `23991a6`.
+
+One Financial-Core hole closed: `LocalTransactionRepository.updateTransaction` now rejects a `categoryId` whose type differs from the transaction's type (`MainGroupChangeException`), so Income/Expense/Transfer cannot be switched through any caller. UI already offered only same-type categories.
+
+Known limitation (needs a separately approved data representation, no schema change made): a Fund-backed Expense stores no spending member, so "by member" filtering cannot include it; Transfer endpoint replacement (source/destination) is not editable.
+
+Tests: `test/data/repositories/transaction_unification_test.dart` (real in-memory DB: Husband→Fund, Fund expense, Wife↔Husband, Savings top-up/withdraw/convert, single id, edit, exact-once delete, main-group immutability) and `test/presentation/features/canonical_transaction_entry_test.dart` (Fund/Savings rows → canonical detail → edit/delete).
