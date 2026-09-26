@@ -309,7 +309,9 @@ function validSlot(slot, kind) {
   }
   const kdf = slot.kdf;
   return kind === 'password'
-    ? exactKeys(kdf, ['alg', 'v', 'm', 't', 'p']) && kdf.alg === 'argon2id' && kdf.v === 19 &&
+    // `norm: 'NFC'` versions the client's password pre-processing.
+    ? exactKeys(kdf, ['alg', 'v', 'm', 't', 'p', 'norm']) && kdf.alg === 'argon2id' && kdf.v === 19 &&
+      kdf.norm === 'NFC' &&
       Number.isSafeInteger(kdf.m) && kdf.m >= 19456 && kdf.m <= 1048576 &&
       Number.isSafeInteger(kdf.t) && kdf.t >= 2 && kdf.t <= 10 &&
       Number.isSafeInteger(kdf.p) && kdf.p >= 1 && kdf.p <= 8

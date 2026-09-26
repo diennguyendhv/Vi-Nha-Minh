@@ -169,50 +169,14 @@ class _SessionControlsState extends State<SessionControls> {
       await _confirm(_text.lostTitle, _text.noBackup, _text.done);
       return;
     }
-    final secret = TextEditingController();
-    var useRecoveryKey = false;
-    final go = await showDialog<bool>(
+    final input = await showDialog<({bool recoveryKey, String value})>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text(_text.lostTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_text.lostBody),
-              SegmentedButton<bool>(
-                segments: [
-                  ButtonSegment(value: false, label: Text(_text.usePassword)),
-                  ButtonSegment(value: true, label: Text(_text.useRecoveryKey)),
-                ],
-                selected: {useRecoveryKey},
-                onSelectionChanged: (s) => setLocal(() => useRecoveryKey = s.first),
-              ),
-              TextField(
-                key: const Key('lost_device_secret'),
-                controller: secret,
-                obscureText: !useRecoveryKey,
-                autocorrect: false,
-                enableSuggestions: false,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(_text.cancelSession),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(_text.recover),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _LostDeviceDialog(text: _text),
     );
-    final value = secret.text.trim();
-    secret.dispose();
-    if (go != true || value.isEmpty || !mounted) return;
+    // Password is used exactly as typed (only NFC later; never trimmed).
+    if (input == null || input.value.isEmpty || !mounted) return;
+    final useRecoveryKey = input.recoveryKey;
+    final value = input.value;
     if (!await _stepUp()) return;
     try {
       await backup.recoverOnThisDevice(
@@ -281,6 +245,71 @@ class _SessionControlsState extends State<SessionControls> {
               child: Text(text.checkSession),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Owns its controller: disposed only when the route is gone, never while the
+/// TextField can still rebuild during the exit animation.
+class _LostDeviceDialog extends StatefulWidget {
+  const _LostDeviceDialog({required this.text});
+  final SessionLocalizations text;
+  @override
+  State<_LostDeviceDialog> createState() => _LostDeviceDialogState();
+}
+
+class _LostDeviceDialogState extends State<_LostDeviceDialog> {
+  final _secret = TextEditingController();
+  var _useRecoveryKey = false;
+
+  @override
+  void dispose() {
+    _secret.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.text;
+    return AlertDialog(
+      title: Text(text.lostTitle),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(text.lostBody),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, label: Text(text.usePassword)),
+                ButtonSegment(value: true, label: Text(text.useRecoveryKey)),
+              ],
+              selected: {_useRecoveryKey},
+              onSelectionChanged: (s) =>
+                  setState(() => _useRecoveryKey = s.first),
+            ),
+            TextField(
+              key: const Key('lost_device_secret'),
+              controller: _secret,
+              obscureText: !_useRecoveryKey,
+              autocorrect: false,
+              enableSuggestions: false,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(text.cancelSession),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, (
+            recoveryKey: _useRecoveryKey,
+            value: _secret.text,
+          )),
+          child: Text(text.recover),
         ),
       ],
     );

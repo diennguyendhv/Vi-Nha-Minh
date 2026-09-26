@@ -50,7 +50,7 @@ const b = n => randomBytes(n).toString('base64');
 const token = () => randomBytes(32).toString('base64url');
 function keyring(credential, walletId, proofs) {
   return {...credential, walletId, mode: 'create', cryptoVersion: 1,
-    password: {salt: b(16), kdf: {alg: 'argon2id', v: 19, m: 65536, t: 3, p: 4}, nonce: b(12), wrapped: b(48)},
+    password: {salt: b(16), kdf: {alg: 'argon2id', v: 19, m: 65536, t: 3, p: 4, norm: 'NFC'}, nonce: b(12), wrapped: b(48)},
     recovery: {salt: b(32), kdf: {alg: 'hkdf-sha256'}, nonce: b(12), wrapped: b(48)},
     passwordProof: proofs.password, recoveryProof: proofs.recovery};
 }
@@ -127,6 +127,10 @@ test('P7.1 approved takeover: B cannot silently replace A; grant is single-use',
   assert.deepEqual([ping.pendingTakeover.requestId, ping.pendingTakeover.code], [request.requestId, request.code]);
   const complete = extra => call('completeTakeover', user, {accountId: user.localId, installationId: bId,
     requestId: request.requestId, requestSecret: request.requestSecret, ...extra});
+  // The 6-digit code is display-only: it can never stand in for the grant.
+  denied(await complete({requestSecret: request.code}));
+  assert.equal((await call('approveTakeover', user, {...a, requestId: request.code})).error?.details?.reason,
+    'NO_PENDING_TAKEOVER');
   // Client cannot self-assert approval.
   reason(await complete({approved: true}), 'TAKEOVER_PENDING');
   denied(await call('approveTakeover', user, {accountId: user.localId, installationId: bId,
@@ -159,8 +163,11 @@ test('P7.1 approved takeover: B cannot silently replace A; grant is single-use',
   // Rejected request cannot be completed.
   const rejected = (await call('requestTakeover', user, {accountId: user.localId, installationId: cId})).result;
   assert.equal((await call('rejectTakeover', user, {...bSession, requestId: rejected.requestId})).result.approved, false);
-  denied(await call('completeTakeover', user, {accountId: user.localId, installationId: cId,
-    requestId: rejected.requestId, requestSecret: rejected.requestSecret}));
+  // Denied (or already rate-limited after the earlier failed completions).
+  const afterReject = await call('completeTakeover', user, {accountId: user.localId, installationId: cId,
+    requestId: rejected.requestId, requestSecret: rejected.requestSecret});
+  assert.equal(afterReject.result, undefined);
+  assert.ok(['PERMISSION_DENIED', 'RESOURCE_EXHAUSTED'].includes(afterReject.error.status));
   assert.equal(await allowed(user, bSession), true);
 });
 
@@ -248,9 +255,13 @@ test('backup keyring: password rewrap keeps recovery slot; hashes never returned
   denied(await call('putBackupKeyring', user, {...created, secret: token()}));
   await call('putBackupKeyring', user, created);
   reason(await call('putBackupKeyring', user, created), 'KEYRING_EXISTS');
+  const {norm, ...noNorm} = created.password.kdf;
+  assert.equal(norm, 'NFC');
+  assert.equal((await call('putBackupKeyring', user, {...created, walletId: walletId + 'x',
+    password: {...created.password, kdf: noNorm}})).error.status, 'INVALID_ARGUMENT');
   assert.equal((await call('putBackupKeyring', user, {...created, password: {...created.password,
-    kdf: {alg: 'argon2id', v: 19, m: 1024, t: 1, p: 1}}})).error.status, 'INVALID_ARGUMENT');
-  const newSlot = {salt: b(16), kdf: {alg: 'argon2id', v: 19, m: 65536, t: 3, p: 4}, nonce: b(12), wrapped: b(48)};
+    kdf: {alg: 'argon2id', v: 19, m: 1024, t: 1, p: 1, norm: 'NFC'}}})).error.status, 'INVALID_ARGUMENT');
+  const newSlot = {salt: b(16), kdf: {alg: 'argon2id', v: 19, m: 65536, t: 3, p: 4, norm: 'NFC'}, nonce: b(12), wrapped: b(48)};
   const rewrap = extra => call('putBackupKeyring', user, {...a, walletId, mode: 'rewrapPassword',
     expectedRev: 1, password: newSlot, passwordProof: token(), ...extra});
   reason(await call('putBackupKeyring', staleSignIn(user), {...a, walletId, mode: 'rewrapPassword',

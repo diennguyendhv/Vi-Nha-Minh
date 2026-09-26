@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:cryptography/dart.dart';
+import 'package:unorm_dart/unorm_dart.dart' as unorm;
 
 /// P8 zero-knowledge backup primitives (cryptoVersion 1).
 ///
@@ -70,14 +71,22 @@ abstract final class BackupCrypto {
   static String _token(List<int> bytes) =>
       base64Url.encode(bytes).replaceAll('=', '');
 
-  /// Backup Password → Argon2id root (salted, versioned params) → HKDF into an
-  /// independent KEK and an independent takeover credential.
+  /// Password pre-processing, versioned in KDF metadata (`norm: 'NFC'`):
+  /// Unicode NFC only — no trim, no case folding, no NFKC. Composed and
+  /// decomposed Vietnamese input (e.g. "ệ" vs "e"+U+0323+U+0302) are equal.
+  static List<int> passwordBytes(String password) =>
+      utf8.encode(unorm.nfc(password));
+
+  /// Backup Password → NFC → UTF-8 → Argon2id root (salted, versioned params)
+  /// → domain-separated HKDF into an independent KEK and an independent
+  /// takeover credential. The takeover credential is NEVER derived from the
+  /// raw password by a fast hash — only from the Argon2id root.
   static Future<KeySlotSecrets> fromPassword(
     String password,
     List<int> salt,
     KdfParams params,
   ) async {
-    final root = await argon2id(utf8.encode(password), salt, params);
+    final root = await argon2id(passwordBytes(password), salt, params);
     return KeySlotSecrets._(
       await hkdf(root, info: passwordKekLabel),
       _token(await hkdf(root, info: passwordTakeoverLabel)),
@@ -174,10 +183,16 @@ class KdfParams {
     'm': memoryKib,
     't': iterations,
     'p': parallelism,
+    'norm': passwordNormalization,
   };
 
+  /// Only supported password pre-processing (versioned with the slot).
+  static const passwordNormalization = 'NFC';
+
   static KdfParams fromJson(Map<String, Object?> json) {
-    if (json['alg'] != 'argon2id' || json['v'] != 19) {
+    if (json['alg'] != 'argon2id' ||
+        json['v'] != 19 ||
+        json['norm'] != passwordNormalization) {
       throw const BackupKeyException();
     }
     final m = json['m'], t = json['t'], p = json['p'];

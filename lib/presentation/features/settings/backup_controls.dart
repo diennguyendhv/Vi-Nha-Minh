@@ -26,7 +26,15 @@ class _BackupControlsState extends State<BackupControls> {
   @override
   void initState() {
     super.initState();
+    // Revoked by lost-device recovery ⇒ BMK wiped; reflect it immediately.
+    widget.backup.session.revokedHandlers.add(_refresh);
     _refresh();
+  }
+
+  @override
+  void dispose() {
+    widget.backup.session.revokedHandlers.remove(_refresh);
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -56,54 +64,22 @@ class _BackupControlsState extends State<BackupControls> {
   }
 
   Future<List<String>?> _askPasswords({required bool change}) async {
-    final fields = [
-      if (change) TextEditingController(),
-      TextEditingController(),
-      TextEditingController(),
-    ];
     final labels = [
       if (change) _text.backupOldPassword,
       _text.backupPassword,
       _text.backupPasswordRepeat,
     ];
-    final ok = await showDialog<bool>(
+    final values = await showDialog<List<String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(change ? _text.backupChangePassword : _text.backupEnable),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_text.backupPasswordHint),
-              for (var i = 0; i < fields.length; i++)
-                TextField(
-                  key: Key('backup_password_$i'),
-                  controller: fields[i],
-                  obscureText: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(labelText: labels[i]),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(_text.cancelSession),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(_text.done),
-          ),
-        ],
+      builder: (_) => _PasswordDialog(
+        title: change ? _text.backupChangePassword : _text.backupEnable,
+        hint: _text.backupPasswordHint,
+        labels: labels,
+        cancel: _text.cancelSession,
+        done: _text.done,
       ),
     );
-    final values = [for (final f in fields) f.text];
-    for (final f in fields) {
-      f.dispose();
-    }
-    if (ok != true) return null;
+    if (values == null) return null;
     final next = values[values.length - 2];
     if (next != values.last || next.length < BackupService.minPasswordLength) {
       throw ArgumentError('password');
@@ -214,4 +190,70 @@ class _BackupControlsState extends State<BackupControls> {
       ],
     );
   }
+}
+
+/// Owns its controllers: disposed only when the route is gone, never while a
+/// TextField can still rebuild during the exit animation (keyboard closing).
+class _PasswordDialog extends StatefulWidget {
+  const _PasswordDialog({
+    required this.title,
+    required this.hint,
+    required this.labels,
+    required this.cancel,
+    required this.done,
+  });
+  final String title;
+  final String hint;
+  final List<String> labels;
+  final String cancel;
+  final String done;
+  @override
+  State<_PasswordDialog> createState() => _PasswordDialogState();
+}
+
+class _PasswordDialogState extends State<_PasswordDialog> {
+  late final _fields = [
+    for (final _ in widget.labels) TextEditingController(),
+  ];
+
+  @override
+  void dispose() {
+    for (final f in _fields) {
+      f.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(widget.hint),
+          for (var i = 0; i < _fields.length; i++)
+            TextField(
+              key: Key('backup_password_$i'),
+              controller: _fields[i],
+              obscureText: true,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(labelText: widget.labels[i]),
+            ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: Text(widget.cancel),
+      ),
+      FilledButton(
+        onPressed: () =>
+            Navigator.pop(context, [for (final f in _fields) f.text]),
+        child: Text(widget.done),
+      ),
+    ],
+  );
 }

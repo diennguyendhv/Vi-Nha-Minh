@@ -2,8 +2,8 @@
 
 Status: **P7 PASS (2026-09-26)** — deployed DEV backend rejects stale device credentials
 and Pixel lifecycle acceptance passed. **P7.1 secure takeover: implemented + emulator
-PASS; DEV deploy/Pixel acceptance pending** (see section P7.1 and
-`docs/p8-cloud-backup-architecture.md`).
+PASS, deployed to DEV and Pixel-accepted (2026-09-26)** (see section P7.1,
+"P7.1 DEV live proof" and `docs/p8-cloud-backup-architecture.md`).
 
 ## Architecture and scope
 
@@ -70,6 +70,34 @@ Step-up (device credential/biometric where available + Google
 lost-device recovery; RECENT_LOGIN_REQUIRED offers "Xác thực lại".
 Limitations: a thief who also has the victim's Google credentials AND Backup
 Password/Recovery Key can recover; the takeover code is compared by a human.
+
+### P7.1 DEV live proof (2026-09-26)
+Two logical installations on the Pixel via the owner-approved sandbox prefs
+replay (A = `987ffdd3…`, B = `c44d7e15…`; copies deleted afterwards). Verdicts
+from Cloud Run request logs + Firestore read-back:
+- A (legacy P7 credential, epoch defaulted to 1) `protectedPing` 200; A rotated
+  itself with its own credential (gen 5→6) — allowed.
+- B normal `activateSession` **400 TAKEOVER_REQUIRED**; `requestTakeover` 200 with
+  code 564429; `completeTakeover` before approval **400 TAKEOVER_PENDING**.
+- A `protectedPing` returned the pending request, showed the same code; approval
+  after step-up (device credential + Google re-auth) → server `approved:true`,
+  target = B's installation.
+- **Not live:** B completing the approved grant, grant reuse / expiry / wrong
+  installation. The request secret lives only in B's memory and the single-phone
+  replay requires a force-stop to switch A↔B. These are proven by the emulator
+  suite (real HTTP + Firestore transactions), not on DEV.
+- Lost device: B `listBackupWallets` → `getBackupKeyring` → `recoverSession` 200
+  (Backup Password proof after step-up) ⇒ server gen 7, **epoch 1→2**, B active,
+  `revokedInstallations=[A]`, pending approval cleared; B ping 200.
+- Old A: `protectedPing` **403 DEVICE_REVOKED** ⇒ client wiped its P7 credential
+  and its Keystore-wrapped BMK (prefs verified empty); `activateSession` **400
+  RECOVERY_REQUIRED** despite valid Firebase Auth; `deactivateSession` **403** —
+  B stayed active (gen 7, epoch 2).
+- **Rate limit not exercised live:** the honest client unwraps locally first, so
+  a wrong password never reaches the server. Server lockout is emulator-proven.
+- No automatic activation after reinstall/reopen/sign-in; App Lock (off) and
+  its separate storage untouched. Pixel DEV left SIGNED OUT; server session B
+  active. PROD package/data not touched.
 
 ## Client behavior and storage
 

@@ -1,6 +1,7 @@
 # P8 — Zero-knowledge Cloud Backup Architecture (approved 2026-09-26)
 
-Status: **crypto + envelope + backend interface implemented (DEV fixture only)**.
+Status: **crypto + envelope + backend interface implemented, deployed to DEV and
+Pixel-accepted with DEV fixture data (2026-09-26)**.
 Full backup/restore engine, Wallet claim and real-data upload: **NOT started**.
 Replaces the earlier (chat-only) P8 audit model of per-entity docs with a
 plaintext `d:{…}` body. Source of truth for P8 cloud data shape.
@@ -24,7 +25,7 @@ plaintext `d:{…}` body. Source of truth for P8 cloud data shape.
 | BMK (256-bit) | CSPRNG | root only; never encrypts directly |
 | DEK | HKDF-SHA256(BMK, `vinhaminh-wallet-data-v1`) | AES-256-GCM of envelopes |
 | IDK | HKDF-SHA256(BMK, `vinhaminh-wallet-id-v1`) | HMAC opaque entity ids |
-| Password root | Argon2id(password, 16B salt, m=64 MiB, t=3, p=4, v=0x13) | input to HKDF only |
+| Password root | Argon2id(UTF-8(NFC(password)), 16B salt, m=64 MiB, t=3, p=4, v=0x13) | input to HKDF only |
 | Password KEK | HKDF(root, `vinhaminh-backup-password-kek-v1`) | wrap/unwrap BMK |
 | Password takeover credential | HKDF(root, `vinhaminh-device-takeover-password-v1`) | P7.1 lost-device proof |
 | Recovery KEK | HKDF(RecoverySecret, 32B salt, `vinhaminh-backup-recovery-v1`) | wrap/unwrap BMK |
@@ -55,8 +56,12 @@ plaintext `d:{…}` body. Source of truth for P8 cloud data shape.
 - Forgot password: (A) trusted device with BMK → set new password after step-up;
   (B) no trusted device → Recovery Key unwraps BMK; (C) no trusted device + no
   password + no Recovery Key → **backup is unrecoverable. No admin reset exists.**
-- Known limitation: password bytes are UTF-8 without Unicode normalization;
-  Vietnamese diacritics typed with a different keyboard composition may differ.
+- Password pre-processing = Unicode **NFC only** (no trim, no case folding, no
+  NFKC), versioned as `kdf.norm: 'NFC'` (server requires it; client refuses a
+  slot without it). Composed/decomposed Vietnamese input derives the same key;
+  case and whitespace stay significant (tests). The UI never trims passwords.
+- The password takeover credential is ONLY HKDF(Argon2id root) — never a fast
+  hash of the raw password. The Recovery Key uses HKDF directly (256-bit random).
 
 ## 4. BMK at rest on device
 `BackupKeyBridge.kt`: non-exportable Keystore AES-256-GCM key
@@ -117,6 +122,22 @@ entity kinds, local ids, Backup Password, Recovery Key, BMK/KEKs/DEK.
 - Server cannot enforce financial invariants on ciphertext (e.g. non-negative
   pools); the client engine remains authoritative. Family (two writers) needs a
   separate design before P10.
+
+## 8b. DEV deployment + Pixel acceptance (2026-09-26)
+Deployed `functions:p7-session,firestore:rules` to `vi-nha-minh-55c60` only.
+Pixel DEV (`.dev`, owner present for step-up/typing): Backup Password with
+Vietnamese characters; Recovery Key shown once (owner-confirmed, not captured);
+fixture encrypt → upload → download/decrypt 3/3; force-stop/reopen: P7
+credential + BMK survive via Keystore, decrypt 3/3 again. Firestore read back
+(owner admin token, read-only): wallet/entities/batches/keyring contain only
+`{v,id,rev,n,c,aad,serverRev}` + wrapped slots (`norm:'NFC'`); none of the
+fixture amounts, notes, names, local ids or entity kinds present. Password
+change: keyring rev 1→2, recovery slot identical, all 3 entity `updateTime`
+unchanged (no re-encryption). Lost-device recovery restored the BMK on the new
+installation from the Backup Password and decrypted 3/3.
+Found + fixed on device: secret dialogs disposed their TextEditingController
+while the route was still animating out (red debug screen); dialogs now own
+their controllers (regression tests `test/auth/secret_dialog_lifecycle_test.dart`).
 
 ## 9. Remaining before full P8
 SQLCipher phase (hard gate) → Wallet claim flow → outbox + incremental upload of

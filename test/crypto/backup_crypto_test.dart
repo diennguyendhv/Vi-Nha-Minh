@@ -200,6 +200,57 @@ void main() {
       );
     });
 
+    test('NFC: composed/decomposed Vietnamese derive the same keys', () async {
+      final salt = List.filled(16, 5);
+      // "Mật khẩu Tiệm" precomposed vs fully decomposed (base + combining marks).
+      const composed = 'Mật khẩu Tiệm';
+      const decomposed = 'Mật khẩu Tiệm';
+      expect(composed == decomposed, isFalse);
+      expect(utf8.encode(composed), isNot(utf8.encode(decomposed)));
+      final a = await BackupCrypto.fromPassword(composed, salt, fast);
+      final b = await BackupCrypto.fromPassword(decomposed, salt, fast);
+      expect(a.proof, b.proof);
+      // Wrapped with one form, unwrapped with the other.
+      final bmk = BackupCrypto.newBmk();
+      final slot = await BackupCrypto.wrap(bmk: bmk, secrets: a, salt: salt,
+          kdf: fast.toJson(), walletId: walletId, slot: 'password');
+      expect(await BackupCrypto.unwrap(slot: slot, secrets: b, walletId: walletId,
+          slotName: 'password'), bmk);
+      expect(fast.toJson()['norm'], 'NFC');
+    });
+
+    test('case and whitespace stay significant (no trim, no case fold, no NFKC)', () async {
+      final salt = List.filled(16, 6);
+      final base = (await BackupCrypto.fromPassword('Mật khẩu 1', salt, fast)).proof;
+      for (final variant in ['mật khẩu 1', 'MẬT KHẨU 1', ' Mật khẩu 1', 'Mật khẩu 1 ',
+          'Mật  khẩu 1', 'Mật khẩu １']) {
+        expect((await BackupCrypto.fromPassword(variant, salt, fast)).proof,
+            isNot(base), reason: variant);
+      }
+    });
+
+    test('password takeover credential = HKDF(Argon2id(NFC(pw))), never a fast hash', () async {
+      final salt = List.filled(16, 3);
+      const pw = 'Tiện chợ 2026';
+      final got = (await BackupCrypto.fromPassword(pw, salt, fast)).proof;
+      final root = await BackupCrypto.argon2id(
+        utf8.encode('Tiện chợ 2026'), salt, fast);
+      final expected = base64Url.encode(await BackupCrypto.hkdf(root,
+          info: BackupCrypto.passwordTakeoverLabel)).replaceAll('=', '');
+      expect(got, expected);
+      final fastHash = base64Url.encode(await BackupCrypto.hkdf(
+          BackupCrypto.passwordBytes(pw), salt: salt,
+          info: BackupCrypto.passwordTakeoverLabel)).replaceAll('=', '');
+      expect(got, isNot(fastHash));
+      final kek = await BackupCrypto.hkdf(root, info: BackupCrypto.passwordKekLabel);
+      expect(got, isNot(base64Url.encode(kek).replaceAll('=', '')));
+    });
+
+    test('KDF metadata without NFC version is refused', () {
+      expect(() => KdfParams.fromJson({'alg': 'argon2id', 'v': 19, 'm': 65536, 't': 3, 'p': 4}),
+          throwsA(isA<BackupKeyException>()));
+    });
+
     test('downgraded KDF params from server are refused', () {
       expect(
         () => KdfParams.fromJson({'alg': 'argon2id', 'v': 19, 'm': 8, 't': 1, 'p': 1}),
