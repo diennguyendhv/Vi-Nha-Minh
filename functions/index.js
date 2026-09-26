@@ -412,8 +412,10 @@ exports.putEncryptedBatch = onCall(options, async request => {
     const wallet = (await tx.get(walletRef)).data();
     const receipt = (await tx.get(receiptRef)).data();
     const current = await Promise.all(entityRefs.map(r => tx.get(r)));
-    if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
     if (wallet && wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
+    // P8.2 claims ownership only; encrypted upload of a claimed Wallet is P8.3.
+    if (wallet?.state === 'CLAIMED') throw reject('failed-precondition', 'BACKUP_NOT_ENABLED');
+    if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
     if (!wallet && data.fixture !== true) throw reject('failed-precondition', 'FIXTURE_ONLY');
     if (receipt) return {headRev: receipt.headRev, duplicate: true};
     const head = wallet?.headRev ?? 0;
@@ -449,4 +451,152 @@ exports.getEncryptedChanges = onCall(options, async request => {
     const {v, id, rev, n, c, aad, serverRev} = d.data();
     return {v, id, rev, n, c, aad, serverRev};
   })};
+});
+
+
+// ---------------------------------------------------------------------------
+// P8.2 explicit Personal Wallet claim. Ownership metadata ONLY: wallet id,
+// opaque FinancialMember ids, the member the user picked as themselves and
+// schema/crypto versions. No financial entity, amount, name, label or note is
+// accepted here (unknown request fields are rejected, not ignored).
+// ---------------------------------------------------------------------------
+const memberIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
+// This backend only ever serves DEV (see context()); PILOT/PROD stay disabled.
+const SERVER_ENVIRONMENT = 'dev';
+const MAX_MEMBERS = 2;
+const CREDENTIAL_KEYS = ['accountId', 'installationId', 'generation', 'epoch', 'secret'];
+const onlyKeys = (data, keys) =>
+  Object.keys(data).every(k => CREDENTIAL_KEYS.includes(k) || keys.includes(k));
+function claimRefs(uid, walletId) {
+  const walletRef = db.doc(`wallets/${walletId}`);
+  return {walletRef, membershipRef: walletRef.collection('memberships').doc(uid),
+    // One deterministic doc per Account: "owns no Personal Wallet yet" is a
+    // single read inside the transaction, so two concurrent claims conflict.
+    indexRef: db.doc(`accounts/${uid}/walletIndex/personal`)};
+}
+function validMembers(members) {
+  return Array.isArray(members) && members.length >= 1 && members.length <= MAX_MEMBERS &&
+    members.every(m => exactKeys(m, ['memberId']) && typeof m.memberId === 'string' &&
+      memberIdPattern.test(m.memberId)) &&
+    new Set(members.map(m => m.memberId)).size === members.length;
+}
+const sortedIds = members => members.map(m => m.memberId).sort();
+function claimInput(data) {
+  if (!onlyKeys(data, ['walletId', 'selfMemberId', 'membersMinimalMetadata', 'payloadSchema',
+    'cryptoVersion', 'environment', 'claimRequestId']) ||
+      typeof data.walletId !== 'string' || !uuid.test(data.walletId) ||
+      typeof data.claimRequestId !== 'string' || !uuid.test(data.claimRequestId) ||
+      !validMembers(data.membersMinimalMetadata) || typeof data.selfMemberId !== 'string' ||
+      !data.membersMinimalMetadata.some(m => m.memberId === data.selfMemberId) ||
+      !Number.isSafeInteger(data.payloadSchema) || data.payloadSchema < 1 ||
+      data.payloadSchema > 1000 || data.cryptoVersion !== 1 ||
+      typeof data.environment !== 'string') {
+    throw new HttpsError('invalid-argument', 'Invalid claim');
+  }
+  if (data.environment !== SERVER_ENVIRONMENT) {
+    throw reject('failed-precondition', 'ENVIRONMENT_MISMATCH');
+  }
+}
+const claimResult = (wallet, walletId, idempotent) => ({claimed: true, idempotent, walletId,
+  selfMemberId: wallet.selfMemberId, claimRequestId: wallet.claimRequestId,
+  headRev: wallet.headRev ?? 0});
+
+/**
+ * P8.2: binds CLOUD ownership of one Personal Wallet to this Account. Session
+ * gate (P7.1 current installation), conflict checks and every write happen in
+ * ONE transaction. Retrying a committed claim (same owner, same member, same
+ * member set) returns the original claim without writing anything.
+ */
+exports.claimWallet = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  claimInput(data);
+  const {walletRef, membershipRef, indexRef} = claimRefs(uid, data.walletId);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const wallet = (await tx.get(walletRef)).data();
+    const index = (await tx.get(indexRef)).data();
+    if (wallet) {
+      if (wallet.ownerAccountId !== uid) throw reject('failed-precondition', 'ALREADY_CLAIMED');
+      // e.g. a pre-claim DEV fixture backup document: never converted silently.
+      if (wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'WALLET_NOT_CLAIMABLE');
+      if (wallet.selfMemberId !== data.selfMemberId) {
+        throw reject('failed-precondition', 'SELF_MEMBER_MISMATCH');
+      }
+      if (sortedIds(data.membersMinimalMetadata).join() !== [...wallet.memberIds].sort().join() ||
+          wallet.environment !== data.environment) {
+        throw reject('failed-precondition', 'CLAIM_MISMATCH');
+      }
+      return claimResult(wallet, data.walletId, true);
+    }
+    if (index) throw reject('failed-precondition', 'ACCOUNT_HAS_WALLET');
+    // Creating ownership is a sensitive, one-way step: fresh sign-in required.
+    requireRecentAuth(request);
+    const now = Timestamp.now();
+    const created = {kind: 'personal', state: 'CLAIMED', ownerAccountId: uid,
+      selfMemberId: data.selfMemberId, memberIds: sortedIds(data.membersMinimalMetadata),
+      payloadSchema: data.payloadSchema, cryptoVersion: data.cryptoVersion,
+      environment: data.environment, claimRequestId: data.claimRequestId, headRev: 0,
+      claimedAt: now};
+    tx.create(walletRef, created);
+    tx.create(membershipRef, {accountId: uid, role: 'OWNER', status: 'ACTIVE',
+      memberId: data.selfMemberId, createdAt: now});
+    tx.create(indexRef, {walletId: data.walletId, createdAt: now});
+    return claimResult(created, data.walletId, false);
+  });
+});
+
+/** Read-only claim status, for the signed-in Account's CURRENT device only. */
+exports.getWalletClaim = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  if (!onlyKeys(data, ['walletId']) || typeof data.walletId !== 'string' ||
+      !uuid.test(data.walletId)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  authorize((await ref.get()).data(), data);
+  const wallet = (await db.doc(`wallets/${data.walletId}`).get()).data();
+  if (!wallet || wallet.state !== 'CLAIMED') return {claimed: false};
+  if (wallet.ownerAccountId !== uid) return {claimed: true, ownedByYou: false};
+  return {...claimResult(wallet, data.walletId, true), ownedByYou: true};
+});
+
+/**
+ * Undo a claim ONLY while nothing was backed up (headRev 0, no encrypted
+ * entities, no batch receipts). Owner + current session + exact claim identity
+ * + recent sign-in. Removes wallet, owner membership and account index at once.
+ */
+exports.abandonClaim = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  if (!onlyKeys(data, ['walletId', 'selfMemberId', 'claimRequestId']) ||
+      typeof data.walletId !== 'string' || !uuid.test(data.walletId) ||
+      typeof data.claimRequestId !== 'string' || !uuid.test(data.claimRequestId) ||
+      typeof data.selfMemberId !== 'string' || !memberIdPattern.test(data.selfMemberId)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  requireRecentAuth(request);
+  const {walletRef, membershipRef, indexRef} = claimRefs(uid, data.walletId);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const wallet = (await tx.get(walletRef)).data();
+    const index = (await tx.get(indexRef)).data();
+    const entities = await tx.get(walletRef.collection('entities').limit(1));
+    const batches = await tx.get(walletRef.collection('batches').limit(1));
+    if (!wallet) {
+      // Retry after a committed abandon, or a claim that never reached the server.
+      if (index?.walletId === data.walletId) tx.delete(indexRef);
+      return {abandoned: true, alreadyAbsent: true};
+    }
+    if (wallet.ownerAccountId !== uid || wallet.state !== 'CLAIMED') {
+      throw reject('failed-precondition', 'ALREADY_CLAIMED');
+    }
+    if (wallet.claimRequestId !== data.claimRequestId || wallet.selfMemberId !== data.selfMemberId) {
+      throw reject('failed-precondition', 'CLAIM_MISMATCH');
+    }
+    if ((wallet.headRev ?? 0) !== 0 || !entities.empty || !batches.empty) {
+      throw reject('failed-precondition', 'BACKUP_STARTED');
+    }
+    tx.delete(walletRef);
+    tx.delete(membershipRef);
+    if (index?.walletId === data.walletId) tx.delete(indexRef);
+    return {abandoned: true, alreadyAbsent: false};
+  });
 });

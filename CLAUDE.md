@@ -177,3 +177,10 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - **Quỹ chính = `wallet_settings.primary_fund_id`** (`LocalWalletSettingsRepository`); prefs cũ chỉ là nguồn đọc dự phòng + di trú 1 lần; ghi mới chỉ vào DB.
 - **`SeedProfile.none`** = ví rỗng tuyệt đối (kể cả `wallet_meta`/thành viên) cho khôi phục; vẫn mở qua `AppDatabase` ⇒ SQLCipher từ lúc tạo, không có file bản rõ. Khoá DB gắn theo tên file — đổi tên `.restoring` → file thật cần xử lý khoá ở engine khôi phục (P8.x).
 - Chưa làm (P8.2+): claim/backend, đẩy/kéo, mốc nền khi ACTIVE (`SyncOutboxStore.enqueueFullSnapshot` đã có, chưa ai gọi), rev theo thực thể, engine khôi phục.
+
+## 25. P8.2 — Claim ví Personal TƯỜNG MINH qua backend (2026-09-26, nguồn: `docs/p8-cloud-backup-architecture.md` §8d)
+- **Claim chỉ gắn QUYỀN CLOUD, không bao giờ làm truy cập cục bộ phụ thuộc Firebase.** Sau claim, máy này vẫn mở ví SQLCipher khi offline/đã đăng xuất (`canOpen`: ví `personal` mở được ở phạm vi local); đăng xuất chỉ dừng thao tác cloud; Account khác không có quyền cloud (máy chủ kiểm owner). Không làm yếu SQLCipher/App Lock.
+- Đăng nhập KHÔNG BAO GIỜ tự claim. Luồng: "Sao lưu ví này" → cần phiên P7.1 → "Bạn là ai trong ví này?" (không mặc định) → xác nhận rõ hệ quả → step-up → `WalletClaimService.claim`. Chỉ DEV (`WalletClaimService.allowedIn`, backend allowlist).
+- Máy trạng thái: NONE → CLAIMING (ghi `claimRequestId` TRƯỚC khi gọi mạng) → ACTIVE (1 DB transaction kiểm walletId/selfMember, lưu id claim gốc của máy chủ, `wallet_meta.kind` → personal) → registry đồng bộ TỪ DB (`reconcileRegistryFromDb`, cả lúc khởi động). Lỗi mạng/phiên ⇒ giữ CLAIMING, thử lại cùng id; lý do dứt khoát của máy chủ ⇒ `release()` về NONE.
+- `claimWallet` = 1 Firestore transaction (P7.1 authorize + xung đột + ghi); chỉ nhận metadata sở hữu (whitelist khoá; trường lạ ⇒ INVALID_ARGUMENT). `abandonClaim` chỉ khi headRev 0 và không có entity/batch. `putEncryptedBatch` từ chối ví đã claim (BACKUP_NOT_ENABLED) tới P8.3. Rules vẫn deny-all.
+- PROD: KHÔNG claim. Chưa đẩy outbox, chưa sao lưu dữ liệu thật, chưa khôi phục (P8.3+).

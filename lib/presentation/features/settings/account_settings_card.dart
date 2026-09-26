@@ -12,6 +12,7 @@ import '../../providers/auth_providers.dart';
 import '../../providers/session_provider.dart';
 import 'backup_controls.dart';
 import 'session_controls.dart';
+import 'wallet_claim_controls.dart';
 
 /// Step-up: device credential/biometric where the phone has one, then a fresh
 /// Google re-authentication (refreshes auth_time) without signing out.
@@ -111,7 +112,7 @@ class AccountSettingsCard extends ConsumerWidget {
           const SizedBox(height: 12),
           if (account != null)
             const Text(
-              'Đăng nhập chỉ xác nhận danh tính. Dữ liệu tài chính vẫn chỉ nằm trên máy này; chưa được sao lưu hay đồng bộ.',
+              'Đăng nhập chỉ xác nhận danh tính và không tự gắn ví nào. Dữ liệu tài chính vẫn chỉ nằm trên máy này; chưa được sao lưu hay đồng bộ.',
               key: Key('account_local_note'),
               style: TextStyle(
                 fontSize: 12,
@@ -135,6 +136,15 @@ class AccountSettingsCard extends ConsumerWidget {
               backup: ref.watch(backupServiceProvider),
               stepUp: () => _stepUp(context, ref),
             ),
+          if (account != null && ref.watch(walletClaimServiceProvider) != null) ...[
+            const SizedBox(height: 10),
+            WalletClaimControls(
+              key: ValueKey('claim-${account.uid}'),
+              service: ref.watch(walletClaimServiceProvider)!,
+              accountLabel: account.email ?? account.label,
+              stepUp: () => _stepUp(context, ref),
+            ),
+          ],
           if (account != null &&
               ref.watch(backupServiceProvider) != null &&
               AppEnvironment.current == AppEnvironment.dev) ...[

@@ -418,6 +418,168 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version.'**
   String get dbRecoveryBody;
+
+  /// No description provided for @claimTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up this Wallet'**
+  String get claimTitle;
+
+  /// No description provided for @claimNone.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wallet lives only on this device and is not linked to any account.'**
+  String get claimNone;
+
+  /// No description provided for @claimStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up this Wallet'**
+  String get claimStart;
+
+  /// No description provided for @claimNeedSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Activate this device for cloud first (Activate this device).'**
+  String get claimNeedSession;
+
+  /// No description provided for @claimWhoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Who are you in this Wallet?'**
+  String get claimWhoTitle;
+
+  /// No description provided for @claimWhoBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the member the signed-in account represents. There is no default; no transaction is changed.'**
+  String get claimWhoBody;
+
+  /// No description provided for @claimMemberSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} transactions · {range}'**
+  String claimMemberSummary(int count, String range);
+
+  /// No description provided for @claimMemberEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No transactions yet'**
+  String get claimMemberEmpty;
+
+  /// No description provided for @claimNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get claimNext;
+
+  /// No description provided for @claimConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm Wallet registration'**
+  String get claimConfirmTitle;
+
+  /// No description provided for @claimConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'• The account {account} becomes the cloud Owner of this Wallet.\n• {member} is you in this Wallet; the other member stays as is, not linked to any account.\n• NO financial data is uploaded in this step — ownership information only.\n• Signing out later does not hide or delete the Wallet on this device.'**
+  String claimConfirmBody(String account, String member);
+
+  /// No description provided for @claimConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Register Wallet'**
+  String get claimConfirm;
+
+  /// No description provided for @claimPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing Wallet registration with the server. Data on this device is unchanged.'**
+  String get claimPending;
+
+  /// No description provided for @claimRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get claimRetry;
+
+  /// No description provided for @claimActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet registered to this account (you are {member}). No financial data has been uploaded yet.'**
+  String claimActive(String member);
+
+  /// No description provided for @claimOtherAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wallet is registered to a different account. The signed-in account has no cloud access to it; the Wallet on this device keeps working.'**
+  String get claimOtherAccount;
+
+  /// No description provided for @claimCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check with server'**
+  String get claimCheck;
+
+  /// No description provided for @claimServerOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Server confirms: this account is the Wallet Owner.'**
+  String get claimServerOk;
+
+  /// No description provided for @claimServerMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The server has no registration of this Wallet for this account.'**
+  String get claimServerMissing;
+
+  /// No description provided for @claimAbandon.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Wallet registration'**
+  String get claimAbandon;
+
+  /// No description provided for @claimAbandonBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only possible while nothing has been backed up to the cloud. Data on this device is kept.'**
+  String get claimAbandonBody;
+
+  /// No description provided for @claimAbandoned.
+  ///
+  /// In en, this message translates to:
+  /// **'Registration cancelled. The Wallet lives only on this device again.'**
+  String get claimAbandoned;
+
+  /// No description provided for @claimAlreadyClaimed.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wallet is already registered by another account.'**
+  String get claimAlreadyClaimed;
+
+  /// No description provided for @claimAccountHasWallet.
+  ///
+  /// In en, this message translates to:
+  /// **'This account already owns another Wallet.'**
+  String get claimAccountHasWallet;
+
+  /// No description provided for @claimSelfMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The server recorded you as a different member of this Wallet. Please choose again.'**
+  String get claimSelfMismatch;
+
+  /// No description provided for @claimBackupStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup has already started, so the registration cannot be cancelled.'**
+  String get claimBackupStarted;
+
+  /// No description provided for @claimFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Registration did not complete. Data on this device is unchanged; please try again later.'**
+  String get claimFailed;
 }
 
 class _SessionLocalizationsDelegate

@@ -26,6 +26,10 @@ class SessionTransportClient {
     'listBackupWallets',
     'putEncryptedBatch',
     'getEncryptedChanges',
+    // P8.2: ownership metadata only (no financial payload).
+    'claimWallet',
+    'getWalletClaim',
+    'abandonClaim',
   };
 
   Future<Map<String, dynamic>> call(

@@ -191,4 +191,105 @@ class SessionLocalizationsEn extends SessionLocalizations {
   @override
   String get dbRecoveryBody =>
       'The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version.';
+
+  @override
+  String get claimTitle => 'Back up this Wallet';
+
+  @override
+  String get claimNone =>
+      'This Wallet lives only on this device and is not linked to any account.';
+
+  @override
+  String get claimStart => 'Back up this Wallet';
+
+  @override
+  String get claimNeedSession =>
+      'Activate this device for cloud first (Activate this device).';
+
+  @override
+  String get claimWhoTitle => 'Who are you in this Wallet?';
+
+  @override
+  String get claimWhoBody =>
+      'Choose the member the signed-in account represents. There is no default; no transaction is changed.';
+
+  @override
+  String claimMemberSummary(int count, String range) {
+    return '$count transactions · $range';
+  }
+
+  @override
+  String get claimMemberEmpty => 'No transactions yet';
+
+  @override
+  String get claimNext => 'Continue';
+
+  @override
+  String get claimConfirmTitle => 'Confirm Wallet registration';
+
+  @override
+  String claimConfirmBody(String account, String member) {
+    return '• The account $account becomes the cloud Owner of this Wallet.\n• $member is you in this Wallet; the other member stays as is, not linked to any account.\n• NO financial data is uploaded in this step — ownership information only.\n• Signing out later does not hide or delete the Wallet on this device.';
+  }
+
+  @override
+  String get claimConfirm => 'Register Wallet';
+
+  @override
+  String get claimPending =>
+      'Finishing Wallet registration with the server. Data on this device is unchanged.';
+
+  @override
+  String get claimRetry => 'Retry';
+
+  @override
+  String claimActive(String member) {
+    return 'Wallet registered to this account (you are $member). No financial data has been uploaded yet.';
+  }
+
+  @override
+  String get claimOtherAccount =>
+      'This Wallet is registered to a different account. The signed-in account has no cloud access to it; the Wallet on this device keeps working.';
+
+  @override
+  String get claimCheck => 'Check with server';
+
+  @override
+  String get claimServerOk =>
+      'Server confirms: this account is the Wallet Owner.';
+
+  @override
+  String get claimServerMissing =>
+      'The server has no registration of this Wallet for this account.';
+
+  @override
+  String get claimAbandon => 'Cancel Wallet registration';
+
+  @override
+  String get claimAbandonBody =>
+      'Only possible while nothing has been backed up to the cloud. Data on this device is kept.';
+
+  @override
+  String get claimAbandoned =>
+      'Registration cancelled. The Wallet lives only on this device again.';
+
+  @override
+  String get claimAlreadyClaimed =>
+      'This Wallet is already registered by another account.';
+
+  @override
+  String get claimAccountHasWallet =>
+      'This account already owns another Wallet.';
+
+  @override
+  String get claimSelfMismatch =>
+      'The server recorded you as a different member of this Wallet. Please choose again.';
+
+  @override
+  String get claimBackupStarted =>
+      'Backup has already started, so the registration cannot be cancelled.';
+
+  @override
+  String get claimFailed =>
+      'Registration did not complete. Data on this device is unchanged; please try again later.';
 }

@@ -73,5 +73,59 @@
   "dbEncryptionOn": "On-device data encryption: on (SQLCipher, key protected by Android Keystore). Separate from App Lock.",
   "dbEncryptionPending": "On-device data encryption: not yet applied. The app will retry on next start; your data is unchanged.",
   "dbRecoveryTitle": "Wallet data cannot be opened on this device",
-  "dbRecoveryBody": "The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version."
+  "dbRecoveryBody": "The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version.",
+  "claimTitle": "Back up this Wallet",
+  "claimNone": "This Wallet lives only on this device and is not linked to any account.",
+  "claimStart": "Back up this Wallet",
+  "claimNeedSession": "Activate this device for cloud first (Activate this device).",
+  "claimWhoTitle": "Who are you in this Wallet?",
+  "claimWhoBody": "Choose the member the signed-in account represents. There is no default; no transaction is changed.",
+  "claimMemberSummary": "{count} transactions · {range}",
+  "claimMemberEmpty": "No transactions yet",
+  "claimNext": "Continue",
+  "claimConfirmTitle": "Confirm Wallet registration",
+  "claimConfirmBody": "• The account {account} becomes the cloud Owner of this Wallet.\n• {member} is you in this Wallet; the other member stays as is, not linked to any account.\n• NO financial data is uploaded in this step — ownership information only.\n• Signing out later does not hide or delete the Wallet on this device.",
+  "claimConfirm": "Register Wallet",
+  "claimPending": "Finishing Wallet registration with the server. Data on this device is unchanged.",
+  "claimRetry": "Retry",
+  "claimActive": "Wallet registered to this account (you are {member}). No financial data has been uploaded yet.",
+  "claimOtherAccount": "This Wallet is registered to a different account. The signed-in account has no cloud access to it; the Wallet on this device keeps working.",
+  "claimCheck": "Check with server",
+  "claimServerOk": "Server confirms: this account is the Wallet Owner.",
+  "claimServerMissing": "The server has no registration of this Wallet for this account.",
+  "claimAbandon": "Cancel Wallet registration",
+  "claimAbandonBody": "Only possible while nothing has been backed up to the cloud. Data on this device is kept.",
+  "claimAbandoned": "Registration cancelled. The Wallet lives only on this device again.",
+  "claimAlreadyClaimed": "This Wallet is already registered by another account.",
+  "claimAccountHasWallet": "This account already owns another Wallet.",
+  "claimSelfMismatch": "The server recorded you as a different member of this Wallet. Please choose again.",
+  "claimBackupStarted": "Backup has already started, so the registration cannot be cancelled.",
+  "claimFailed": "Registration did not complete. Data on this device is unchanged; please try again later.",
+  "@claimMemberSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "@claimConfirmBody": {
+    "placeholders": {
+      "account": {
+        "type": "String"
+      },
+      "member": {
+        "type": "String"
+      }
+    }
+  },
+  "@claimActive": {
+    "placeholders": {
+      "member": {
+        "type": "String"
+      }
+    }
+  }
 }

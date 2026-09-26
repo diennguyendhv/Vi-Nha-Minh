@@ -136,9 +136,36 @@ void main() {
       expect(b.map((e) => e.walletId), ['L', 'wb']);
     });
 
-    test('chưa đăng nhập không mở được ví gắn Account nào', () {
+    test('P8.2: đã đăng xuất vẫn mở được ví Personal trên máy (claim chỉ gắn quyền cloud)', () {
       final l = r.openableFor(const WalletAccessScope.local());
-      expect(l.map((e) => e.walletId), ['L']);
+      expect(l.map((e) => e.walletId), ['L', 'wa', 'wb']);
+      // Ví chưa claim vẫn là lựa chọn mặc định khi chưa đăng nhập.
+      expect(r.resolveActive(const WalletAccessScope.local())!.walletId, 'L');
+    });
+
+    test('P8.2: reconcileBinding phản chiếu DB, giữ vị trí + createdAt, không trùng', () async {
+      final storage = MemoryWalletRegistryStorage();
+      final reg = await WalletRegistry.load(storage);
+      final l = await reg.ensureLegacyLocal(() async => 'L', now: DateTime.utc(2026));
+      final bound = await reg.reconcileBinding(
+        walletId: 'L',
+        dbFileName: l.dbFileName,
+        boundAccountId: 'A',
+      );
+      expect(bound.kind, WalletKind.personal);
+      expect(bound.createdAt, DateTime.utc(2026));
+      final reloaded = await WalletRegistry.load(storage);
+      expect(reloaded.entries.single.boundAccountId, 'A');
+      // Đăng xuất: vẫn mở được; Account khác đăng nhập thì không chọn được ví này.
+      expect(reloaded.resolveActive(const WalletAccessScope.local())!.walletId, 'L');
+      expect(reloaded.openableFor(const WalletAccessScope.account('B')), isEmpty);
+      final again = await reloaded.reconcileBinding(walletId: 'L', dbFileName: l.dbFileName);
+      expect(again.isUnclaimedLocal, isTrue);
+      expect((await WalletRegistry.load(storage)).entries.single.isUnclaimedLocal, isTrue);
+      expect(
+        () => reloaded.reconcileBinding(walletId: 'khac', dbFileName: l.dbFileName),
+        throwsStateError,
+      );
     });
 
     test('resolveActive: ưu tiên ví gắn Account, không vượt phạm vi', () {

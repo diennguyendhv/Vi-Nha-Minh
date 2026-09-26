@@ -191,4 +191,104 @@ class SessionLocalizationsVi extends SessionLocalizations {
   @override
   String get dbRecoveryBody =>
       'Khoá mã hoá bảo vệ ví trên máy này không còn dùng được (ví dụ sau khi hệ thống đặt lại bảo mật). Dữ liệu đã mã hoá được giữ nguyên, không bị xoá hay ghi đè. App KHÔNG tạo khoá mới. Khôi phục từ bản sao lưu cloud mã hoá sẽ là cách lấy lại ở phiên bản sau.';
+
+  @override
+  String get claimTitle => 'Sao lưu ví này';
+
+  @override
+  String get claimNone =>
+      'Ví này chỉ nằm trên máy này, chưa gắn với tài khoản nào.';
+
+  @override
+  String get claimStart => 'Sao lưu ví này';
+
+  @override
+  String get claimNeedSession =>
+      'Hãy kích hoạt thiết bị này cho cloud trước (nút Kích hoạt thiết bị này).';
+
+  @override
+  String get claimWhoTitle => 'Bạn là ai trong ví này?';
+
+  @override
+  String get claimWhoBody =>
+      'Chọn thành viên đại diện cho tài khoản đang đăng nhập. Không có lựa chọn mặc định; không giao dịch nào bị thay đổi.';
+
+  @override
+  String claimMemberSummary(int count, String range) {
+    return '$count giao dịch · $range';
+  }
+
+  @override
+  String get claimMemberEmpty => 'Chưa có giao dịch';
+
+  @override
+  String get claimNext => 'Tiếp tục';
+
+  @override
+  String get claimConfirmTitle => 'Xác nhận đăng ký ví';
+
+  @override
+  String claimConfirmBody(String account, String member) {
+    return '• Tài khoản $account sẽ là Chủ sở hữu cloud của ví này.\n• $member là bạn trong ví này; thành viên còn lại giữ nguyên và chưa gắn tài khoản nào.\n• Ở bước này KHÔNG có dữ liệu tài chính nào được tải lên — chỉ thông tin sở hữu.\n• Đăng xuất sau này không ẩn, không xoá ví trên máy.';
+  }
+
+  @override
+  String get claimConfirm => 'Đăng ký ví';
+
+  @override
+  String get claimPending =>
+      'Đang hoàn tất đăng ký ví với máy chủ. Dữ liệu trên máy không thay đổi.';
+
+  @override
+  String get claimRetry => 'Thử lại';
+
+  @override
+  String claimActive(String member) {
+    return 'Ví đã đăng ký với tài khoản này (bạn là $member). Chưa có dữ liệu tài chính nào được tải lên.';
+  }
+
+  @override
+  String get claimOtherAccount =>
+      'Ví này đã đăng ký với một tài khoản khác. Tài khoản đang đăng nhập không có quyền cloud với ví; ví trên máy vẫn dùng bình thường.';
+
+  @override
+  String get claimCheck => 'Kiểm tra với máy chủ';
+
+  @override
+  String get claimServerOk =>
+      'Máy chủ xác nhận: tài khoản này là Chủ sở hữu ví.';
+
+  @override
+  String get claimServerMissing =>
+      'Máy chủ không có đăng ký nào của ví này cho tài khoản này.';
+
+  @override
+  String get claimAbandon => 'Huỷ đăng ký ví';
+
+  @override
+  String get claimAbandonBody =>
+      'Chỉ huỷ được khi chưa có bản sao lưu nào trên cloud. Dữ liệu trên máy giữ nguyên.';
+
+  @override
+  String get claimAbandoned =>
+      'Đã huỷ đăng ký. Ví quay về chỉ nằm trên máy này.';
+
+  @override
+  String get claimAlreadyClaimed =>
+      'Ví này đã được một tài khoản khác đăng ký.';
+
+  @override
+  String get claimAccountHasWallet => 'Tài khoản này đã sở hữu một ví khác.';
+
+  @override
+  String get claimSelfMismatch =>
+      'Máy chủ đã ghi bạn là thành viên khác trong ví này. Hãy chọn lại.';
+
+  @override
+  String get claimBackupStarted =>
+      'Đã bắt đầu sao lưu nên không huỷ đăng ký được.';
+
+  @override
+  String get claimFailed =>
+      'Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau.';
 }

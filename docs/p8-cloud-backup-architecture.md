@@ -2,7 +2,7 @@
 
 Status: **crypto + envelope + backend interface implemented, deployed to DEV and
 Pixel-accepted with DEV fixture data (2026-09-26)**.
-Full backup/restore engine, Wallet claim and real-data upload: **NOT started**.
+Wallet claim (P8.2, DEV): done — ownership metadata only (§8d). Full backup/restore engine and real-data upload: **NOT started**.
 Replaces the earlier (chat-only) P8 audit model of per-entity docs with a
 plaintext `d:{…}` body. Source of truth for P8 cloud data shape.
 
@@ -95,9 +95,16 @@ Visible: `{v:1, id, rev, n, c, aad:1}` + server `serverRev`.
 | `listBackupWallets` | session OR recent sign-in | opaque wallet ids |
 | `putEncryptedBatch` | session + owner + keyring | ≤100 envelopes, shape/size checks, CAS `baseHeadRev` (HEAD_MOVED), per-entity rev (STALE_REV), idempotent `batchId` receipt; first write requires `fixture:true` |
 | `getEncryptedChanges` | session + owner | envelopes with `serverRev > sinceRev` (≤200) |
+| `claimWallet` (P8.2) | session + recent sign-in for a NEW claim | ownership metadata only; idempotent replay; see §8d |
+| `getWalletClaim` (P8.2) | session | `{claimed, ownedByYou, selfMemberId, headRev}` |
+| `abandonClaim` (P8.2) | session + recent sign-in + exact claim | only while headRev 0 and no entities/batches |
 
 Firestore: `wallets/{walletId}` {ownerAccountId, cryptoVersion, fixture, headRev,
-updatedAt}; `wallets/{walletId}/entities/{id}` envelope + serverRev;
+updatedAt} (pre-claim DEV fixture) or, after P8.2 claim, {kind:'personal',
+state:'CLAIMED', ownerAccountId, selfMemberId, memberIds, payloadSchema,
+cryptoVersion, environment, claimRequestId, headRev:0, claimedAt};
+`wallets/{walletId}/memberships/{uid}` {accountId, role:'OWNER', status:'ACTIVE',
+memberId, createdAt}; `accounts/{uid}/walletIndex/personal` {walletId, createdAt}; `wallets/{walletId}/entities/{id}` envelope + serverRev;
 `wallets/{walletId}/batches/{batchId}` {headRev, count, at}.
 
 ## 7. What Firebase Admin can / cannot see
@@ -161,9 +168,71 @@ Local only; nothing uploaded, PROD not claimed, BackupGate still closed.
   seq 0 = no outbox row ever written); primary fund migrated (`an_uong`); Home
   pixel-identical. Nothing uploaded.
 
+## 8d. P8.2 — explicit Personal Wallet claim (2026-09-26)
+Claim ONLY: no financial entity uploaded, outbox not pushed, no restore, DEV only
+(backend allowlist + `WalletClaimService.allowedIn(dev)`; PILOT/PROD have no
+cloud session at all). PROD not claimed.
+
+**Locked product rule.** Claim binds CLOUD ownership to an Account. Local access
+never depends on Firebase: after claim this installation keeps opening the
+SQLCipher Wallet offline / signed out (`WalletRegistryEntry.canOpen`: a
+`personal` Wallet is openable in local scope); sign-out stops cloud operations
+only; a different signed-in Account gets no cloud authority (server owner
+check) and cannot select the Wallet in the registry.
+
+**UX.** Settings → Account card (DEV) → "Sao lưu ví này" (login never claims) →
+P7.1 credential must exist (else "kích hoạt thiết bị" first, nothing written) →
+"Bạn là ai trong ví này?" (no default; neutral summary = tx count + month range,
+no amounts) → confirmation (Account becomes cloud Owner; chosen member is you;
+other member unchanged/unlinked; NO financial data uploaded; sign-out does not
+hide/delete) → step-up (device credential + Google reauth) → claim.
+
+**Local state machine** (`CloudBindingStore`, DB authoritative):
+NONE → CLAIMING (`claimRequestId` = UUID persisted BEFORE the network call) →
+ACTIVE. `activate` re-checks in ONE DB transaction: server walletId ==
+`wallet_meta`, server selfMemberId == chosen, member still exists; stores the
+SERVER's canonical `claimRequestId`; `wallet_meta.kind` local → personal.
+Then `wallet_registry.json` is reconciled FROM the DB (`reconcileRegistryFromDb`,
+also at every app start) — the registry never binds by itself. Network/session
+failure ⇒ stays CLAIMING and the card retries the SAME id on open
+(`resume`). Terminal server answers (ALREADY_CLAIMED, ACCOUNT_HAS_WALLET,
+SELF_MEMBER_MISMATCH, CLAIM_MISMATCH, WALLET_NOT_CLAIMABLE, ENVIRONMENT_MISMATCH)
+prove the server holds nothing of ours ⇒ `release()` back to NONE. Calls are
+serialized (double tap = one claim).
+
+**Server `claimWallet`** (one Firestore transaction): P7.1 `authorize`
+(stale ⇒ 403, revoked ⇒ DEVICE_REVOKED) → read wallet + account index →
+existing wallet: other owner ⇒ ALREADY_CLAIMED; non-claim doc ⇒
+WALLET_NOT_CLAIMABLE; different selfMember ⇒ SELF_MEMBER_MISMATCH; different
+member set/env ⇒ CLAIM_MISMATCH; otherwise idempotent success returning the
+ORIGINAL claim (no write; stale sign-in allowed because nothing new is granted)
+→ absent wallet: account already has a Personal Wallet ⇒ ACCOUNT_HAS_WALLET;
+recent sign-in required; `create` wallet + owner membership + index (create
+fails on races ⇒ transaction retry sees the winner). Request keys are
+whitelisted (credential + walletId, selfMemberId, `membersMinimalMetadata`
+= `[{memberId}]` ≤ 2, payloadSchema, cryptoVersion 1, environment 'dev',
+claimRequestId UUID); any other field ⇒ INVALID_ARGUMENT. `putEncryptedBatch`
+refuses a CLAIMED wallet (BACKUP_NOT_ENABLED) until P8.3.
+
+**Abandon.** Owner + current session + recent sign-in + exact
+(walletId, selfMemberId, claimRequestId); refused (BACKUP_STARTED) once
+headRev > 0 or any entity/batch exists; deletes wallet + membership + index
+atomically; retry after commit = `alreadyAbsent`. Client: CLAIMING ⇒ ask
+`getWalletClaim` first (ours ⇒ finish claim then abandon it; not ours ⇒ local
+release only); success ⇒ `release()` (binding, outbox, sync_state cleared,
+kind → local; no financial row touched) + registry reconcile.
+
+**Tests.** Emulator `functions/test/claim.test.js` (6): metadata-only +
+idempotency (same id, compatible new id, member order, stale sign-in replay),
+conflicts, races (2 Accounts/1 wallet, 1 Account/2 wallets, 3 parallel taps ⇒
+exactly one ownership set), P7.1 (non-recent, no session, other account, stale
+after takeover, DEVICE_REVOKED after lost-device recovery), abandon rules, Rules
+deny direct read/write. App: `test/cloud/wallet_claim_test.dart` (28),
+`test/cloud/wallet_claim_controls_test.dart` (2), registry tests.
+
 ## 9. Remaining before full P8
-~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → Wallet claim flow
-(P8.2) + baseline enqueue + per-entity rev tracking → incremental upload of
+~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow
+(P8.2)~~ ✅ → P8.3 encrypted initial backup: baseline enqueue + per-entity rev tracking → incremental upload of
 real entity kinds → restore into a fresh Wallet (no seed) + reconciliation →
 tombstone/idempotency review → Recovery Key regeneration + disable backup +
 trusted-device removal endpoints (each with step-up) → PILOT only after owner
