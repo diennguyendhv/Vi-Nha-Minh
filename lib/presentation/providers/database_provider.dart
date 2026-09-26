@@ -1,6 +1,8 @@
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/local/app_database.dart';
+import '../../data/local/seed_defaults.dart';
 import '../../data/local/wallet_descriptor.dart';
 import '../../data/local/wallet_registry.dart';
 import '../../data/repositories/local_wallet_identity_repository.dart';
@@ -40,6 +42,15 @@ final activeWalletProvider = Provider<WalletDescriptor>((ref) {
   return entry?.toDescriptor() ?? WalletDescriptor.legacyLocal;
 });
 
+/// Máy có ví nhưng KHÔNG ví nào mở được ở phạm vi hiện tại (vd ví Family/Personal đã
+/// gắn Account A, đang đăng nhập Account X). Khi đó KHÔNG được rơi về file ví cục bộ
+/// mặc định (chính là ví của A) — app dựng màn "ví thuộc tài khoản khác" và không mở
+/// DB nào. Dữ liệu trên máy giữ nguyên (không xoá, không chuyển quyền).
+final walletAccessDeniedProvider = Provider<bool>((ref) {
+  final scope = ref.watch(walletAccessScopeProvider);
+  return ref.watch(walletRegistryProvider).deniesAll(scope);
+});
+
 /// Khoá phiên ví: đổi ⇒ mọi state gắn với ví trước phải reset.
 final walletSessionKeyProvider = Provider<String>(
   (ref) => ref.watch(activeWalletProvider.select((w) => w.dbFileName)),
@@ -57,6 +68,17 @@ final walletDatabaseFactoryProvider =
 /// mới — không provider nào giữ dòng của ví trước.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
   ref.watch(walletSessionKeyProvider);
+  if (ref.watch(walletAccessDeniedProvider)) {
+    // Riverpod có thể dựng lại provider này 1 nhịp TRƯỚC khi WalletAccessGate gỡ cây
+    // con. Không bao giờ rơi về file ví của Account khác: trả DB rỗng TRONG BỘ NHỚ
+    // (không file, không binding ⇒ không đồng bộ), bị huỷ ngay khi cổng chặn.
+    final sentinel = AppDatabase.forTesting(
+      NativeDatabase.memory(),
+      seed: SeedProfile.fresh,
+    );
+    ref.onDispose(sentinel.close);
+    return sentinel;
+  }
   final db = ref.read(walletDatabaseFactoryProvider)(
     ref.read(activeWalletProvider),
   );

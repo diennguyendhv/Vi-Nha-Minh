@@ -14,6 +14,7 @@ import 'data/repositories/local_wallet_settings_repository.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/db_recovery_screen.dart';
 import 'presentation/features/security/lock_gate.dart';
+import 'presentation/features/wallet_access/wallet_access_gate.dart';
 import 'presentation/providers/app_lock_provider.dart';
 import 'presentation/providers/auth_providers.dart';
 import 'presentation/providers/database_provider.dart';
@@ -118,7 +119,9 @@ class ViNhaMinhApp extends StatelessWidget {
       theme: AppTheme.light(),
       routerConfig: appRouter,
       builder: (context, child) => LockGate(
-        child: TapGuardScope(child: child ?? const SizedBox.shrink()),
+        child: WalletAccessGate(
+          child: TapGuardScope(child: child ?? const SizedBox.shrink()),
+        ),
       ),
     );
   }

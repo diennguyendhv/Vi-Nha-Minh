@@ -191,3 +191,7 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - Kéo: 1 DB transaction, `withoutSyncCapture`, FK hoãn; xung đột với thay đổi cục bộ chưa đẩy của NGƯỜI KHÁC ⇒ lưu `sync_conflicts`, bản máy chủ thắng; FK vỡ ⇒ huỷ cả lần kéo. KHÔNG tự gộp.
 - Khôi phục: file đích tên cuối cùng ngẫu nhiên `wallet_<uuid>.sqlite` + khoá DB riêng (KHÔNG rename), kích hoạt = ghi registry SAU kiểm chứng; lỗi ⇒ xoá file tạm, ví hiện tại không bị mở. Bridge khoá DB vẫn KHÔNG có API xoá khoá.
 - Chỉ DEV (env dev + backend DEV). PROD chưa migrate v11, chưa claim, chưa upload.
+
+## 27. Đổi tài khoản trên cùng máy — cổng quyền Wallet (2026-09-27)
+- Ví LOCAL chưa claim: mở ở mọi phạm vi. Ví PERSONAL đã claim: mở với đúng Account hoặc khi đã đăng xuất; Account khác ⇒ ẩn. Ví FAMILY: CHỈ mở với Account thành viên đã gắn; đăng xuất hoặc Account khác ⇒ ẩn.
+- "Ẩn" = `WalletAccessGate` (dưới `LockGate`) không dựng Navigator/màn tài chính, không mở DB nào; `appDatabaseProvider` KHÔNG BAO GIỜ rơi về file ví mặc định khi `registry.deniesAll(scope)` (sentinel DB rỗng trong bộ nhớ). Không xoá file/khoá, không chuyển quyền, không claim cho Account mới. Đúng Account quay lại ⇒ cùng file, cùng walletId, không khôi phục lại. Thao tác cloud vẫn cần phiên P7.1.
