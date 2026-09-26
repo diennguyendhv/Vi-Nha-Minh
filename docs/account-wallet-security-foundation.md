@@ -363,6 +363,8 @@ Ba khái niệm **khác nhau**, không được nhầm:
 | Mã hoá mức ứng dụng (client mã hoá trường) | Không tự có; phải tự làm |
 | **E2EE thật** (máy chủ không đọc được nội dung) | **Firebase KHÔNG tự cung cấp E2EE** |
 
+> **CẬP NHẬT 2026-09-26 (ĐÃ DUYỆT, thay khuyến nghị bên dưới cho DỮ LIỆU TÀI CHÍNH SAO LƯU):** nội dung tài chính lên cloud được **mã hoá phía client (zero-knowledge)**: BMK 256-bit ngẫu nhiên (chỉ là khoá gốc) → HKDF ra DEK (mã hoá AES-256-GCM) / IDK (id mờ); BMK được bọc bởi Password KEK (Argon2id 64 MiB, t=3, p=4 + HKDF) VÀ Recovery KEK (Recovery Key 256-bit + HKDF); credential tiếp quản thiết bị suy ra tách miền, máy chủ chỉ lưu SHA-256. Firebase/Admin không giữ khoá giải mã nào. KHÔNG E2EE: metadata Auth/phiên/ví, số lượng/kích thước/thời điểm bản ghi. Mất cả Mật khẩu sao lưu + Recovery Key + mọi thiết bị tin cậy ⇒ không khôi phục được, không có reset của quản trị. Không thay thế SQLCipher. Chi tiết: `docs/p8-cloud-backup-architecture.md`.
+
 E2EE thật sẽ **phá vỡ**: Security Rules kiểm tra nội dung, kiểm tra bất biến tài chính phía máy chủ (số dư không âm), truy vấn theo trường, hợp nhất đồng bộ phía máy chủ, khôi phục khi mất khoá (mất khoá = mất dữ liệu vĩnh viễn). **Khuyến nghị v1:** không E2EE; phát biểu trung thực *"mã hoá khi truyền và khi lưu bởi nhà cung cấp"*; giảm dữ liệu nhạy cảm gửi lên; cân nhắc mã hoá trường `note` sau (P-later). Không được quảng cáo "E2EE".
 
 ---
@@ -410,6 +412,9 @@ token bị sao chép vẫn giữ nguyên mọi claim, không chứng minh phần
 - Secret lưu AES-256-GCM bằng khóa Android Keystore riêng, không dùng khóa PIN.
   Không lưu plaintext trong prefs, không log secret/token/email. Không tự kích hoạt
   khi Auth refresh, mở app hoặc reconnect; kích hoạt lại luôn là thao tác rõ ràng.
+
+### 21.2b P7.1 — tiếp quản an toàn (2026-09-26)
+Firebase Auth một mình KHÔNG thay được installation đang active: `activateSession` trả TAKEOVER_REQUIRED. Chuyển máy bình thường = B xin → A (credential hiện hành + đăng nhập gần đây + xác minh thiết bị) chấp thuận → B hoàn tất bằng secret yêu cầu dùng 1 lần, ngắn hạn, gắn uid + installation đích (máy chủ chỉ lưu băm). Mất máy = đăng nhập gần đây + credential tiếp quản suy ra từ Mật khẩu sao lưu/Recovery Key ⇒ `epoch+1`, A bị đưa vào `revokedInstallations` (403 DEVICE_REVOKED ⇒ client xoá credential + BMK cục bộ; kích hoạt lại ⇒ RECOVERY_REQUIRED). Có rate limit phía máy chủ. Chi tiết: `docs/p7-exclusive-session.md` mục P7.1. (Mục 21.3 bên dưới mô tả P7; điểm "A cũ có thể kích hoạt lại" đã bị P7.1 thay thế.)
 
 ### 21.3 Giới hạn chính xác
 - Sau transaction kích hoạt B commit, request mới dùng secret A bị từ chối dù
@@ -533,6 +538,8 @@ wallets/{walletId}/counterparties|obligations/{id}   (sau)
 wallets/{walletId}/tombstones|changefeed              (theo rev)
 ```
 Khác mẫu: (1) thêm chỉ mục `accounts/{a}/wallets/{w}` để liệt kê ví mà **không cần** truy vấn collection group; (2) `memberships` khoá theo `accountId` (kiểm tra `exists` O(1) trong Rules); (3) bảng tombstone/feed theo `rev`.
+
+> **P8 (2026-09-26) thay hình dạng trên cho dữ liệu tài chính:** không còn collection tài chính theo loại với nội dung rõ. Dùng 1 collection chung `wallets/{walletId}/entities/{opaqueId}` chứa envelope mã hoá `{v, id, rev, n, c, aad, serverRev}` (loại thực thể nằm TRONG ciphertext), `wallets/{walletId}/batches/{batchId}` (biên nhận idempotent) và `accounts/{uid}/backupKeyrings/{walletId}` (khoá đã bọc). Mọi ghi qua Function + cổng phiên; Rules deny-all. Chi tiết `docs/p8-cloud-backup-architecture.md`. Các dòng "Rules (client trực tiếp)" ở bảng dưới KHÔNG còn áp dụng.
 
 ### 27.2 Việc nào phải do máy chủ (Cloud Function/Trusted), việc nào Rules đủ
 | Thao tác | Cơ chế | Lý do |
@@ -696,7 +703,7 @@ Ghi chú thứ tự: P3 (khoá ứng dụng) **độc lập với cloud** và n�
 | Cách gửi lời mời | **LOCKED (duyệt sau P1)** | — | **Backend tạo + backend gửi email**; nhà cung cấp email hoãn tới phase mời Family; không gắn lõi vào 1 vendor | Bảo mật token phía máy chủ | Đã duyệt |
 | Chuyển quyền Owner | **LOCKED (duyệt sau P1)** | — | **KHÔNG hỗ trợ ở Family v1** (không có UI/mutation MEMBER→OWNER); khôi phục Owner dựa vào khôi phục tài khoản của nhà cung cấp Auth | Giảm bề mặt tấn công | Đã duyệt |
 | Nhiều ví trên 1 tài khoản (cấu trúc) | **LOCKED (duyệt sau P1)** | — | Kiến trúc cho phép nhiều Wallet; **UI v1 chỉ 1 ví hoạt động**; không có UI chuyển ví ở P2 | Không đóng cửa tương lai | Đã duyệt |
-| E2EE | **LOCKED (duyệt sau P1)** | — | **Không E2EE ở v1.** Ngăn xếp: TLS + mã hoá lúc nghỉ của nhà cung cấp + Auth/Rules/server chặt + App Check + DB cục bộ mã hoá. Không được mô tả Firebase là E2EE | E2EE phá Rules/sync/khôi phục | Đã duyệt |
+| E2EE | **THAY ĐỔI 2026-09-26** | — | Nội dung tài chính sao lưu: **mã hoá phía client (zero-knowledge)**, xem §18.4 + `docs/p8-cloud-backup-architecture.md`. Metadata Auth/phiên/ví vẫn không E2EE. *(Bản cũ: Không E2EE ở v1.)* Ngăn xếp: TLS + mã hoá lúc nghỉ của nhà cung cấp + Auth/Rules/server chặt + App Check + DB cục bộ mã hoá. Không được mô tả Firebase là E2EE | E2EE phá Rules/sync/khôi phục | Đã duyệt |
 | Cập nhật `spec.md`/`CLAUDE.md` §7 (mô hình `families/memberIds` cũ) | **DONE ở P2** | — | Đã thay bằng Account/Wallet/FinancialMember/Membership (xem Phụ lục C) | Tránh hai mô hình mâu thuẫn | Đã làm |
 
 ---

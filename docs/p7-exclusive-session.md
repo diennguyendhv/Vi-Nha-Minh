@@ -1,7 +1,9 @@
 # P7 — Exclusive Account Session Foundation
 
-Status: **PASS (2026-09-26)** — deployed DEV backend rejects stale device credentials
-and Pixel lifecycle acceptance passed. P8 has not started.
+Status: **P7 PASS (2026-09-26)** — deployed DEV backend rejects stale device credentials
+and Pixel lifecycle acceptance passed. **P7.1 secure takeover: implemented + emulator
+PASS; DEV deploy/Pixel acceptance pending** (see section P7.1 and
+`docs/p8-cloud-backup-architecture.md`).
 
 ## Architecture and scope
 
@@ -29,6 +31,45 @@ No custom device claims, refresh-token revocation, financial cloud operations,
 Wallet claims, membership creation, financial-member binding or schema changes.
 Client session bootstrap is DEV-only. Server handlers allow only DEV project
 `vi-nha-minh-55c60` or `demo-homewallet-p7` inside Functions emulator.
+
+## P7.1 — Secure device takeover (2026-09-26, supersedes "explicit activation replaces")
+
+Threat fixed: under P7, any installation with a valid Firebase token could
+activate and evict the other (A↔B ping-pong); a stolen, still-signed-in phone
+could keep reclaiming. **Firebase Auth proves WHO; the P7 credential proves WHICH
+installation. Auth alone never replaces an active installation.**
+
+Record `accounts/{uid}/session/current` adds `epoch` (missing ⇒ 1),
+`revokedInstallations` (≤ 20 UUIDs) and `takeover` {requestId,
+targetInstallationId, requestSecretHash, code, expiresAt, approved} | null.
+Credentials now carry `epoch`. Recent sign-in = `auth_time` ≤ 30 min.
+
+| Call | Rule |
+|---|---|
+| `activateSession` | revoked installation ⇒ RECOVERY_REQUIRED; active session + matching own credential ⇒ rotate; active session otherwise ⇒ TAKEOVER_REQUIRED; no active session ⇒ recent sign-in required |
+| `requestTakeover` (B) | recent sign-in, rate-limited; stores hash of a one-time 256-bit request secret, 6-digit display code, 10 min expiry; latest request replaces older |
+| `protectedPing` (A) | returns `pendingTakeover {requestId, code}` |
+| `approveTakeover` (A) | A's current credential + recent sign-in (+ client device credential); approval valid ≤ 5 min |
+| `rejectTakeover` (A) | clears request |
+| `completeTakeover` (B) | recent sign-in + approved + same uid/requestId/target installation + request secret; consumed atomically (single-use); else TAKEOVER_PENDING / denied |
+| `recoverSession` (lost device) | recent sign-in + takeover credential derived from Backup Password or Recovery Key (server stores SHA-256 only); `epoch+1`, new credential, old installation added to `revokedInstallations` |
+
+Old A after lost-device recovery: `protectedPing`/`deactivateSession` ⇒ 403
+`DEVICE_REVOKED` (client then wipes its P7 credential + local BMK);
+`activateSession` ⇒ RECOVERY_REQUIRED even after B logs out; a reinstall with a
+new UUID still needs a recent Google sign-in. Not usable as recovery secret:
+App Lock PIN, installationId. Rate limits (per account, 5 per 15 min ⇒ 30 min
+lock): recovery proofs, grant completion, approval, takeover requests; the
+error for a wrong/unknown proof is uniform. All decisions happen in Firestore
+transactions; concurrent attempts leave exactly one current credential.
+
+Client: TAKEOVER_REQUIRED dialog → "Xin thiết bị đang hoạt động" (shows code,
+"Hoàn tất chuyển") or "Thiết bị cũ đã mất" (Backup Password / Recovery Key).
+Step-up (device credential/biometric where available + Google
+`reauthenticateWithCredential` without sign-out) before approving and before
+lost-device recovery; RECENT_LOGIN_REQUIRED offers "Xác thực lại".
+Limitations: a thief who also has the victim's Google credentials AND Backup
+Password/Recovery Key can recover; the takeover code is compared by a human.
 
 ## Client behavior and storage
 

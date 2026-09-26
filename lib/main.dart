@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'data/backup/backup_key_store.dart';
+import 'data/backup/backup_service.dart';
 import 'data/auth/firebase_bootstrap.dart';
 import 'data/auth/firebase_auth_repository.dart';
 import 'presentation/providers/session_provider.dart';
@@ -58,6 +60,16 @@ Future<void> main() async {
         cloudSessionProvider.overrideWithValue(
           authRepository is FirebaseAuthRepository
               ? authRepository.cloudSession
+              : null,
+        ),
+        backupServiceProvider.overrideWithValue(
+          authRepository is FirebaseAuthRepository &&
+                  authRepository.cloudSession != null
+              ? BackupService(
+                  session: authRepository.cloudSession!,
+                  transport: authRepository.cloudSession!.transport,
+                  keyStore: KeystoreBackupKeyStore(),
+                )
               : null,
         ),
         appLockPlatformProvider.overrideWithValue(lockPlatform),

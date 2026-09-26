@@ -5,22 +5,34 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../domain/auth/cloud_session.dart';
 
-/// Firebase callable wire protocol over HTTPS. Only fixed session endpoints;
-/// no generic financial payloads, retries, offline outbox or request logging.
+/// Firebase callable wire protocol over HTTPS. Only fixed session/backup
+/// endpoints. Backup endpoints carry wrapped keys and ciphertext envelopes only
+/// (never plaintext financial payloads); no retries, outbox or request logging.
 class SessionTransportClient {
   SessionTransportClient(this.auth, this.projectId);
   final FirebaseAuth auth;
   final String projectId;
+  static const operations = {
+    'activateSession',
+    'protectedPing',
+    'deactivateSession',
+    'requestTakeover',
+    'approveTakeover',
+    'rejectTakeover',
+    'completeTakeover',
+    'recoverSession',
+    'putBackupKeyring',
+    'getBackupKeyring',
+    'listBackupWallets',
+    'putEncryptedBatch',
+    'getEncryptedChanges',
+  };
 
   Future<Map<String, dynamic>> call(
     String operation,
     Map<String, dynamic> data,
   ) async {
-    if (!{
-      'activateSession',
-      'protectedPing',
-      'deactivateSession',
-    }.contains(operation)) {
+    if (!operations.contains(operation)) {
       throw const SessionFailure(true);
     }
     final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -49,9 +61,14 @@ class SessionTransportClient {
             .timeout(const Duration(seconds: 10)),
       ) as Map<String, dynamic>;
       if (response.statusCode != 200 || body['error'] != null) {
-        final status = (body['error'] as Map?)?['status'];
+        final error = body['error'] as Map?;
+        final status = error?['status'];
+        final details = error?['details'];
         throw SessionFailure(
           status == 'PERMISSION_DENIED' || status == 'UNAUTHENTICATED',
+          details is Map && details['reason'] is String
+              ? details['reason'] as String
+              : null,
         );
       }
       return Map<String, dynamic>.from(body['result'] as Map);

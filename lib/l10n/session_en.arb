@@ -7,5 +7,67 @@
   "sessionReady": "Session accepted by server at last check.",
   "sessionDenied": "No current cloud session on this device. Activate explicitly to use it again.",
   "sessionUnknown": "Cloud session could not be verified. Local data remains available.",
-  "sessionUnchecked": "Cloud session has not been checked."
+  "sessionUnchecked": "Cloud session has not been checked.",
+  "takeoverTitle": "Another device is active",
+  "takeoverBody": "Signing in is not enough to replace the active device. Ask the active device to approve, or use lost-device recovery.",
+  "takeoverRequest": "Ask the active device",
+  "takeoverLost": "Old device is lost",
+  "takeoverWaiting": "Code {code}. On the active device, tap Check cloud session and approve only if it shows this code. Then tap Finish transfer here.",
+  "takeoverFinish": "Finish transfer",
+  "takeoverPending": "Not approved yet by the active device.",
+  "approveTitle": "Transfer request",
+  "approveBody": "A device signed in to this account asks to become the active device. Code: {code}. Approve only if the new device shows the same code. This device will lose cloud access.",
+  "approve": "Approve",
+  "reject": "Reject",
+  "recoveryRequired": "This device was replaced by lost-device recovery. It needs the Backup Password or Recovery Key.",
+  "recentLoginRequired": "For safety, sign out and sign in again, then retry within 30 minutes.",
+  "lostTitle": "Lost-device recovery",
+  "lostBody": "Enter the Backup Password or the Recovery Key. The old device will be locked out permanently. The App Lock PIN is not accepted here.",
+  "usePassword": "Backup Password",
+  "useRecoveryKey": "Recovery Key",
+  "recover": "Recover",
+  "recoverFailed": "Recovery failed. Check the secret and try again.",
+  "noBackup": "No cloud backup exists for this account, so lost-device recovery is not available.",
+  "backupTitle": "Encrypted backup (DEV fixture)",
+  "backupOff": "Not enabled on this device. Only synthetic DEV data is uploaded until local database encryption is done.",
+  "backupOn": "Enabled. Backup key is protected by Android Keystore.",
+  "backupEnable": "Enable backup",
+  "backupUpload": "Upload DEV fixture",
+  "backupVerify": "Download & decrypt",
+  "backupChangePassword": "Change Backup Password",
+  "backupPassword": "Backup Password (min 10 characters)",
+  "backupPasswordRepeat": "Repeat Backup Password",
+  "backupOldPassword": "Current Backup Password (optional on this trusted device)",
+  "backupPasswordHint": "Separate from your Google account, App Lock PIN and phone PIN. It is never sent to the server.",
+  "recoveryKeyTitle": "Save your Recovery Key",
+  "recoveryKeyBody": "Shown only once. If you lose the Backup Password, this Recovery Key AND every trusted device, the backup cannot be recovered by anyone, including administrators.",
+  "recoveryKeySaved": "I have saved the Recovery Key somewhere safe",
+  "done": "Done",
+  "backupResult": "{result}",
+  "backupFailed": "Backup action failed.",
+  "@takeoverWaiting": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "@approveBody": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "@backupResult": {
+    "placeholders": {
+      "result": {
+        "type": "String"
+      }
+    }
+  },
+  "stepUpReason": "Confirm it is you for this security action",
+  "reauthenticate": "Verify again",
+  "stepUpFailed": "Verification was not completed.",
+  "deviceRevoked": "This device was replaced by lost-device recovery. Its cloud credential and backup key were removed from this device."
 }

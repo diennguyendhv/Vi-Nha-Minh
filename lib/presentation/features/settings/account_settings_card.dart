@@ -1,11 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/app_environment.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../data/auth/firebase_auth_repository.dart';
 import '../../../domain/auth/auth_repository.dart';
+import '../../../domain/security/app_lock.dart';
+import '../../../l10n/session_localizations.dart';
+import '../../providers/app_lock_provider.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/session_provider.dart';
+import 'backup_controls.dart';
 import 'session_controls.dart';
+
+/// Step-up: device credential/biometric where the phone has one, then a fresh
+/// Google re-authentication (refreshes auth_time) without signing out.
+Future<bool> _stepUp(BuildContext context, WidgetRef ref) async {
+  final reason = SessionLocalizations.of(context)!.stepUpReason;
+  final outcome = await ref
+      .read(deviceAuthenticatorProvider)
+      .authenticateDeviceOwner(reason);
+  if (outcome != BiometricOutcome.success &&
+      outcome != BiometricOutcome.unavailable) {
+    return false;
+  }
+  final repo = ref.read(authRepositoryProvider);
+  if (repo is! FirebaseAuthRepository) return false;
+  try {
+    await repo.reauthenticate();
+    return true;
+  } on AuthFailure {
+    return false;
+  }
+}
 
 /// Thẻ Tài khoản (P5). Đăng nhập là TUỲ CHỌN: app cục bộ hoạt động đầy đủ khi chưa
 /// đăng nhập. Đăng nhập KHÔNG tải dữ liệu, KHÔNG gắn Vợ/Chồng, KHÔNG sao lưu/đồng bộ.
@@ -105,7 +132,19 @@ class AccountSettingsCard extends ConsumerWidget {
             SessionControls(
               key: ValueKey(account.uid),
               session: ref.watch(cloudSessionProvider)!,
+              backup: ref.watch(backupServiceProvider),
+              stepUp: () => _stepUp(context, ref),
             ),
+          if (account != null &&
+              ref.watch(backupServiceProvider) != null &&
+              AppEnvironment.current == AppEnvironment.dev) ...[
+            const SizedBox(height: 10),
+            BackupControls(
+              key: ValueKey('backup-${account.uid}'),
+              backup: ref.watch(backupServiceProvider)!,
+              stepUp: () => _stepUp(context, ref),
+            ),
+          ],
           if (account == null)
             SizedBox(
               width: double.infinity,

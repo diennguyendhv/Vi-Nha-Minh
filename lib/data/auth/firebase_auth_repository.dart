@@ -102,6 +102,35 @@ class FirebaseAuthRepository implements AuthRepository {
     }
   }
 
+  /// Step-up for sensitive cloud actions: fresh Google re-authentication of the
+  /// CURRENT user (refreshes `auth_time`) WITHOUT signing out, so an active
+  /// device keeps its P7 session while approving a takeover.
+  Future<void> reauthenticate() async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFailure(AuthFailureReason.authFailure);
+    try {
+      await _ensureGoogleInit();
+      final account = await _google.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        throw const AuthFailure(AuthFailureReason.providerFailure);
+      }
+      await user.reauthenticateWithCredential(
+        fb.GoogleAuthProvider.credential(idToken: idToken),
+      );
+      await user.getIdToken(true);
+    } on AuthFailure {
+      rethrow;
+    } on GoogleSignInException catch (e) {
+      _log('google-reauth', e.code.name);
+      throw const AuthFailure(AuthFailureReason.cancelled);
+    } on fb.FirebaseAuthException catch (e) {
+      // e.g. user-mismatch: a different Google account was picked.
+      _log('firebase-reauth', e.code);
+      throw const AuthFailure(AuthFailureReason.authFailure);
+    }
+  }
+
   @override
   Future<void> signOut() async {
     final session = cloudSession;

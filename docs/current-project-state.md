@@ -7,6 +7,8 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
+**P7.1 + P8 Security Foundation — code + emulator PASS, DEV deploy/Pixel acceptance CHỜ** (2026-09-26). P7.1: Auth một mình không thay thiết bị active (TAKEOVER_REQUIRED), chuyển máy cần A chấp thuận, mất máy cần credential suy ra từ Mật khẩu sao lưu/Recovery Key (epoch+1, máy cũ DEVICE_REVOKED). P8 crypto: BMK/DEK/IDK, Argon2id + Recovery Key, envelope chung không lộ loại thực thể, backend chỉ nhận ciphertext, chỉ fixture DEV (cổng SQLCipher). Chi tiết: `docs/p7-exclusive-session.md` (P7.1), `docs/p8-cloud-backup-architecture.md`. Full backup/restore engine, claim, đồng bộ: CHƯA.
+
 **P7 — Exclusive Account Session Foundation — PASS** (2026-09-26). Callable DEV `vi-nha-minh-55c60` (Node 22) đã triển khai; Pixel: kích hoạt tường minh, Keystore giữ qua force-stop, thiết bị cũ bị SERVER từ chối (403), đăng xuất cũ không tắt được phiên mới, kích hoạt lại thay thế, đăng xuất xoá credential. Rules deny-all. Không dữ liệu tài chính trên cloud; Wallet không claim. PROD chỉ đọc: v8, integrity ok, FK 0, 1.849 giao dịch. Chi tiết: `docs/p7-exclusive-session.md`. **P8 chưa bắt đầu.**
 
 ## Last Completed Phase
@@ -50,7 +52,7 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - FinancialMember ổn định; email là danh tính mời/đăng nhập, KHÔNG là danh tính tài chính; Owner/Member là quyền, Vợ/Chồng là người.
 - Đổi tài khoản gắn với Member không đổi memberId/lịch sử. Chỉ Owner quản trị membership. Không chuyển Owner ở v1.
 - 1 Account = 1 thiết bị hoạt động. Google Auth trước; lớp Auth độc lập nhà cung cấp; lời mời do backend tạo/gửi.
-- Không E2EE ở v1. Mã hoá DB cục bộ BẮT BUỘC trước cloud pilot/Play (SQLCipher hoặc tương đương, khoá DB độc lập với PIN).
+- Nội dung tài chính sao lưu mã hoá phía client (zero-knowledge, 2026-09-26); metadata Auth/phiên/ví không E2EE. Mã hoá DB cục bộ BẮT BUỘC trước cloud pilot/Play (SQLCipher hoặc tương đương, khoá DB độc lập với PIN).
 - Quỹ chính (primary fund) là WALLET DATA (tạm còn SharedPreferences); sắp xếp/lọc Explorer là DEVICE-ONLY.
 - Cloud sau này xoá bằng tombstone; xoá cục bộ hiện tại giữ nguyên ngữ nghĩa (xoá thật) cho tới phase đồng bộ.
 - App Lock / sinh trắc là DEVICE security, không phải Account Auth, không đồng bộ.
