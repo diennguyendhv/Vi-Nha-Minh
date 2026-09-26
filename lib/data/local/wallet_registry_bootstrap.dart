@@ -8,6 +8,7 @@ import 'sync/cloud_binding_store.dart';
 import 'wallet_descriptor.dart';
 import 'wallet_registry.dart';
 import '../../domain/entities/cloud_binding.dart';
+import '../sync/restore_storage.dart';
 
 /// Nạp registry và đăng ký ví cục bộ hiện tại TẠI CHỖ (đọc `wallet_id` từ chính file
 /// `vi_nha_minh.sqlite`, không move/copy/tạo lại). KHÔNG BAO GIỜ ném: lỗi ⇒ registry
@@ -17,6 +18,12 @@ Future<WalletRegistry> bootstrapWalletRegistry() async {
     final dir = await getApplicationDocumentsDirectory();
     final registry = await WalletRegistry.load(
       FileWalletRegistryStorage(File(p.join(dir.path, 'wallet_registry.json'))),
+    );
+    // P8.5: khôi phục bị ngắt (marker `.restoring`, chưa vào registry) ⇒ dọn file dở.
+    await cleanupInterruptedRestores(
+      registry,
+      SqlcipherRestoreStorage(directory: () async => dir),
+      dir,
     );
     final db = AppDatabase(wallet: WalletDescriptor.legacyLocal);
     try {

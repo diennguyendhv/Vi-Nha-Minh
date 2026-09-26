@@ -88,6 +88,9 @@ class LocalTransactionRepository implements TransactionRepository {
     );
   }
 
+  /// Mọi dòng giao dịch (kể cả ẩn) — kiểm chứng sau khôi phục/đồng bộ (P8.5).
+  Future<List<domain.Transaction>> allTransactions() => _allTransactions();
+
   Future<List<domain.Transaction>> _allTransactions() async {
     final rows = await _db.select(_db.transactionRows).get();
     return rows.map(_toDomain).toList();

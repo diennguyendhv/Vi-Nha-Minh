@@ -2,7 +2,7 @@
 
 Status: **crypto + envelope + backend interface implemented, deployed to DEV and
 Pixel-accepted with DEV fixture data (2026-09-26)**.
-Wallet claim (P8.2, DEV): done — ownership metadata only (§8d). Full backup/restore engine and real-data upload: **NOT started**.
+Wallet claim (P8.2, DEV): done — ownership metadata only (§8d). Backup/delta/restore engines (P8.3–P8.5): implemented + emulator-proven (§8e); real-data upload: **NOT done** (DEV only).
 Replaces the earlier (chat-only) P8 audit model of per-entity docs with a
 plaintext `d:{…}` body. Source of truth for P8 cloud data shape.
 
@@ -268,6 +268,59 @@ Server verdicts from Cloud Run request logs; Firestore read back read-only.
 - Not live (emulator only): DEVICE_REVOKED claim rejection (needs lost-device
   recovery with the DEV Backup Password), two-Account race.
 Final DEV state: fixture Wallet claimed by the owner Account (headRev 0).
+
+## 8e. P8.3–P8.5 — encrypted backup, delta sync, restore (2026-09-27, DEV/emulator)
+Schema **v11** (additive): `sync_state.backup_state` (NULL/SEEDING/COMPLETE),
+`sync_conflicts` (local-only review table, excluded from sync). PROD not migrated.
+- **Enable (Owner, claimed wallet):** random BMK → Keystore FIRST → keyring
+  (Password + Recovery slots) → `enableBackup` (server `backupState: SEEDING`) →
+  one DB tx: `SEEDING` + outbox full snapshot. Crash after keyring creation ⇒ retry
+  gets `KEYRING_EXISTS`, the SAME password unwraps the same BMK (no new Recovery Key
+  is shown; regenerate-Recovery-Key is backlog). `EntityCodec` (inside ciphertext):
+  `{s: schema, c: {column: raw SQLite value}}` / `{s, deleted: true}` + writer `w`;
+  sorted keys, locale-free, exact restore; unknown/newer columns rejected.
+- **Push:** outbox + current rows read in ONE DB tx; every envelope of a batch gets
+  `rev = baseHeadRev + 1` (> any stored rev); `batchId = HMAC(IDK, head‖manifest‖seqs)`
+  ⇒ retry after a lost response hits the receipt (no second write); ACK deletes the
+  exact seqs only (a newer edit has a new seq and survives). The batch that drains
+  the outbox carries an encrypted `manifest` (walletId, created_at, per-kind counts)
+  and `checkpoint: true` ⇒ server `checkpointRev`, SEEDING → COMPLETE.
+- **Pull:** all pages (server pages end on whole batches: `throughRev`/`more`),
+  every envelope authenticated (serverRev == sealed rev), applied in ONE DB tx inside
+  `withoutSyncCapture` with deferred FKs; FK violation ⇒ whole pull rolled back
+  (`dependency-conflict`). Entity with a pending local change: same content ⇒ ack;
+  own older echo ⇒ keep local; other writer ⇒ local copy saved verbatim in
+  `sync_conflicts`, server version wins (no silent overwrite).
+- **Worker (`SyncWorker`):** start/resume + Drift table updates → debounce →
+  `syncNow` (pull, push, HEAD_MOVED ⇒ pull+retry). Network errors ⇒ exponential
+  backoff (≤15 min); signed out / other Account / stale or revoked device / no BMK
+  ⇒ stop quietly, outbox kept. No polling while idle; its own pull writes do not
+  retrigger it. Not yet wired to app lifecycle/UI (DEV UI = backlog).
+- **Restore (`RestoreEngine`):** P7.1 session → `getWalletClaim` (owned) → keyring →
+  unwrap BMK locally (wrong secret fails before any file) → download + authenticate
+  all → NEW file with its FINAL random name `wallet_<uuid>.sqlite` and its own new
+  DEK-DB (no rename ⇒ Keystore/AAD file binding intact), `SeedProfile.none`,
+  marker `.restoring` → one DB tx: wallet_meta, rows, FK check, binding ACTIVE +
+  sync_state COMPLETE (written after data ⇒ no outbox) → verify: integrity_check,
+  FK, every row re-read == decrypted body, per-kind counts == manifest (manifest
+  must be at head unless `allowStaleCheckpoint`), all pools ≥ 0, unique clientTxId,
+  outbox 0 → BMK into Keystore → registry register (= activation) → marker removed.
+  Any failure ⇒ close + delete file/sidecars/marker; current Wallet never opened.
+  Startup `cleanupInterruptedRestores` removes unregistered `wallet_*` leftovers.
+  DB-key entries of discarded restore files are kept (the bridge intentionally has
+  no key-deletion API); names are random, never reused.
+- **Tests:** `test/sync/cloud_backup_test.dart` (11), `sync_worker_test.dart` (3),
+  `restore_test.dart` (10, failure injected at download/create/apply/verify/activate
+  ⇒ directory byte-identical), `restore_storage_test.dart` (3, real SQLCipher),
+  `migration_v10_to_v11_test.dart`; emulator `functions/test/backup.test.js` (5) +
+  `test/sync/emulator_e2e_test.dart` (real Functions/Firestore/Auth: backup 16
+  envelopes in 1 call, delta 1 call, idle sync 1 read call, Firestore admin dump has
+  no amount/note/label/local id/kind/password/Recovery Key, lost-device recovery →
+  restore == source, old device DEVICE_REVOKED + BMK wiped).
+- **Honest limits:** server can replay an OLDER envelope of an entity (authentic,
+  older rev) — per-entity rollback detection is backlog; the manifest detects
+  dropped/added objects only at a checkpoint. Pull applies other-writer rows without
+  re-running pool non-negativity for merged pending local rows (restore does check).
 
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow

@@ -184,3 +184,10 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - Máy trạng thái: NONE → CLAIMING (ghi `claimRequestId` TRƯỚC khi gọi mạng) → ACTIVE (1 DB transaction kiểm walletId/selfMember, lưu id claim gốc của máy chủ, `wallet_meta.kind` → personal) → registry đồng bộ TỪ DB (`reconcileRegistryFromDb`, cả lúc khởi động). Lỗi mạng/phiên ⇒ giữ CLAIMING, thử lại cùng id; lý do dứt khoát của máy chủ ⇒ `release()` về NONE.
 - `claimWallet` = 1 Firestore transaction (P7.1 authorize + xung đột + ghi); chỉ nhận metadata sở hữu (whitelist khoá; trường lạ ⇒ INVALID_ARGUMENT). `abandonClaim` chỉ khi headRev 0 và không có entity/batch. `putEncryptedBatch` từ chối ví đã claim (BACKUP_NOT_ENABLED) tới P8.3. Rules vẫn deny-all.
 - PROD: KHÔNG claim. Chưa đẩy outbox, chưa sao lưu dữ liệu thật, chưa khôi phục (P8.3+).
+
+## 26. P8.3–P8.5 — Sao lưu mã hoá, delta, khôi phục (schema v11, 2026-09-27, DEV/emulator; nguồn `docs/p8-cloud-backup-architecture.md` §8e)
+- Nội dung đồng bộ = `EntityCodec` (dòng SQLite thô, khoá sắp xếp) BÊN TRONG ciphertext; máy chủ chỉ thấy `{v,id,rev,n,c,aad}`. Không bao giờ thêm trường nhìn thấy được.
+- Đẩy: `rev = baseHeadRev+1`, `batchId` tất định (HMAC IDK) ⇒ gửi lại idempotent; ACK theo `seq` chính xác. Batch rút cạn outbox mang manifest mã hoá + checkpoint.
+- Kéo: 1 DB transaction, `withoutSyncCapture`, FK hoãn; xung đột với thay đổi cục bộ chưa đẩy của NGƯỜI KHÁC ⇒ lưu `sync_conflicts`, bản máy chủ thắng; FK vỡ ⇒ huỷ cả lần kéo. KHÔNG tự gộp.
+- Khôi phục: file đích tên cuối cùng ngẫu nhiên `wallet_<uuid>.sqlite` + khoá DB riêng (KHÔNG rename), kích hoạt = ghi registry SAU kiểm chứng; lỗi ⇒ xoá file tạm, ví hiện tại không bị mở. Bridge khoá DB vẫn KHÔNG có API xoá khoá.
+- Chỉ DEV (env dev + backend DEV). PROD chưa migrate v11, chưa claim, chưa upload.
