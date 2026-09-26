@@ -30,6 +30,8 @@ class SessionTransportClient {
     'claimWallet',
     'getWalletClaim',
     'abandonClaim',
+    // P8.3: turn on encrypted backup of a claimed Wallet (metadata only).
+    'enableBackup',
   };
 
   Future<Map<String, dynamic>> call(

@@ -144,7 +144,7 @@ class BackupService {
         }),
       );
 
-  static Future<({Uint8List bmk, String proof})> _unwrapPassword(
+  static Future<({Uint8List bmk, String proof})> unwrapPassword(
     Map<String, Object?> keyring,
     String walletId,
     String password,
@@ -165,6 +165,73 @@ class BackupService {
         slotName: 'password',
       ),
       proof: secrets.proof,
+    );
+  }
+
+  /// Recovery-Key slot → BMK (checksum + GCM tag detect a wrong key locally).
+  static Future<({Uint8List bmk, String proof})> unwrapRecovery(
+    Map<String, Object?> keyring,
+    String walletId,
+    String recoveryKey,
+  ) async {
+    final slot = WrappedKeySlot.fromJson(
+      Map<String, Object?>.from(keyring['recovery']! as Map),
+    );
+    if (slot.kdf['alg'] != 'hkdf-sha256') throw const BackupKeyException();
+    final secrets = await BackupCrypto.fromRecoveryKey(
+      await RecoveryKey.parse(recoveryKey),
+      slot.salt,
+    );
+    return (
+      bmk: await BackupCrypto.unwrap(
+        slot: slot,
+        secrets: secrets,
+        walletId: walletId,
+        slotName: 'recovery',
+      ),
+      proof: secrets.proof,
+    );
+  }
+
+  /// `putBackupKeyring(create)` payload for [bmk]: Password slot (Argon2id) +
+  /// Recovery slot. Returns the Recovery Key display string — show ONCE.
+  static Future<({Map<String, Object?> payload, String recoveryKey})>
+  newKeyring({
+    required Uint8List bmk,
+    required String walletId,
+    required String password,
+    KdfParams kdf = KdfParams.v1,
+  }) async {
+    final pwSalt = BackupCrypto.randomBytes(16);
+    final pw = await BackupCrypto.fromPassword(password, pwSalt, kdf);
+    final recoveryKey = RecoveryKey.generate();
+    final rcSalt = BackupCrypto.randomBytes(32);
+    final rc = await BackupCrypto.fromRecoveryKey(recoveryKey, rcSalt);
+    return (
+      payload: <String, Object?>{
+        'walletId': walletId,
+        'mode': 'create',
+        'cryptoVersion': BackupCrypto.cryptoVersion,
+        'password': (await BackupCrypto.wrap(
+          bmk: bmk,
+          secrets: pw,
+          salt: pwSalt,
+          kdf: kdf.toJson(),
+          walletId: walletId,
+          slot: 'password',
+        )).toJson(),
+        'recovery': (await BackupCrypto.wrap(
+          bmk: bmk,
+          secrets: rc,
+          salt: rcSalt,
+          kdf: {'alg': 'hkdf-sha256'},
+          walletId: walletId,
+          slot: 'recovery',
+        )).toJson(),
+        'passwordProof': pw.proof,
+        'recoveryProof': rc.proof,
+      },
+      recoveryKey: await recoveryKey.display(),
     );
   }
 
@@ -190,7 +257,7 @@ class BackupService {
     final keyring = await _keyring(walletId);
     String? oldProof;
     if (oldPassword != null) {
-      final old = await _unwrapPassword(keyring, walletId, oldPassword);
+      final old = await unwrapPassword(keyring, walletId, oldPassword);
       if (!_equal(old.bmk, local.bmk)) throw const BackupKeyException();
       oldProof = old.proof;
     }
@@ -231,7 +298,7 @@ class BackupService {
     late Uint8List bmk;
     late String proof;
     if (password != null) {
-      final r = await _unwrapPassword(keyring, walletId, password);
+      final r = await unwrapPassword(keyring, walletId, password);
       bmk = r.bmk;
       proof = r.proof;
     } else {

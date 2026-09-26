@@ -5446,6 +5446,18 @@ class $SyncStateTable extends SyncState
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _backupStateMeta = const VerificationMeta(
+    'backupState',
+  );
+  @override
+  late final GeneratedColumn<String> backupState = GeneratedColumn<String>(
+    'backup_state',
+    aliasedName,
+    true,
+    check: () => backupState.isIn(const ['SEEDING', 'COMPLETE']),
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     singleton,
@@ -5453,6 +5465,7 @@ class $SyncStateTable extends SyncState
     serverHeadRev,
     lastPushAt,
     lastPullAt,
+    backupState,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -5508,6 +5521,15 @@ class $SyncStateTable extends SyncState
         ),
       );
     }
+    if (data.containsKey('backup_state')) {
+      context.handle(
+        _backupStateMeta,
+        backupState.isAcceptableOrUnknown(
+          data['backup_state']!,
+          _backupStateMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -5537,6 +5559,10 @@ class $SyncStateTable extends SyncState
         DriftSqlType.dateTime,
         data['${effectivePrefix}last_pull_at'],
       ),
+      backupState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}backup_state'],
+      ),
     );
   }
 
@@ -5554,12 +5580,18 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
   final int? serverHeadRev;
   final DateTime? lastPushAt;
   final DateTime? lastPullAt;
+
+  /// v11 (P8.3): sao lưu mã hoá của ví này. `null` = chưa bật; `SEEDING` = đã bật,
+  /// mốc nền đang được đẩy; `COMPLETE` = mốc nền đã được máy chủ xác nhận trọn vẹn
+  /// (checkpoint) — từ đó chỉ còn delta.
+  final String? backupState;
   const SyncStateRow({
     required this.singleton,
     required this.captureSuppressed,
     this.serverHeadRev,
     this.lastPushAt,
     this.lastPullAt,
+    this.backupState,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -5574,6 +5606,9 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
     }
     if (!nullToAbsent || lastPullAt != null) {
       map['last_pull_at'] = Variable<DateTime>(lastPullAt);
+    }
+    if (!nullToAbsent || backupState != null) {
+      map['backup_state'] = Variable<String>(backupState);
     }
     return map;
   }
@@ -5591,6 +5626,9 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
       lastPullAt: lastPullAt == null && nullToAbsent
           ? const Value.absent()
           : Value(lastPullAt),
+      backupState: backupState == null && nullToAbsent
+          ? const Value.absent()
+          : Value(backupState),
     );
   }
 
@@ -5605,6 +5643,7 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
       serverHeadRev: serializer.fromJson<int?>(json['serverHeadRev']),
       lastPushAt: serializer.fromJson<DateTime?>(json['lastPushAt']),
       lastPullAt: serializer.fromJson<DateTime?>(json['lastPullAt']),
+      backupState: serializer.fromJson<String?>(json['backupState']),
     );
   }
   @override
@@ -5616,6 +5655,7 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
       'serverHeadRev': serializer.toJson<int?>(serverHeadRev),
       'lastPushAt': serializer.toJson<DateTime?>(lastPushAt),
       'lastPullAt': serializer.toJson<DateTime?>(lastPullAt),
+      'backupState': serializer.toJson<String?>(backupState),
     };
   }
 
@@ -5625,6 +5665,7 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
     Value<int?> serverHeadRev = const Value.absent(),
     Value<DateTime?> lastPushAt = const Value.absent(),
     Value<DateTime?> lastPullAt = const Value.absent(),
+    Value<String?> backupState = const Value.absent(),
   }) => SyncStateRow(
     singleton: singleton ?? this.singleton,
     captureSuppressed: captureSuppressed ?? this.captureSuppressed,
@@ -5633,6 +5674,7 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
         : this.serverHeadRev,
     lastPushAt: lastPushAt.present ? lastPushAt.value : this.lastPushAt,
     lastPullAt: lastPullAt.present ? lastPullAt.value : this.lastPullAt,
+    backupState: backupState.present ? backupState.value : this.backupState,
   );
   SyncStateRow copyWithCompanion(SyncStateCompanion data) {
     return SyncStateRow(
@@ -5649,6 +5691,9 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
       lastPullAt: data.lastPullAt.present
           ? data.lastPullAt.value
           : this.lastPullAt,
+      backupState: data.backupState.present
+          ? data.backupState.value
+          : this.backupState,
     );
   }
 
@@ -5659,7 +5704,8 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
           ..write('captureSuppressed: $captureSuppressed, ')
           ..write('serverHeadRev: $serverHeadRev, ')
           ..write('lastPushAt: $lastPushAt, ')
-          ..write('lastPullAt: $lastPullAt')
+          ..write('lastPullAt: $lastPullAt, ')
+          ..write('backupState: $backupState')
           ..write(')'))
         .toString();
   }
@@ -5671,6 +5717,7 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
     serverHeadRev,
     lastPushAt,
     lastPullAt,
+    backupState,
   );
   @override
   bool operator ==(Object other) =>
@@ -5680,7 +5727,8 @@ class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
           other.captureSuppressed == this.captureSuppressed &&
           other.serverHeadRev == this.serverHeadRev &&
           other.lastPushAt == this.lastPushAt &&
-          other.lastPullAt == this.lastPullAt);
+          other.lastPullAt == this.lastPullAt &&
+          other.backupState == this.backupState);
 }
 
 class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
@@ -5689,12 +5737,14 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
   final Value<int?> serverHeadRev;
   final Value<DateTime?> lastPushAt;
   final Value<DateTime?> lastPullAt;
+  final Value<String?> backupState;
   const SyncStateCompanion({
     this.singleton = const Value.absent(),
     this.captureSuppressed = const Value.absent(),
     this.serverHeadRev = const Value.absent(),
     this.lastPushAt = const Value.absent(),
     this.lastPullAt = const Value.absent(),
+    this.backupState = const Value.absent(),
   });
   SyncStateCompanion.insert({
     this.singleton = const Value.absent(),
@@ -5702,6 +5752,7 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
     this.serverHeadRev = const Value.absent(),
     this.lastPushAt = const Value.absent(),
     this.lastPullAt = const Value.absent(),
+    this.backupState = const Value.absent(),
   });
   static Insertable<SyncStateRow> custom({
     Expression<int>? singleton,
@@ -5709,6 +5760,7 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
     Expression<int>? serverHeadRev,
     Expression<DateTime>? lastPushAt,
     Expression<DateTime>? lastPullAt,
+    Expression<String>? backupState,
   }) {
     return RawValuesInsertable({
       if (singleton != null) 'singleton': singleton,
@@ -5716,6 +5768,7 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
       if (serverHeadRev != null) 'server_head_rev': serverHeadRev,
       if (lastPushAt != null) 'last_push_at': lastPushAt,
       if (lastPullAt != null) 'last_pull_at': lastPullAt,
+      if (backupState != null) 'backup_state': backupState,
     });
   }
 
@@ -5725,6 +5778,7 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
     Value<int?>? serverHeadRev,
     Value<DateTime?>? lastPushAt,
     Value<DateTime?>? lastPullAt,
+    Value<String?>? backupState,
   }) {
     return SyncStateCompanion(
       singleton: singleton ?? this.singleton,
@@ -5732,6 +5786,7 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
       serverHeadRev: serverHeadRev ?? this.serverHeadRev,
       lastPushAt: lastPushAt ?? this.lastPushAt,
       lastPullAt: lastPullAt ?? this.lastPullAt,
+      backupState: backupState ?? this.backupState,
     );
   }
 
@@ -5753,6 +5808,9 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
     if (lastPullAt.present) {
       map['last_pull_at'] = Variable<DateTime>(lastPullAt.value);
     }
+    if (backupState.present) {
+      map['backup_state'] = Variable<String>(backupState.value);
+    }
     return map;
   }
 
@@ -5763,7 +5821,8 @@ class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
           ..write('captureSuppressed: $captureSuppressed, ')
           ..write('serverHeadRev: $serverHeadRev, ')
           ..write('lastPushAt: $lastPushAt, ')
-          ..write('lastPullAt: $lastPullAt')
+          ..write('lastPullAt: $lastPullAt, ')
+          ..write('backupState: $backupState')
           ..write(')'))
         .toString();
   }
@@ -5977,6 +6036,518 @@ class WalletSettingsCompanion extends UpdateCompanion<WalletSetting> {
   }
 }
 
+class $SyncConflictsTable extends SyncConflicts
+    with TableInfo<$SyncConflictsTable, SyncConflictRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncConflictsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _entityKindMeta = const VerificationMeta(
+    'entityKind',
+  );
+  @override
+  late final GeneratedColumn<String> entityKind = GeneratedColumn<String>(
+    'entity_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _localBodyMeta = const VerificationMeta(
+    'localBody',
+  );
+  @override
+  late final GeneratedColumn<String> localBody = GeneratedColumn<String>(
+    'local_body',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _serverOpMeta = const VerificationMeta(
+    'serverOp',
+  );
+  @override
+  late final GeneratedColumn<String> serverOp = GeneratedColumn<String>(
+    'server_op',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _serverRevMeta = const VerificationMeta(
+    'serverRev',
+  );
+  @override
+  late final GeneratedColumn<int> serverRev = GeneratedColumn<int>(
+    'server_rev',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detectedAtMeta = const VerificationMeta(
+    'detectedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> detectedAt = GeneratedColumn<DateTime>(
+    'detected_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _resolvedMeta = const VerificationMeta(
+    'resolved',
+  );
+  @override
+  late final GeneratedColumn<bool> resolved = GeneratedColumn<bool>(
+    'resolved',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("resolved" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    entityKind,
+    entityId,
+    localBody,
+    serverOp,
+    serverRev,
+    detectedAt,
+    resolved,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_conflicts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncConflictRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('entity_kind')) {
+      context.handle(
+        _entityKindMeta,
+        entityKind.isAcceptableOrUnknown(data['entity_kind']!, _entityKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityKindMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('local_body')) {
+      context.handle(
+        _localBodyMeta,
+        localBody.isAcceptableOrUnknown(data['local_body']!, _localBodyMeta),
+      );
+    }
+    if (data.containsKey('server_op')) {
+      context.handle(
+        _serverOpMeta,
+        serverOp.isAcceptableOrUnknown(data['server_op']!, _serverOpMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_serverOpMeta);
+    }
+    if (data.containsKey('server_rev')) {
+      context.handle(
+        _serverRevMeta,
+        serverRev.isAcceptableOrUnknown(data['server_rev']!, _serverRevMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_serverRevMeta);
+    }
+    if (data.containsKey('detected_at')) {
+      context.handle(
+        _detectedAtMeta,
+        detectedAt.isAcceptableOrUnknown(data['detected_at']!, _detectedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_detectedAtMeta);
+    }
+    if (data.containsKey('resolved')) {
+      context.handle(
+        _resolvedMeta,
+        resolved.isAcceptableOrUnknown(data['resolved']!, _resolvedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SyncConflictRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncConflictRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      entityKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_kind'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      localBody: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_body'],
+      ),
+      serverOp: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}server_op'],
+      )!,
+      serverRev: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_rev'],
+      )!,
+      detectedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}detected_at'],
+      )!,
+      resolved: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}resolved'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncConflictsTable createAlias(String alias) {
+    return $SyncConflictsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncConflictRow extends DataClass implements Insertable<SyncConflictRow> {
+  final int id;
+  final String entityKind;
+  final String entityId;
+
+  /// Dòng cục bộ (JSON chuẩn tắc của `entity_codec`) — `null` nếu thay đổi cục bộ là xoá.
+  final String? localBody;
+
+  /// Máy chủ: `upsert` hoặc `delete` đã thắng, tại revision [serverRev].
+  final String serverOp;
+  final int serverRev;
+  final DateTime detectedAt;
+  final bool resolved;
+  const SyncConflictRow({
+    required this.id,
+    required this.entityKind,
+    required this.entityId,
+    this.localBody,
+    required this.serverOp,
+    required this.serverRev,
+    required this.detectedAt,
+    required this.resolved,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['entity_kind'] = Variable<String>(entityKind);
+    map['entity_id'] = Variable<String>(entityId);
+    if (!nullToAbsent || localBody != null) {
+      map['local_body'] = Variable<String>(localBody);
+    }
+    map['server_op'] = Variable<String>(serverOp);
+    map['server_rev'] = Variable<int>(serverRev);
+    map['detected_at'] = Variable<DateTime>(detectedAt);
+    map['resolved'] = Variable<bool>(resolved);
+    return map;
+  }
+
+  SyncConflictsCompanion toCompanion(bool nullToAbsent) {
+    return SyncConflictsCompanion(
+      id: Value(id),
+      entityKind: Value(entityKind),
+      entityId: Value(entityId),
+      localBody: localBody == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localBody),
+      serverOp: Value(serverOp),
+      serverRev: Value(serverRev),
+      detectedAt: Value(detectedAt),
+      resolved: Value(resolved),
+    );
+  }
+
+  factory SyncConflictRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncConflictRow(
+      id: serializer.fromJson<int>(json['id']),
+      entityKind: serializer.fromJson<String>(json['entityKind']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      localBody: serializer.fromJson<String?>(json['localBody']),
+      serverOp: serializer.fromJson<String>(json['serverOp']),
+      serverRev: serializer.fromJson<int>(json['serverRev']),
+      detectedAt: serializer.fromJson<DateTime>(json['detectedAt']),
+      resolved: serializer.fromJson<bool>(json['resolved']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'entityKind': serializer.toJson<String>(entityKind),
+      'entityId': serializer.toJson<String>(entityId),
+      'localBody': serializer.toJson<String?>(localBody),
+      'serverOp': serializer.toJson<String>(serverOp),
+      'serverRev': serializer.toJson<int>(serverRev),
+      'detectedAt': serializer.toJson<DateTime>(detectedAt),
+      'resolved': serializer.toJson<bool>(resolved),
+    };
+  }
+
+  SyncConflictRow copyWith({
+    int? id,
+    String? entityKind,
+    String? entityId,
+    Value<String?> localBody = const Value.absent(),
+    String? serverOp,
+    int? serverRev,
+    DateTime? detectedAt,
+    bool? resolved,
+  }) => SyncConflictRow(
+    id: id ?? this.id,
+    entityKind: entityKind ?? this.entityKind,
+    entityId: entityId ?? this.entityId,
+    localBody: localBody.present ? localBody.value : this.localBody,
+    serverOp: serverOp ?? this.serverOp,
+    serverRev: serverRev ?? this.serverRev,
+    detectedAt: detectedAt ?? this.detectedAt,
+    resolved: resolved ?? this.resolved,
+  );
+  SyncConflictRow copyWithCompanion(SyncConflictsCompanion data) {
+    return SyncConflictRow(
+      id: data.id.present ? data.id.value : this.id,
+      entityKind: data.entityKind.present
+          ? data.entityKind.value
+          : this.entityKind,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      localBody: data.localBody.present ? data.localBody.value : this.localBody,
+      serverOp: data.serverOp.present ? data.serverOp.value : this.serverOp,
+      serverRev: data.serverRev.present ? data.serverRev.value : this.serverRev,
+      detectedAt: data.detectedAt.present
+          ? data.detectedAt.value
+          : this.detectedAt,
+      resolved: data.resolved.present ? data.resolved.value : this.resolved,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConflictRow(')
+          ..write('id: $id, ')
+          ..write('entityKind: $entityKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('localBody: $localBody, ')
+          ..write('serverOp: $serverOp, ')
+          ..write('serverRev: $serverRev, ')
+          ..write('detectedAt: $detectedAt, ')
+          ..write('resolved: $resolved')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    entityKind,
+    entityId,
+    localBody,
+    serverOp,
+    serverRev,
+    detectedAt,
+    resolved,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncConflictRow &&
+          other.id == this.id &&
+          other.entityKind == this.entityKind &&
+          other.entityId == this.entityId &&
+          other.localBody == this.localBody &&
+          other.serverOp == this.serverOp &&
+          other.serverRev == this.serverRev &&
+          other.detectedAt == this.detectedAt &&
+          other.resolved == this.resolved);
+}
+
+class SyncConflictsCompanion extends UpdateCompanion<SyncConflictRow> {
+  final Value<int> id;
+  final Value<String> entityKind;
+  final Value<String> entityId;
+  final Value<String?> localBody;
+  final Value<String> serverOp;
+  final Value<int> serverRev;
+  final Value<DateTime> detectedAt;
+  final Value<bool> resolved;
+  const SyncConflictsCompanion({
+    this.id = const Value.absent(),
+    this.entityKind = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.localBody = const Value.absent(),
+    this.serverOp = const Value.absent(),
+    this.serverRev = const Value.absent(),
+    this.detectedAt = const Value.absent(),
+    this.resolved = const Value.absent(),
+  });
+  SyncConflictsCompanion.insert({
+    this.id = const Value.absent(),
+    required String entityKind,
+    required String entityId,
+    this.localBody = const Value.absent(),
+    required String serverOp,
+    required int serverRev,
+    required DateTime detectedAt,
+    this.resolved = const Value.absent(),
+  }) : entityKind = Value(entityKind),
+       entityId = Value(entityId),
+       serverOp = Value(serverOp),
+       serverRev = Value(serverRev),
+       detectedAt = Value(detectedAt);
+  static Insertable<SyncConflictRow> custom({
+    Expression<int>? id,
+    Expression<String>? entityKind,
+    Expression<String>? entityId,
+    Expression<String>? localBody,
+    Expression<String>? serverOp,
+    Expression<int>? serverRev,
+    Expression<DateTime>? detectedAt,
+    Expression<bool>? resolved,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (entityKind != null) 'entity_kind': entityKind,
+      if (entityId != null) 'entity_id': entityId,
+      if (localBody != null) 'local_body': localBody,
+      if (serverOp != null) 'server_op': serverOp,
+      if (serverRev != null) 'server_rev': serverRev,
+      if (detectedAt != null) 'detected_at': detectedAt,
+      if (resolved != null) 'resolved': resolved,
+    });
+  }
+
+  SyncConflictsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? entityKind,
+    Value<String>? entityId,
+    Value<String?>? localBody,
+    Value<String>? serverOp,
+    Value<int>? serverRev,
+    Value<DateTime>? detectedAt,
+    Value<bool>? resolved,
+  }) {
+    return SyncConflictsCompanion(
+      id: id ?? this.id,
+      entityKind: entityKind ?? this.entityKind,
+      entityId: entityId ?? this.entityId,
+      localBody: localBody ?? this.localBody,
+      serverOp: serverOp ?? this.serverOp,
+      serverRev: serverRev ?? this.serverRev,
+      detectedAt: detectedAt ?? this.detectedAt,
+      resolved: resolved ?? this.resolved,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (entityKind.present) {
+      map['entity_kind'] = Variable<String>(entityKind.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (localBody.present) {
+      map['local_body'] = Variable<String>(localBody.value);
+    }
+    if (serverOp.present) {
+      map['server_op'] = Variable<String>(serverOp.value);
+    }
+    if (serverRev.present) {
+      map['server_rev'] = Variable<int>(serverRev.value);
+    }
+    if (detectedAt.present) {
+      map['detected_at'] = Variable<DateTime>(detectedAt.value);
+    }
+    if (resolved.present) {
+      map['resolved'] = Variable<bool>(resolved.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncConflictsCompanion(')
+          ..write('id: $id, ')
+          ..write('entityKind: $entityKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('localBody: $localBody, ')
+          ..write('serverOp: $serverOp, ')
+          ..write('serverRev: $serverRev, ')
+          ..write('detectedAt: $detectedAt, ')
+          ..write('resolved: $resolved')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5999,6 +6570,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
   late final $SyncStateTable syncState = $SyncStateTable(this);
   late final $WalletSettingsTable walletSettings = $WalletSettingsTable(this);
+  late final $SyncConflictsTable syncConflicts = $SyncConflictsTable(this);
   late final Index uxTransactionClientTxId = Index(
     'ux_transaction_client_tx_id',
     'CREATE UNIQUE INDEX ux_transaction_client_tx_id ON transaction_rows (client_tx_id)',
@@ -6053,6 +6625,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncOutbox,
     syncState,
     walletSettings,
+    syncConflicts,
     uxTransactionClientTxId,
     ixTransactionSource,
     ixTransactionDestination,
@@ -9717,6 +10290,7 @@ typedef $$SyncStateTableCreateCompanionBuilder = SyncStateCompanion Function({
   Value<int?> serverHeadRev,
   Value<DateTime?> lastPushAt,
   Value<DateTime?> lastPullAt,
+  Value<String?> backupState,
 });
 typedef $$SyncStateTableUpdateCompanionBuilder = SyncStateCompanion Function({
   Value<int> singleton,
@@ -9724,6 +10298,7 @@ typedef $$SyncStateTableUpdateCompanionBuilder = SyncStateCompanion Function({
   Value<int?> serverHeadRev,
   Value<DateTime?> lastPushAt,
   Value<DateTime?> lastPullAt,
+  Value<String?> backupState,
 });
 
 class $$SyncStateTableFilterComposer
@@ -9757,6 +10332,11 @@ class $$SyncStateTableFilterComposer
 
   ColumnFilters<DateTime> get lastPullAt => $composableBuilder(
     column: $table.lastPullAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get backupState => $composableBuilder(
+    column: $table.backupState,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -9794,6 +10374,11 @@ class $$SyncStateTableOrderingComposer
     column: $table.lastPullAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get backupState => $composableBuilder(
+    column: $table.backupState,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncStateTableAnnotationComposer
@@ -9825,6 +10410,11 @@ class $$SyncStateTableAnnotationComposer
 
   GeneratedColumn<DateTime> get lastPullAt => $composableBuilder(
     column: $table.lastPullAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get backupState => $composableBuilder(
+    column: $table.backupState,
     builder: (column) => column,
   );
 }
@@ -9865,12 +10455,14 @@ class $$SyncStateTableTableManager
                 Value<int?> serverHeadRev = const Value.absent(),
                 Value<DateTime?> lastPushAt = const Value.absent(),
                 Value<DateTime?> lastPullAt = const Value.absent(),
+                Value<String?> backupState = const Value.absent(),
               }) => SyncStateCompanion(
                 singleton: singleton,
                 captureSuppressed: captureSuppressed,
                 serverHeadRev: serverHeadRev,
                 lastPushAt: lastPushAt,
                 lastPullAt: lastPullAt,
+                backupState: backupState,
               ),
           createCompanionCallback:
               ({
@@ -9879,12 +10471,14 @@ class $$SyncStateTableTableManager
                 Value<int?> serverHeadRev = const Value.absent(),
                 Value<DateTime?> lastPushAt = const Value.absent(),
                 Value<DateTime?> lastPullAt = const Value.absent(),
+                Value<String?> backupState = const Value.absent(),
               }) => SyncStateCompanion.insert(
                 singleton: singleton,
                 captureSuppressed: captureSuppressed,
                 serverHeadRev: serverHeadRev,
                 lastPushAt: lastPushAt,
                 lastPullAt: lastPullAt,
+                backupState: backupState,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -10069,6 +10663,270 @@ typedef $$WalletSettingsTableProcessedTableManager =
       WalletSetting,
       PrefetchHooks Function()
     >;
+typedef $$SyncConflictsTableCreateCompanionBuilder =
+    SyncConflictsCompanion Function({
+      Value<int> id,
+      required String entityKind,
+      required String entityId,
+      Value<String?> localBody,
+      required String serverOp,
+      required int serverRev,
+      required DateTime detectedAt,
+      Value<bool> resolved,
+    });
+typedef $$SyncConflictsTableUpdateCompanionBuilder =
+    SyncConflictsCompanion Function({
+      Value<int> id,
+      Value<String> entityKind,
+      Value<String> entityId,
+      Value<String?> localBody,
+      Value<String> serverOp,
+      Value<int> serverRev,
+      Value<DateTime> detectedAt,
+      Value<bool> resolved,
+    });
+
+class $$SyncConflictsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTable> {
+  $$SyncConflictsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localBody => $composableBuilder(
+    column: $table.localBody,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serverOp => $composableBuilder(
+    column: $table.serverOp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverRev => $composableBuilder(
+    column: $table.serverRev,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get resolved => $composableBuilder(
+    column: $table.resolved,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncConflictsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTable> {
+  $$SyncConflictsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localBody => $composableBuilder(
+    column: $table.localBody,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get serverOp => $composableBuilder(
+    column: $table.serverOp,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverRev => $composableBuilder(
+    column: $table.serverRev,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get resolved => $composableBuilder(
+    column: $table.resolved,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncConflictsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncConflictsTable> {
+  $$SyncConflictsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<String> get localBody =>
+      $composableBuilder(column: $table.localBody, builder: (column) => column);
+
+  GeneratedColumn<String> get serverOp =>
+      $composableBuilder(column: $table.serverOp, builder: (column) => column);
+
+  GeneratedColumn<int> get serverRev =>
+      $composableBuilder(column: $table.serverRev, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get detectedAt => $composableBuilder(
+    column: $table.detectedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get resolved =>
+      $composableBuilder(column: $table.resolved, builder: (column) => column);
+}
+
+class $$SyncConflictsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncConflictsTable,
+          SyncConflictRow,
+          $$SyncConflictsTableFilterComposer,
+          $$SyncConflictsTableOrderingComposer,
+          $$SyncConflictsTableAnnotationComposer,
+          $$SyncConflictsTableCreateCompanionBuilder,
+          $$SyncConflictsTableUpdateCompanionBuilder,
+          (
+            SyncConflictRow,
+            BaseReferences<_$AppDatabase, $SyncConflictsTable, SyncConflictRow>,
+          ),
+          SyncConflictRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncConflictsTableTableManager(_$AppDatabase db, $SyncConflictsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncConflictsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncConflictsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncConflictsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> entityKind = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<String?> localBody = const Value.absent(),
+                Value<String> serverOp = const Value.absent(),
+                Value<int> serverRev = const Value.absent(),
+                Value<DateTime> detectedAt = const Value.absent(),
+                Value<bool> resolved = const Value.absent(),
+              }) => SyncConflictsCompanion(
+                id: id,
+                entityKind: entityKind,
+                entityId: entityId,
+                localBody: localBody,
+                serverOp: serverOp,
+                serverRev: serverRev,
+                detectedAt: detectedAt,
+                resolved: resolved,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String entityKind,
+                required String entityId,
+                Value<String?> localBody = const Value.absent(),
+                required String serverOp,
+                required int serverRev,
+                required DateTime detectedAt,
+                Value<bool> resolved = const Value.absent(),
+              }) => SyncConflictsCompanion.insert(
+                id: id,
+                entityKind: entityKind,
+                entityId: entityId,
+                localBody: localBody,
+                serverOp: serverOp,
+                serverRev: serverRev,
+                detectedAt: detectedAt,
+                resolved: resolved,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncConflictsTable, SyncConflictRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncConflictsTable,
+                    SyncConflictRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncConflictsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncConflictsTable,
+      SyncConflictRow,
+      $$SyncConflictsTableFilterComposer,
+      $$SyncConflictsTableOrderingComposer,
+      $$SyncConflictsTableAnnotationComposer,
+      $$SyncConflictsTableCreateCompanionBuilder,
+      $$SyncConflictsTableUpdateCompanionBuilder,
+      (
+        SyncConflictRow,
+        BaseReferences<_$AppDatabase, $SyncConflictsTable, SyncConflictRow>,
+      ),
+      SyncConflictRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10099,4 +10957,6 @@ class $AppDatabaseManager {
       $$SyncStateTableTableManager(_db, _db.syncState);
   $$WalletSettingsTableTableManager get walletSettings =>
       $$WalletSettingsTableTableManager(_db, _db.walletSettings);
+  $$SyncConflictsTableTableManager get syncConflicts =>
+      $$SyncConflictsTableTableManager(_db, _db.syncConflicts);
 }

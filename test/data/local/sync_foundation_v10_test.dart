@@ -135,7 +135,7 @@ void main() {
       final snap = captureSnapshot(after);
       final sqlAfter = _tableSql(after);
       after.close();
-      expect(snap.userVersion, 10);
+      expect(snap.userVersion, 11);
       for (final t in _v9Tables) {
         expect(snap.tables[t], before.tables[t], reason: '$t phải trùng số dòng + digest');
         expect(sqlAfter[t], sqlBefore[t], reason: 'schema $t không đổi');
@@ -178,7 +178,7 @@ void main() {
       applySqlcipherKey(raw, key);
       final snap = captureSnapshot(raw);
       raw.close();
-      expect(snap.userVersion, 10);
+      expect(snap.userVersion, 11);
       for (final t in _v9Tables) {
         expect(snap.tables[t], before.tables[t], reason: t);
       }
@@ -588,7 +588,7 @@ void main() {
       }
       expect(
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>('user_version'),
-        10,
+        11,
       );
       await db.close();
 

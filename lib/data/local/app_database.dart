@@ -270,8 +270,36 @@ class SyncState extends Table {
   DateTimeColumn get lastPushAt => dateTime().nullable()();
   DateTimeColumn get lastPullAt => dateTime().nullable()();
 
+  /// v11 (P8.3): sao lưu mã hoá của ví này. `null` = chưa bật; `SEEDING` = đã bật,
+  /// mốc nền đang được đẩy; `COMPLETE` = mốc nền đã được máy chủ xác nhận trọn vẹn
+  /// (checkpoint) — từ đó chỉ còn delta.
+  TextColumn get backupState => text().nullable().check(
+    // ignore: recursive_getters
+    backupState.isIn(const ['SEEDING', 'COMPLETE']),
+  )();
+
   @override
   Set<Column> get primaryKey => {singleton};
+}
+
+/// v11 (P8.4/Family) — thay đổi cục bộ CHƯA đẩy bị thay thế bởi phiên bản máy chủ
+/// (người khác đã sửa/xoá cùng thực thể trước). KHÔNG ghi đè im lặng: bản cục bộ được
+/// giữ nguyên văn ở đây để người dùng xem lại. Chỉ nằm trong DB cục bộ (SQLCipher),
+/// không bao giờ đồng bộ.
+@DataClassName('SyncConflictRow')
+class SyncConflicts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get entityKind => text()();
+  TextColumn get entityId => text()();
+
+  /// Dòng cục bộ (JSON chuẩn tắc của `entity_codec`) — `null` nếu thay đổi cục bộ là xoá.
+  TextColumn get localBody => text().nullable()();
+
+  /// Máy chủ: `upsert` hoặc `delete` đã thắng, tại revision [serverRev].
+  TextColumn get serverOp => text()();
+  IntColumn get serverRev => integer()();
+  DateTimeColumn get detectedAt => dateTime()();
+  BoolColumn get resolved => boolean().withDefault(const Constant(false))();
 }
 
 /// v10 (P8.1) — cài đặt thuộc WALLET (đồng bộ cùng ví), dạng khoá/giá trị. Khác
@@ -300,6 +328,7 @@ class WalletSettings extends Table {
     SyncOutbox,
     SyncState,
     WalletSettings,
+    SyncConflicts,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -352,8 +381,9 @@ class AppDatabase extends _$AppDatabase {
   /// (`wallet_meta`, `financial_member_rows`), không đụng dòng/cột nào của dữ liệu cũ.
   /// Version 10 (P8.1): 4 bảng THUẦN CỘNG THÊM (`cloud_binding`, `sync_outbox`,
   /// `sync_state`, `wallet_settings`) + trigger ghi nhận thay đổi; không ghi dòng nào.
+  /// Version 11 (P8.3): `sync_state.backup_state` + bảng `sync_conflicts` (cộng thêm).
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -419,6 +449,17 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(syncState);
           await m.createTable(walletSettings);
           await installSyncCaptureTriggers(this);
+        });
+      }
+      if (from < 11) {
+        // v10 → v11 (P8.3): 1 cột nullable + 1 bảng mới. Không ghi dòng nào.
+        // Idempotent như v9 (bảng tạo mới theo schema HIỆN TẠI đã có cột).
+        await transaction(() async {
+          final cols = await customSelect('PRAGMA table_info(sync_state)').get();
+          if (!cols.any((c) => c.read<String>('name') == 'backup_state')) {
+            await m.addColumn(syncState, syncState.backupState);
+          }
+          await m.createTable(syncConflicts);
         });
       }
     },

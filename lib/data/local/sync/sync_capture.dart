@@ -38,6 +38,7 @@ const syncExcludedTables = <String, String>{
   'cloud_binding': 'hạ tầng đồng bộ cục bộ (ràng buộc Account/thiết bị)',
   'sync_outbox': 'hạ tầng đồng bộ cục bộ',
   'sync_state': 'hạ tầng đồng bộ cục bộ (con trỏ/cờ tắt ghi nhận)',
+  'sync_conflicts': 'bản cục bộ bị máy chủ thay thế — chỉ để người dùng xem lại',
 };
 
 String _triggerName(String table, String op) => 'sync_capture_${table}_$op';

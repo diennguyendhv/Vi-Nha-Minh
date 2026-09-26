@@ -18,6 +18,11 @@ const envelopeKinds = {
   'walletMeta',
   'counterparty',
   'obligation',
+  // P8.3: real Wallet tables (`syncCapturedTables`) + the encrypted manifest.
+  'savingsAssetType',
+  'financialMember',
+  'walletSetting',
+  'manifest',
 };
 
 /// Generic encrypted object, cryptoVersion 1 / payload schema 1.

@@ -18,6 +18,7 @@ const MAX_REVOKED = 20;
 const LIMIT = {max: 5, windowMs: 15 * 60 * 1000, lockMs: 30 * 60 * 1000};
 const MAX_CIPHERTEXT_B64 = 16384;
 const MAX_BATCH = 100;
+const CREDENTIAL_KEYS = ['accountId', 'installationId', 'generation', 'epoch', 'secret'];
 
 const reject = (code, reason, message = reason) =>
   new HttpsError(code, message, {reason});
@@ -389,16 +390,39 @@ function validEnvelope(e) {
     typeof e.c === 'string' && e.c.length <= MAX_CIPHERTEXT_B64 && b64Bytes(e.c, 17, 12288);
 }
 /**
- * Session gate + ownership + envelope shape + CAS(headRev) + per-entity rev +
+ * Who may exchange ciphertext for a wallet. Pre-claim DEV fixture wallets: the
+ * owner only. CLAIMED wallets (P8.2+): an ACTIVE membership of this Account
+ * (Owner, or the Family Member). Returns the keyring owner.
+ */
+async function walletAccess(tx, walletRef, uid) {
+  const wallet = (await tx.get(walletRef)).data();
+  if (!wallet) return {wallet: null, keyringOwner: uid};
+  if (wallet.state === undefined) {
+    if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
+    return {wallet, keyringOwner: uid};
+  }
+  if (wallet.state !== 'CLAIMED') throw new HttpsError('permission-denied', 'Not a member');
+  const membership = (await tx.get(walletRef.collection('memberships').doc(uid))).data();
+  if (!membership || membership.status !== 'ACTIVE' || membership.accountId !== uid) {
+    throw new HttpsError('permission-denied', 'Not a member');
+  }
+  return {wallet, membership, keyringOwner: wallet.ownerAccountId};
+}
+/**
+ * Session gate + membership + envelope shape + CAS(headRev) + per-entity rev +
  * idempotent batch receipt, all in ONE transaction. Ciphertext is opaque here.
- * DEV fixture wallets only until the SQLCipher gate passes.
+ * Claimed wallets need backup enabled (enableBackup); unclaimed ones are DEV
+ * fixtures only. `checkpoint: true` = the client says this batch drained its
+ * outbox and carries the (encrypted) manifest: the server records
+ * checkpointRev and, while SEEDING, marks the initial backup COMPLETE.
  */
 exports.putEncryptedBatch = onCall(options, async request => {
   const {data, uid, ref} = context(request);
-  const keyringRef = keyringRefs(uid, data.walletId);
+  if (!walletIdPattern.test(data.walletId ?? '')) throw new HttpsError('invalid-argument', 'Invalid wallet');
   const envelopes = data.envelopes;
   if (typeof data.batchId !== 'string' || !token43.test(data.batchId) ||
       !Number.isSafeInteger(data.baseHeadRev) || data.baseHeadRev < 0 ||
+      (data.checkpoint !== undefined && typeof data.checkpoint !== 'boolean') ||
       !Array.isArray(envelopes) || envelopes.length < 1 || envelopes.length > MAX_BATCH ||
       !envelopes.every(validEnvelope) || new Set(envelopes.map(e => e.id)).size !== envelopes.length) {
     throw new HttpsError('invalid-argument', 'Invalid batch');
@@ -408,13 +432,13 @@ exports.putEncryptedBatch = onCall(options, async request => {
   const entityRefs = envelopes.map(e => walletRef.collection('entities').doc(e.id));
   return db.runTransaction(async tx => {
     authorize((await tx.get(ref)).data(), data);
-    const keyring = (await tx.get(keyringRef)).data();
-    const wallet = (await tx.get(walletRef)).data();
+    const {wallet, keyringOwner} = await walletAccess(tx, walletRef, uid);
+    const keyring = (await tx.get(keyringRefs(keyringOwner, data.walletId))).data();
     const receipt = (await tx.get(receiptRef)).data();
     const current = await Promise.all(entityRefs.map(r => tx.get(r)));
-    if (wallet && wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
-    // P8.2 claims ownership only; encrypted upload of a claimed Wallet is P8.3.
-    if (wallet?.state === 'CLAIMED') throw reject('failed-precondition', 'BACKUP_NOT_ENABLED');
+    if (wallet?.state === 'CLAIMED' && !['SEEDING', 'COMPLETE'].includes(wallet.backupState)) {
+      throw reject('failed-precondition', 'BACKUP_NOT_ENABLED');
+    }
     if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
     if (!wallet && data.fixture !== true) throw reject('failed-precondition', 'FIXTURE_ONLY');
     if (receipt) return {headRev: receipt.headRev, duplicate: true};
@@ -426,7 +450,12 @@ exports.putEncryptedBatch = onCall(options, async request => {
     });
     const headRev = head + 1;
     const now = Timestamp.now();
-    tx.set(walletRef, wallet ? {headRev, updatedAt: now}
+    const update = {headRev, updatedAt: now};
+    if (data.checkpoint === true && wallet?.state === 'CLAIMED') {
+      update.checkpointRev = headRev;
+      if (wallet.backupState === 'SEEDING') update.backupState = 'COMPLETE';
+    }
+    tx.set(walletRef, wallet ? update
       : {ownerAccountId: uid, cryptoVersion: 1, fixture: true, headRev, updatedAt: now},
     {merge: true});
     envelopes.forEach((e, i) => tx.set(entityRefs[i], {...e, serverRev: headRev}));
@@ -434,25 +463,60 @@ exports.putEncryptedBatch = onCall(options, async request => {
     return {headRev, duplicate: false};
   });
 });
+const MAX_PAGE = 200;
+/**
+ * Envelopes with serverRev > sinceRev. Pages end on a WHOLE batch boundary
+ * (`throughRev`): a batch is never split across pages, so a cursor never skips
+ * the rest of a half-read batch.
+ */
 exports.getEncryptedChanges = onCall(options, async request => {
   const {data, uid, ref} = context(request);
   if (!walletIdPattern.test(data.walletId ?? '') || !Number.isSafeInteger(data.sinceRev) ||
       data.sinceRev < 0) {
     throw new HttpsError('invalid-argument', 'Invalid request');
   }
-  authorize((await ref.get()).data(), data);
   const walletRef = db.doc(`wallets/${data.walletId}`);
-  const wallet = (await walletRef.get()).data();
-  if (!wallet) return {headRev: 0, envelopes: []};
-  if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
-  const snapshot = await walletRef.collection('entities').where('serverRev', '>', data.sinceRev)
-    .orderBy('serverRev').limit(200).get();
-  return {headRev: wallet.headRev, envelopes: snapshot.docs.map(d => {
-    const {v, id, rev, n, c, aad, serverRev} = d.data();
-    return {v, id, rev, n, c, aad, serverRev};
-  })};
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {wallet} = await walletAccess(tx, walletRef, uid);
+    if (!wallet) return {headRev: 0, throughRev: 0, more: false, envelopes: []};
+    const snapshot = await tx.get(walletRef.collection('entities')
+      .where('serverRev', '>', data.sinceRev).orderBy('serverRev').limit(MAX_PAGE + 1));
+    let docs = snapshot.docs.map(d => d.data());
+    let more = false;
+    if (docs.length > MAX_PAGE) {
+      more = true;
+      const cut = docs[MAX_PAGE].serverRev;
+      docs = docs.filter(d => d.serverRev < cut);
+    }
+    const throughRev = more ? docs[docs.length - 1].serverRev : wallet.headRev;
+    return {headRev: wallet.headRev, throughRev, more,
+      checkpointRev: wallet.checkpointRev ?? null, backupState: wallet.backupState ?? null,
+      envelopes: docs.map(({v, id, rev, n, c, aad, serverRev}) => ({v, id, rev, n, c, aad, serverRev}))};
+  }, {readOnly: true});
 });
-
+/**
+ * P8.3: the Owner explicitly turns on encrypted backup for a CLAIMED wallet
+ * after creating its keyring. Idempotent; never downgrades COMPLETE.
+ */
+exports.enableBackup = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  if (!Object.keys(data).every(k => [...CREDENTIAL_KEYS, 'walletId'].includes(k)) ||
+      typeof data.walletId !== 'string' || !uuid.test(data.walletId)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  const walletRef = db.doc(`wallets/${data.walletId}`);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const wallet = (await tx.get(walletRef)).data();
+    if (!wallet || wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'NOT_CLAIMED');
+    if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
+    const keyring = (await tx.get(keyringRefs(uid, data.walletId))).data();
+    if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
+    if (!wallet.backupState) tx.update(walletRef, {backupState: 'SEEDING'});
+    return {backupState: wallet.backupState ?? 'SEEDING', headRev: wallet.headRev ?? 0};
+  });
+});
 
 // ---------------------------------------------------------------------------
 // P8.2 explicit Personal Wallet claim. Ownership metadata ONLY: wallet id,
@@ -464,7 +528,6 @@ const memberIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
 // This backend only ever serves DEV (see context()); PILOT/PROD stay disabled.
 const SERVER_ENVIRONMENT = 'dev';
 const MAX_MEMBERS = 2;
-const CREDENTIAL_KEYS = ['accountId', 'installationId', 'generation', 'epoch', 'secret'];
 const onlyKeys = (data, keys) =>
   Object.keys(data).every(k => CREDENTIAL_KEYS.includes(k) || keys.includes(k));
 function claimRefs(uid, walletId) {
@@ -499,7 +562,8 @@ function claimInput(data) {
 }
 const claimResult = (wallet, walletId, idempotent) => ({claimed: true, idempotent, walletId,
   selfMemberId: wallet.selfMemberId, claimRequestId: wallet.claimRequestId,
-  headRev: wallet.headRev ?? 0});
+  headRev: wallet.headRev ?? 0, backupState: wallet.backupState ?? null,
+  checkpointRev: wallet.checkpointRev ?? null});
 
 /**
  * P8.2: binds CLOUD ownership of one Personal Wallet to this Account. Session

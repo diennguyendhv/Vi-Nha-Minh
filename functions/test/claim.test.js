@@ -78,7 +78,7 @@ test('claim writes ownership metadata only, exactly once; retries are idempotent
   const request = claim(a, walletId);
   const first = (await call('claimWallet', user, request)).result;
   assert.deepEqual(first, {claimed: true, idempotent: false, walletId, selfMemberId: 'chong',
-    claimRequestId: request.claimRequestId, headRev: 0});
+    claimRequestId: request.claimRequestId, headRev: 0, backupState: null, checkpointRev: null});
   const before = await snapshotOf(user.localId, walletId);
   assert.deepEqual(Object.keys(before.wallet).sort(), ['claimRequestId', 'claimedAt', 'cryptoVersion',
     'environment', 'headRev', 'kind', 'memberIds', 'ownerAccountId', 'payloadSchema', 'selfMemberId', 'state']);

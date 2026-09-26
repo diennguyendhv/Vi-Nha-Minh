@@ -112,7 +112,7 @@ void main() {
     final file = await plaintextFixture(dir);
     final before = snapshotPlain(file);
     expect(before.healthy, isTrue);
-    expect(before.userVersion, 10);
+    expect(before.userVersion, 11);
     expect(before.count('transaction_rows'), 40);
     final keys = MemoryDbKeyStore();
     final plan = await WalletDbEncryption(keys).prepare(file, fileName);
