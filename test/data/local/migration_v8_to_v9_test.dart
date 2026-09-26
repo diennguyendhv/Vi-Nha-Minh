@@ -60,7 +60,7 @@ void main() {
     raw.close();
 
     final db = AppDatabase.forTesting(NativeDatabase(file));
-    expect((await db.customSelect('PRAGMA user_version').getSingle()).read<int>('user_version'), 9);
+    expect((await db.customSelect('PRAGMA user_version').getSingle()).read<int>('user_version'), 10);
     final after = await db.customSelect('SELECT * FROM transaction_rows ORDER BY id').get();
     expect(after, hasLength(before.length));
     for (var i = 0; i < before.length; i++) {

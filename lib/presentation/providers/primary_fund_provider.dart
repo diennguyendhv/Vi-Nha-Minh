@@ -3,9 +3,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/default_funds.dart';
 import '../../data/local/wallet_descriptor.dart';
+import '../../data/repositories/local_wallet_settings_repository.dart';
 import 'database_provider.dart';
 
 /// Lưu lựa chọn "quỹ chính" của Trang chủ.
+///
+/// Từ v10 (P8.1) nơi lưu CHÍNH là `wallet_settings` trong DB của ví (WALLET DATA,
+/// đồng bộ cùng ví). Khoá SharedPreferences cũ dưới đây chỉ còn là nguồn ĐỌC dự
+/// phòng tạm thời + nguồn di trú một lần; không ghi mới vào đó.
 ///
 /// Quy ước giá trị lưu (khóa [key]):
 ///  - chưa từng lưu → mặc định [DefaultFunds.anUongId] (cài mới);
@@ -26,10 +31,17 @@ class PrimaryFundStorage {
       ? key
       : '$key.${wallet.walletId}';
 
-  static String? load(SharedPreferences prefs, {String storageKey = key}) {
-    if (!prefs.containsKey(storageKey)) return DefaultFunds.anUongId;
-    final value = prefs.getString(storageKey);
-    return (value == null || value.isEmpty) ? null : value;
+  static String? load(SharedPreferences prefs, {String storageKey = key}) =>
+      decode(readRaw(prefs, storageKey: storageKey));
+
+  /// Giá trị thô (`null` = chưa từng lưu).
+  static String? readRaw(SharedPreferences prefs, {String storageKey = key}) =>
+      prefs.containsKey(storageKey) ? (prefs.getString(storageKey) ?? '') : null;
+
+  /// Thô → id quỹ theo quy ước ở trên.
+  static String? decode(String? raw) {
+    if (raw == null) return DefaultFunds.anUongId;
+    return raw.isEmpty ? null : raw;
   }
 
   static Future<void> save(
@@ -51,9 +63,23 @@ class PrimaryFundController extends StateNotifier<String?> {
   /// Ghi lựa chọn xuống nơi lưu bền vững (null trong test → chỉ in-memory).
   final Future<void> Function(String? id)? persist;
 
+  bool _touched = false;
+
   Future<void> select(String? id) async {
+    _touched = true;
     state = id;
     await persist?.call(id);
+  }
+
+  /// Nạp giá trị bền vững (bất đồng bộ, từ DB ví). Bỏ qua nếu người dùng đã chọn
+  /// trong lúc chờ; lỗi đọc ⇒ giữ giá trị dự phòng hiện tại.
+  Future<void> hydrate(Future<String?> Function() load) async {
+    try {
+      final id = await load();
+      if (!_touched && mounted) state = id;
+    } on Object {
+      // giữ giá trị dự phòng
+    }
   }
 
   /// Gọi sau khi xóa hẳn 1 quỹ: nếu đó là quỹ chính thì bỏ chọn.
@@ -72,15 +98,25 @@ final primaryFundIdProvider =
       },
     );
 
-/// Dựng controller lưu bền vững từ [prefs] cho [wallet] — dùng ở `main()`.
-PrimaryFundController createPersistentPrimaryFundController(
-  SharedPreferences prefs, [
-  WalletDescriptor wallet = WalletDescriptor.legacyLocal,
-]) {
-  final storageKey = PrimaryFundStorage.keyFor(wallet);
-  return PrimaryFundController(
-    initialId: PrimaryFundStorage.load(prefs, storageKey: storageKey),
-    persist: (id) =>
-        PrimaryFundStorage.save(prefs, id, storageKey: storageKey),
+/// Dựng controller của [wallet] cho `main()`: đọc/ghi `wallet_settings` trong DB ví.
+/// Lần đầu (DB chưa có giá trị) chép giá trị hiệu lực từ khoá prefs cũ sang DB; prefs
+/// cũ chỉ là giá trị hiển thị tạm trước khi DB nạp xong. Ghi mới CHỈ vào DB.
+PrimaryFundController createWalletPrimaryFundController(
+  SharedPreferences prefs,
+  WalletDescriptor wallet,
+  LocalWalletSettingsRepository settings,
+) {
+  final legacyKey = PrimaryFundStorage.keyFor(wallet);
+  final legacyRaw = PrimaryFundStorage.readRaw(prefs, storageKey: legacyKey);
+  const k = LocalWalletSettingsRepository.primaryFundKey;
+  final controller = PrimaryFundController(
+    initialId: PrimaryFundStorage.decode(legacyRaw),
+    persist: (id) => settings.writeRaw(k, id ?? ''),
   );
+  controller.hydrate(
+    () async => PrimaryFundStorage.decode(
+      await settings.readOrMigrate(k, legacyRaw: legacyRaw),
+    ),
+  );
+  return controller;
 }

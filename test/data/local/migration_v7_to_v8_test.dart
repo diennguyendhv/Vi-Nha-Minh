@@ -122,7 +122,7 @@ void main() {
 
     final db = AppDatabase.forTesting(NativeDatabase(file));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 9);
+    expect(version.read<int>('user_version'), 10);
 
     // 1) Dữ liệu cũ y hệt, từng trường của từng dòng.
     final after = await dumpOld(db);
@@ -216,7 +216,7 @@ void main() {
   });
 
   test('DB MỚI: fresh = 2 thành viên ID mờ; demo (di sản) = vo/chong; đều đúng 1 Wallet', () async {
-    for (final profile in SeedProfile.values) {
+    for (final profile in [SeedProfile.fresh, SeedProfile.demo]) {
       final db = AppDatabase.forTesting(NativeDatabase.memory(), seed: profile);
       expect(await db.select(db.walletMeta).get(), hasLength(1), reason: '$profile');
       final members = await LocalMemberRepository(db).getMembers();

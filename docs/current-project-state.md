@@ -7,6 +7,8 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
+**P8.1 — Local Cloud-Sync Foundation (schema v10) — code PASS, PROD migration CHỜ chủ máy** (2026-09-26): `cloud_binding` (NONE/CLAIMING/ACTIVE, DB là nguồn sự thật), `sync_outbox` (trigger SQLite, chỉ khi ACTIVE; chỉ danh tính/ý định, gộp, tombstone, ack theo seq), `sync_state` (cờ `withoutSyncCapture` trong 1 transaction), `wallet_settings` (quỹ chính chuyển từ prefs, prefs = dự phòng đọc + di trú 1 lần), `SeedProfile.none` (rỗng tuyệt đối, SQLCipher từ lúc tạo). Test phủ bảng bắt buộc. Không upload, không claim, BackupGate đóng. Chi tiết: CLAUDE.md §24, `docs/p8-cloud-backup-architecture.md` §8c. Sao lưu mã hoá PROD trước di trú: `Documents/ViNhaMinh_backups/2026-09-26/p8_1_pre/` + trên máy `_p8_1_pre_backup/` (SHA-256 `ead04837…3dff`).
+
 **SQLCipher Local DB Encryption — PASS** (2026-09-26): mọi file ví mã hoá bằng SQLCipher 4.18, khoá riêng mỗi ví bọc bằng Keystore; PROD di trú tại chỗ (1.849 → 1.849 giao dịch, 9/9 bảng trùng digest, walletId/v9/integrity/FK giữ nguyên), bản sao PROD kéo ra không đọc được. Mất khoá ⇒ màn khôi phục, không tạo khoá mới. Chi tiết `docs/sqlcipher-local-encryption.md`. Cổng dữ liệu thật lên cloud VẪN ĐÓNG (chưa có engine P8).
 
 **P7.1 + P8 Security Foundation — PASS (DEV deploy + Pixel DEV, 2026-09-26)**. Mật khẩu sao lưu chuẩn hoá NFC (`kdf.norm`). Chưa live: B hoàn tất grant đã duyệt / dùng lại / hết hạn / sai installation và rate limit (chỉ emulator). P7.1: Auth một mình không thay thiết bị active (TAKEOVER_REQUIRED), chuyển máy cần A chấp thuận, mất máy cần credential suy ra từ Mật khẩu sao lưu/Recovery Key (epoch+1, máy cũ DEVICE_REVOKED). P8 crypto: BMK/DEK/IDK, Argon2id + Recovery Key, envelope chung không lộ loại thực thể, backend chỉ nhận ciphertext, chỉ fixture DEV (cổng SQLCipher). Chi tiết: `docs/p7-exclusive-session.md` (P7.1), `docs/p8-cloud-backup-architecture.md`. Full backup/restore engine, claim, đồng bộ: CHƯA.
@@ -17,7 +19,7 @@
 P7 (phiên độc quyền, PASS). P6/P6.1 (cách ly Wallet, PASS). P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
-**v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 và P4 KHÔNG đổi schema.
+**v10** (v9→v10 cộng thêm, nguyên tử, P8.1): `cloud_binding`, `sync_outbox`, `sync_state`, `wallet_settings` + trigger `sync_capture_*`. v9: `actor_member_id`. v8: `wallet_meta` + `financial_member_rows`.
 
 ## Auth & Environments (P5)
 - 3 môi trường qua Android flavor + `AppEnvironment.current` (nguồn duy nhất, từ `appFlavor`): dev=`com.vinhamimh.vi_nha_minh.dev`, pilot=`...pilot`, prod=`com.vinhamimh.vi_nha_minh` (không đổi). Mỗi môi trường 1 dự án Firebase riêng; cấu hình client công khai qua `--dart-define-from-file=env/<env>.json` (mẫu `env/*.example.json`; file thật gitignored; `FirebaseEnvConfig.isUsableFor(env)` từ chối cấu hình khác môi trường/giá trị mẫu). Không có google-services.json/service account trong repo.
@@ -30,7 +32,7 @@ P7 (phiên độc quyền, PASS). P6/P6.1 (cách ly Wallet, PASS). P5 (Auth & m�
 - **Registry toàn app** `wallet_registry.json` (thư mục tài liệu, ghi nguyên tử; `WalletRegistry`, `data/local/wallet_registry.dart`): chỉ metadata (`walletId`, `kind`, `dbFileName` thuần, `createdAt`, `boundAccountId?`). `main` gọi `bootstrapWalletRegistry()` (không bao giờ ném) đăng ký ví cục bộ TẠI CHỖ, idempotent; registry hỏng ⇒ rỗng và tự đăng ký lại đúng walletId. Xoá registry không xoá ví.
 - **Phạm vi phiên** `WalletAccessScope` (local | account(uid)) từ `accountProvider` (chỉ uid). `WalletRegistryEntry.canOpen`: ví LOCAL chưa claim mở được ở mọi phạm vi; ví gắn Account CHỈ mở bởi đúng Account. `resolveActive` ưu tiên ví gắn Account, rồi ví cục bộ. Đăng nhập KHÔNG gắn/claim/đổi kind; không có code production nào gán `boundAccountId` (chỉ test — P8 claim).
 - `appDatabaseProvider` watch `activeWalletProvider`: đổi ví/Account ⇒ DB cũ đóng, mọi repository/stream dựng lại. `selectedWalletIdProvider`, `currentTabProvider`, `syncModeProvider`, `primaryFundIdProvider` gắn `walletSessionKeyProvider` nên reset khi đổi ví/đăng xuất. Đăng xuất chỉ xoá phiên; file ví, App Lock, prefs thiết bị giữ nguyên.
-- Prefs: primary fund = WALLET data, ví cục bộ giữ khoá cũ `primary_fund_id`, ví khác `primary_fund_id.<walletId>`; explorer sort/App Lock = DEVICE, không đổi.
+- Primary fund = WALLET data trong `wallet_settings` (v10); khoá prefs cũ (`primary_fund_id` / `primary_fund_id.<walletId>`) chỉ còn đọc dự phòng + di trú 1 lần. Explorer sort/App Lock = DEVICE, không đổi.
 
 ## Financial Members
 Runtime = bảng `financial_member_rows` qua `MemberRepository` (`watchMembers/getMembers/getMemberById/createMember`), UI qua `memberDirectoryProvider` (`MemberDirectory`: nhãn, mặc định = đầu theo `displayOrder`, `otherThan`). Enum `FamilyMember` và `WalletMemberResolver` đã XOÁ; domain dùng `String memberId`.

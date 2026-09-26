@@ -10,6 +10,7 @@ import 'presentation/providers/session_provider.dart';
 import 'l10n/session_localizations.dart';
 import 'data/local/db_encryption/db_preflight.dart';
 import 'data/local/wallet_registry_bootstrap.dart';
+import 'data/repositories/local_wallet_settings_repository.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/db_recovery_screen.dart';
 import 'presentation/features/security/lock_gate.dart';
@@ -89,9 +90,10 @@ Future<void> main() async {
         ),
         appLockInitialStatusProvider.overrideWithValue(lockStatus),
         primaryFundIdProvider.overrideWith(
-          (ref) => createPersistentPrimaryFundController(
+          (ref) => createWalletPrimaryFundController(
             prefs,
             ref.watch(activeWalletProvider),
+            LocalWalletSettingsRepository(ref.watch(appDatabaseProvider)),
           ),
         ),
         explorerSortProvider.overrideWith(

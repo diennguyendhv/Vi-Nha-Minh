@@ -4345,6 +4345,1638 @@ class FinancialMemberRowsCompanion extends UpdateCompanion<FinancialMemberRow> {
   }
 }
 
+class $CloudBindingTable extends CloudBinding
+    with TableInfo<$CloudBindingTable, CloudBindingRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CloudBindingTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _singletonMeta = const VerificationMeta(
+    'singleton',
+  );
+  @override
+  late final GeneratedColumn<int> singleton = GeneratedColumn<int>(
+    'singleton',
+    aliasedName,
+    false,
+    check: () => singleton.equals(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _walletIdMeta = const VerificationMeta(
+    'walletId',
+  );
+  @override
+  late final GeneratedColumn<String> walletId = GeneratedColumn<String>(
+    'wallet_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _selfMemberIdMeta = const VerificationMeta(
+    'selfMemberId',
+  );
+  @override
+  late final GeneratedColumn<String> selfMemberId = GeneratedColumn<String>(
+    'self_member_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _environmentMeta = const VerificationMeta(
+    'environment',
+  );
+  @override
+  late final GeneratedColumn<String> environment = GeneratedColumn<String>(
+    'environment',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    false,
+    check: () => state.isIn(const ['NONE', 'CLAIMING', 'ACTIVE']),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _claimRequestIdMeta = const VerificationMeta(
+    'claimRequestId',
+  );
+  @override
+  late final GeneratedColumn<String> claimRequestId = GeneratedColumn<String>(
+    'claim_request_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cryptoVersionMeta = const VerificationMeta(
+    'cryptoVersion',
+  );
+  @override
+  late final GeneratedColumn<int> cryptoVersion = GeneratedColumn<int>(
+    'crypto_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _keyringRevMeta = const VerificationMeta(
+    'keyringRev',
+  );
+  @override
+  late final GeneratedColumn<int> keyringRev = GeneratedColumn<int>(
+    'keyring_rev',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    singleton,
+    walletId,
+    accountId,
+    selfMemberId,
+    environment,
+    state,
+    claimRequestId,
+    cryptoVersion,
+    keyringRev,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cloud_binding';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CloudBindingRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('singleton')) {
+      context.handle(
+        _singletonMeta,
+        singleton.isAcceptableOrUnknown(data['singleton']!, _singletonMeta),
+      );
+    }
+    if (data.containsKey('wallet_id')) {
+      context.handle(
+        _walletIdMeta,
+        walletId.isAcceptableOrUnknown(data['wallet_id']!, _walletIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_walletIdMeta);
+    }
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('self_member_id')) {
+      context.handle(
+        _selfMemberIdMeta,
+        selfMemberId.isAcceptableOrUnknown(
+          data['self_member_id']!,
+          _selfMemberIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_selfMemberIdMeta);
+    }
+    if (data.containsKey('environment')) {
+      context.handle(
+        _environmentMeta,
+        environment.isAcceptableOrUnknown(
+          data['environment']!,
+          _environmentMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_environmentMeta);
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('claim_request_id')) {
+      context.handle(
+        _claimRequestIdMeta,
+        claimRequestId.isAcceptableOrUnknown(
+          data['claim_request_id']!,
+          _claimRequestIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('crypto_version')) {
+      context.handle(
+        _cryptoVersionMeta,
+        cryptoVersion.isAcceptableOrUnknown(
+          data['crypto_version']!,
+          _cryptoVersionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('keyring_rev')) {
+      context.handle(
+        _keyringRevMeta,
+        keyringRev.isAcceptableOrUnknown(data['keyring_rev']!, _keyringRevMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {singleton};
+  @override
+  CloudBindingRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CloudBindingRow(
+      singleton: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}singleton'],
+      )!,
+      walletId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}wallet_id'],
+      )!,
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      selfMemberId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}self_member_id'],
+      )!,
+      environment: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}environment'],
+      )!,
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      )!,
+      claimRequestId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}claim_request_id'],
+      ),
+      cryptoVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}crypto_version'],
+      ),
+      keyringRev: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}keyring_rev'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CloudBindingTable createAlias(String alias) {
+    return $CloudBindingTable(attachedDatabase, alias);
+  }
+}
+
+class CloudBindingRow extends DataClass implements Insertable<CloudBindingRow> {
+  final int singleton;
+  final String walletId;
+  final String accountId;
+  final String selfMemberId;
+  final String environment;
+  final String state;
+  final String? claimRequestId;
+
+  /// Chỉ metadata phiên bản (KHÔNG khoá): cryptoVersion + rev keyring đã biết.
+  final int? cryptoVersion;
+  final int? keyringRev;
+  final DateTime updatedAt;
+  const CloudBindingRow({
+    required this.singleton,
+    required this.walletId,
+    required this.accountId,
+    required this.selfMemberId,
+    required this.environment,
+    required this.state,
+    this.claimRequestId,
+    this.cryptoVersion,
+    this.keyringRev,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['singleton'] = Variable<int>(singleton);
+    map['wallet_id'] = Variable<String>(walletId);
+    map['account_id'] = Variable<String>(accountId);
+    map['self_member_id'] = Variable<String>(selfMemberId);
+    map['environment'] = Variable<String>(environment);
+    map['state'] = Variable<String>(state);
+    if (!nullToAbsent || claimRequestId != null) {
+      map['claim_request_id'] = Variable<String>(claimRequestId);
+    }
+    if (!nullToAbsent || cryptoVersion != null) {
+      map['crypto_version'] = Variable<int>(cryptoVersion);
+    }
+    if (!nullToAbsent || keyringRev != null) {
+      map['keyring_rev'] = Variable<int>(keyringRev);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CloudBindingCompanion toCompanion(bool nullToAbsent) {
+    return CloudBindingCompanion(
+      singleton: Value(singleton),
+      walletId: Value(walletId),
+      accountId: Value(accountId),
+      selfMemberId: Value(selfMemberId),
+      environment: Value(environment),
+      state: Value(state),
+      claimRequestId: claimRequestId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(claimRequestId),
+      cryptoVersion: cryptoVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cryptoVersion),
+      keyringRev: keyringRev == null && nullToAbsent
+          ? const Value.absent()
+          : Value(keyringRev),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CloudBindingRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CloudBindingRow(
+      singleton: serializer.fromJson<int>(json['singleton']),
+      walletId: serializer.fromJson<String>(json['walletId']),
+      accountId: serializer.fromJson<String>(json['accountId']),
+      selfMemberId: serializer.fromJson<String>(json['selfMemberId']),
+      environment: serializer.fromJson<String>(json['environment']),
+      state: serializer.fromJson<String>(json['state']),
+      claimRequestId: serializer.fromJson<String?>(json['claimRequestId']),
+      cryptoVersion: serializer.fromJson<int?>(json['cryptoVersion']),
+      keyringRev: serializer.fromJson<int?>(json['keyringRev']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'singleton': serializer.toJson<int>(singleton),
+      'walletId': serializer.toJson<String>(walletId),
+      'accountId': serializer.toJson<String>(accountId),
+      'selfMemberId': serializer.toJson<String>(selfMemberId),
+      'environment': serializer.toJson<String>(environment),
+      'state': serializer.toJson<String>(state),
+      'claimRequestId': serializer.toJson<String?>(claimRequestId),
+      'cryptoVersion': serializer.toJson<int?>(cryptoVersion),
+      'keyringRev': serializer.toJson<int?>(keyringRev),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CloudBindingRow copyWith({
+    int? singleton,
+    String? walletId,
+    String? accountId,
+    String? selfMemberId,
+    String? environment,
+    String? state,
+    Value<String?> claimRequestId = const Value.absent(),
+    Value<int?> cryptoVersion = const Value.absent(),
+    Value<int?> keyringRev = const Value.absent(),
+    DateTime? updatedAt,
+  }) => CloudBindingRow(
+    singleton: singleton ?? this.singleton,
+    walletId: walletId ?? this.walletId,
+    accountId: accountId ?? this.accountId,
+    selfMemberId: selfMemberId ?? this.selfMemberId,
+    environment: environment ?? this.environment,
+    state: state ?? this.state,
+    claimRequestId: claimRequestId.present
+        ? claimRequestId.value
+        : this.claimRequestId,
+    cryptoVersion: cryptoVersion.present
+        ? cryptoVersion.value
+        : this.cryptoVersion,
+    keyringRev: keyringRev.present ? keyringRev.value : this.keyringRev,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CloudBindingRow copyWithCompanion(CloudBindingCompanion data) {
+    return CloudBindingRow(
+      singleton: data.singleton.present ? data.singleton.value : this.singleton,
+      walletId: data.walletId.present ? data.walletId.value : this.walletId,
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      selfMemberId: data.selfMemberId.present
+          ? data.selfMemberId.value
+          : this.selfMemberId,
+      environment: data.environment.present
+          ? data.environment.value
+          : this.environment,
+      state: data.state.present ? data.state.value : this.state,
+      claimRequestId: data.claimRequestId.present
+          ? data.claimRequestId.value
+          : this.claimRequestId,
+      cryptoVersion: data.cryptoVersion.present
+          ? data.cryptoVersion.value
+          : this.cryptoVersion,
+      keyringRev: data.keyringRev.present
+          ? data.keyringRev.value
+          : this.keyringRev,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudBindingRow(')
+          ..write('singleton: $singleton, ')
+          ..write('walletId: $walletId, ')
+          ..write('accountId: $accountId, ')
+          ..write('selfMemberId: $selfMemberId, ')
+          ..write('environment: $environment, ')
+          ..write('state: $state, ')
+          ..write('claimRequestId: $claimRequestId, ')
+          ..write('cryptoVersion: $cryptoVersion, ')
+          ..write('keyringRev: $keyringRev, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    singleton,
+    walletId,
+    accountId,
+    selfMemberId,
+    environment,
+    state,
+    claimRequestId,
+    cryptoVersion,
+    keyringRev,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CloudBindingRow &&
+          other.singleton == this.singleton &&
+          other.walletId == this.walletId &&
+          other.accountId == this.accountId &&
+          other.selfMemberId == this.selfMemberId &&
+          other.environment == this.environment &&
+          other.state == this.state &&
+          other.claimRequestId == this.claimRequestId &&
+          other.cryptoVersion == this.cryptoVersion &&
+          other.keyringRev == this.keyringRev &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CloudBindingCompanion extends UpdateCompanion<CloudBindingRow> {
+  final Value<int> singleton;
+  final Value<String> walletId;
+  final Value<String> accountId;
+  final Value<String> selfMemberId;
+  final Value<String> environment;
+  final Value<String> state;
+  final Value<String?> claimRequestId;
+  final Value<int?> cryptoVersion;
+  final Value<int?> keyringRev;
+  final Value<DateTime> updatedAt;
+  const CloudBindingCompanion({
+    this.singleton = const Value.absent(),
+    this.walletId = const Value.absent(),
+    this.accountId = const Value.absent(),
+    this.selfMemberId = const Value.absent(),
+    this.environment = const Value.absent(),
+    this.state = const Value.absent(),
+    this.claimRequestId = const Value.absent(),
+    this.cryptoVersion = const Value.absent(),
+    this.keyringRev = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  CloudBindingCompanion.insert({
+    this.singleton = const Value.absent(),
+    required String walletId,
+    required String accountId,
+    required String selfMemberId,
+    required String environment,
+    required String state,
+    this.claimRequestId = const Value.absent(),
+    this.cryptoVersion = const Value.absent(),
+    this.keyringRev = const Value.absent(),
+    required DateTime updatedAt,
+  }) : walletId = Value(walletId),
+       accountId = Value(accountId),
+       selfMemberId = Value(selfMemberId),
+       environment = Value(environment),
+       state = Value(state),
+       updatedAt = Value(updatedAt);
+  static Insertable<CloudBindingRow> custom({
+    Expression<int>? singleton,
+    Expression<String>? walletId,
+    Expression<String>? accountId,
+    Expression<String>? selfMemberId,
+    Expression<String>? environment,
+    Expression<String>? state,
+    Expression<String>? claimRequestId,
+    Expression<int>? cryptoVersion,
+    Expression<int>? keyringRev,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (singleton != null) 'singleton': singleton,
+      if (walletId != null) 'wallet_id': walletId,
+      if (accountId != null) 'account_id': accountId,
+      if (selfMemberId != null) 'self_member_id': selfMemberId,
+      if (environment != null) 'environment': environment,
+      if (state != null) 'state': state,
+      if (claimRequestId != null) 'claim_request_id': claimRequestId,
+      if (cryptoVersion != null) 'crypto_version': cryptoVersion,
+      if (keyringRev != null) 'keyring_rev': keyringRev,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  CloudBindingCompanion copyWith({
+    Value<int>? singleton,
+    Value<String>? walletId,
+    Value<String>? accountId,
+    Value<String>? selfMemberId,
+    Value<String>? environment,
+    Value<String>? state,
+    Value<String?>? claimRequestId,
+    Value<int?>? cryptoVersion,
+    Value<int?>? keyringRev,
+    Value<DateTime>? updatedAt,
+  }) {
+    return CloudBindingCompanion(
+      singleton: singleton ?? this.singleton,
+      walletId: walletId ?? this.walletId,
+      accountId: accountId ?? this.accountId,
+      selfMemberId: selfMemberId ?? this.selfMemberId,
+      environment: environment ?? this.environment,
+      state: state ?? this.state,
+      claimRequestId: claimRequestId ?? this.claimRequestId,
+      cryptoVersion: cryptoVersion ?? this.cryptoVersion,
+      keyringRev: keyringRev ?? this.keyringRev,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (singleton.present) {
+      map['singleton'] = Variable<int>(singleton.value);
+    }
+    if (walletId.present) {
+      map['wallet_id'] = Variable<String>(walletId.value);
+    }
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (selfMemberId.present) {
+      map['self_member_id'] = Variable<String>(selfMemberId.value);
+    }
+    if (environment.present) {
+      map['environment'] = Variable<String>(environment.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (claimRequestId.present) {
+      map['claim_request_id'] = Variable<String>(claimRequestId.value);
+    }
+    if (cryptoVersion.present) {
+      map['crypto_version'] = Variable<int>(cryptoVersion.value);
+    }
+    if (keyringRev.present) {
+      map['keyring_rev'] = Variable<int>(keyringRev.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CloudBindingCompanion(')
+          ..write('singleton: $singleton, ')
+          ..write('walletId: $walletId, ')
+          ..write('accountId: $accountId, ')
+          ..write('selfMemberId: $selfMemberId, ')
+          ..write('environment: $environment, ')
+          ..write('state: $state, ')
+          ..write('claimRequestId: $claimRequestId, ')
+          ..write('cryptoVersion: $cryptoVersion, ')
+          ..write('keyringRev: $keyringRev, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncOutboxTable extends SyncOutbox
+    with TableInfo<$SyncOutboxTable, SyncOutboxRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncOutboxTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _seqMeta = const VerificationMeta('seq');
+  @override
+  late final GeneratedColumn<int> seq = GeneratedColumn<int>(
+    'seq',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _entityKindMeta = const VerificationMeta(
+    'entityKind',
+  );
+  @override
+  late final GeneratedColumn<String> entityKind = GeneratedColumn<String>(
+    'entity_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _entityIdMeta = const VerificationMeta(
+    'entityId',
+  );
+  @override
+  late final GeneratedColumn<String> entityId = GeneratedColumn<String>(
+    'entity_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _opMeta = const VerificationMeta('op');
+  @override
+  late final GeneratedColumn<String> op = GeneratedColumn<String>(
+    'op',
+    aliasedName,
+    false,
+    check: () => op.isIn(const ['upsert', 'delete']),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _changedAtMeta = const VerificationMeta(
+    'changedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> changedAt = GeneratedColumn<DateTime>(
+    'changed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _attemptsMeta = const VerificationMeta(
+    'attempts',
+  );
+  @override
+  late final GeneratedColumn<int> attempts = GeneratedColumn<int>(
+    'attempts',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    seq,
+    entityKind,
+    entityId,
+    op,
+    changedAt,
+    attempts,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_outbox';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncOutboxRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('seq')) {
+      context.handle(
+        _seqMeta,
+        seq.isAcceptableOrUnknown(data['seq']!, _seqMeta),
+      );
+    }
+    if (data.containsKey('entity_kind')) {
+      context.handle(
+        _entityKindMeta,
+        entityKind.isAcceptableOrUnknown(data['entity_kind']!, _entityKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityKindMeta);
+    }
+    if (data.containsKey('entity_id')) {
+      context.handle(
+        _entityIdMeta,
+        entityId.isAcceptableOrUnknown(data['entity_id']!, _entityIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityIdMeta);
+    }
+    if (data.containsKey('op')) {
+      context.handle(_opMeta, op.isAcceptableOrUnknown(data['op']!, _opMeta));
+    } else if (isInserting) {
+      context.missing(_opMeta);
+    }
+    if (data.containsKey('changed_at')) {
+      context.handle(
+        _changedAtMeta,
+        changedAt.isAcceptableOrUnknown(data['changed_at']!, _changedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_changedAtMeta);
+    }
+    if (data.containsKey('attempts')) {
+      context.handle(
+        _attemptsMeta,
+        attempts.isAcceptableOrUnknown(data['attempts']!, _attemptsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {seq};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {entityKind, entityId},
+  ];
+  @override
+  SyncOutboxRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncOutboxRow(
+      seq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}seq'],
+      )!,
+      entityKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_kind'],
+      )!,
+      entityId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_id'],
+      )!,
+      op: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}op'],
+      )!,
+      changedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}changed_at'],
+      )!,
+      attempts: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempts'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncOutboxTable createAlias(String alias) {
+    return $SyncOutboxTable(attachedDatabase, alias);
+  }
+}
+
+class SyncOutboxRow extends DataClass implements Insertable<SyncOutboxRow> {
+  final int seq;
+  final String entityKind;
+  final String entityId;
+  final String op;
+  final DateTime changedAt;
+  final int attempts;
+  const SyncOutboxRow({
+    required this.seq,
+    required this.entityKind,
+    required this.entityId,
+    required this.op,
+    required this.changedAt,
+    required this.attempts,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['seq'] = Variable<int>(seq);
+    map['entity_kind'] = Variable<String>(entityKind);
+    map['entity_id'] = Variable<String>(entityId);
+    map['op'] = Variable<String>(op);
+    map['changed_at'] = Variable<DateTime>(changedAt);
+    map['attempts'] = Variable<int>(attempts);
+    return map;
+  }
+
+  SyncOutboxCompanion toCompanion(bool nullToAbsent) {
+    return SyncOutboxCompanion(
+      seq: Value(seq),
+      entityKind: Value(entityKind),
+      entityId: Value(entityId),
+      op: Value(op),
+      changedAt: Value(changedAt),
+      attempts: Value(attempts),
+    );
+  }
+
+  factory SyncOutboxRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncOutboxRow(
+      seq: serializer.fromJson<int>(json['seq']),
+      entityKind: serializer.fromJson<String>(json['entityKind']),
+      entityId: serializer.fromJson<String>(json['entityId']),
+      op: serializer.fromJson<String>(json['op']),
+      changedAt: serializer.fromJson<DateTime>(json['changedAt']),
+      attempts: serializer.fromJson<int>(json['attempts']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'seq': serializer.toJson<int>(seq),
+      'entityKind': serializer.toJson<String>(entityKind),
+      'entityId': serializer.toJson<String>(entityId),
+      'op': serializer.toJson<String>(op),
+      'changedAt': serializer.toJson<DateTime>(changedAt),
+      'attempts': serializer.toJson<int>(attempts),
+    };
+  }
+
+  SyncOutboxRow copyWith({
+    int? seq,
+    String? entityKind,
+    String? entityId,
+    String? op,
+    DateTime? changedAt,
+    int? attempts,
+  }) => SyncOutboxRow(
+    seq: seq ?? this.seq,
+    entityKind: entityKind ?? this.entityKind,
+    entityId: entityId ?? this.entityId,
+    op: op ?? this.op,
+    changedAt: changedAt ?? this.changedAt,
+    attempts: attempts ?? this.attempts,
+  );
+  SyncOutboxRow copyWithCompanion(SyncOutboxCompanion data) {
+    return SyncOutboxRow(
+      seq: data.seq.present ? data.seq.value : this.seq,
+      entityKind: data.entityKind.present
+          ? data.entityKind.value
+          : this.entityKind,
+      entityId: data.entityId.present ? data.entityId.value : this.entityId,
+      op: data.op.present ? data.op.value : this.op,
+      changedAt: data.changedAt.present ? data.changedAt.value : this.changedAt,
+      attempts: data.attempts.present ? data.attempts.value : this.attempts,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncOutboxRow(')
+          ..write('seq: $seq, ')
+          ..write('entityKind: $entityKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('op: $op, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('attempts: $attempts')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(seq, entityKind, entityId, op, changedAt, attempts);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncOutboxRow &&
+          other.seq == this.seq &&
+          other.entityKind == this.entityKind &&
+          other.entityId == this.entityId &&
+          other.op == this.op &&
+          other.changedAt == this.changedAt &&
+          other.attempts == this.attempts);
+}
+
+class SyncOutboxCompanion extends UpdateCompanion<SyncOutboxRow> {
+  final Value<int> seq;
+  final Value<String> entityKind;
+  final Value<String> entityId;
+  final Value<String> op;
+  final Value<DateTime> changedAt;
+  final Value<int> attempts;
+  const SyncOutboxCompanion({
+    this.seq = const Value.absent(),
+    this.entityKind = const Value.absent(),
+    this.entityId = const Value.absent(),
+    this.op = const Value.absent(),
+    this.changedAt = const Value.absent(),
+    this.attempts = const Value.absent(),
+  });
+  SyncOutboxCompanion.insert({
+    this.seq = const Value.absent(),
+    required String entityKind,
+    required String entityId,
+    required String op,
+    required DateTime changedAt,
+    this.attempts = const Value.absent(),
+  }) : entityKind = Value(entityKind),
+       entityId = Value(entityId),
+       op = Value(op),
+       changedAt = Value(changedAt);
+  static Insertable<SyncOutboxRow> custom({
+    Expression<int>? seq,
+    Expression<String>? entityKind,
+    Expression<String>? entityId,
+    Expression<String>? op,
+    Expression<DateTime>? changedAt,
+    Expression<int>? attempts,
+  }) {
+    return RawValuesInsertable({
+      if (seq != null) 'seq': seq,
+      if (entityKind != null) 'entity_kind': entityKind,
+      if (entityId != null) 'entity_id': entityId,
+      if (op != null) 'op': op,
+      if (changedAt != null) 'changed_at': changedAt,
+      if (attempts != null) 'attempts': attempts,
+    });
+  }
+
+  SyncOutboxCompanion copyWith({
+    Value<int>? seq,
+    Value<String>? entityKind,
+    Value<String>? entityId,
+    Value<String>? op,
+    Value<DateTime>? changedAt,
+    Value<int>? attempts,
+  }) {
+    return SyncOutboxCompanion(
+      seq: seq ?? this.seq,
+      entityKind: entityKind ?? this.entityKind,
+      entityId: entityId ?? this.entityId,
+      op: op ?? this.op,
+      changedAt: changedAt ?? this.changedAt,
+      attempts: attempts ?? this.attempts,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (seq.present) {
+      map['seq'] = Variable<int>(seq.value);
+    }
+    if (entityKind.present) {
+      map['entity_kind'] = Variable<String>(entityKind.value);
+    }
+    if (entityId.present) {
+      map['entity_id'] = Variable<String>(entityId.value);
+    }
+    if (op.present) {
+      map['op'] = Variable<String>(op.value);
+    }
+    if (changedAt.present) {
+      map['changed_at'] = Variable<DateTime>(changedAt.value);
+    }
+    if (attempts.present) {
+      map['attempts'] = Variable<int>(attempts.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncOutboxCompanion(')
+          ..write('seq: $seq, ')
+          ..write('entityKind: $entityKind, ')
+          ..write('entityId: $entityId, ')
+          ..write('op: $op, ')
+          ..write('changedAt: $changedAt, ')
+          ..write('attempts: $attempts')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $SyncStateTable extends SyncState
+    with TableInfo<$SyncStateTable, SyncStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _singletonMeta = const VerificationMeta(
+    'singleton',
+  );
+  @override
+  late final GeneratedColumn<int> singleton = GeneratedColumn<int>(
+    'singleton',
+    aliasedName,
+    false,
+    check: () => singleton.equals(1),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _captureSuppressedMeta = const VerificationMeta(
+    'captureSuppressed',
+  );
+  @override
+  late final GeneratedColumn<bool> captureSuppressed = GeneratedColumn<bool>(
+    'capture_suppressed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("capture_suppressed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _serverHeadRevMeta = const VerificationMeta(
+    'serverHeadRev',
+  );
+  @override
+  late final GeneratedColumn<int> serverHeadRev = GeneratedColumn<int>(
+    'server_head_rev',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastPushAtMeta = const VerificationMeta(
+    'lastPushAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPushAt = GeneratedColumn<DateTime>(
+    'last_push_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastPullAtMeta = const VerificationMeta(
+    'lastPullAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPullAt = GeneratedColumn<DateTime>(
+    'last_pull_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    singleton,
+    captureSuppressed,
+    serverHeadRev,
+    lastPushAt,
+    lastPullAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_state';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('singleton')) {
+      context.handle(
+        _singletonMeta,
+        singleton.isAcceptableOrUnknown(data['singleton']!, _singletonMeta),
+      );
+    }
+    if (data.containsKey('capture_suppressed')) {
+      context.handle(
+        _captureSuppressedMeta,
+        captureSuppressed.isAcceptableOrUnknown(
+          data['capture_suppressed']!,
+          _captureSuppressedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('server_head_rev')) {
+      context.handle(
+        _serverHeadRevMeta,
+        serverHeadRev.isAcceptableOrUnknown(
+          data['server_head_rev']!,
+          _serverHeadRevMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_push_at')) {
+      context.handle(
+        _lastPushAtMeta,
+        lastPushAt.isAcceptableOrUnknown(
+          data['last_push_at']!,
+          _lastPushAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_pull_at')) {
+      context.handle(
+        _lastPullAtMeta,
+        lastPullAt.isAcceptableOrUnknown(
+          data['last_pull_at']!,
+          _lastPullAtMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {singleton};
+  @override
+  SyncStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncStateRow(
+      singleton: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}singleton'],
+      )!,
+      captureSuppressed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}capture_suppressed'],
+      )!,
+      serverHeadRev: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_head_rev'],
+      ),
+      lastPushAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_push_at'],
+      ),
+      lastPullAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_pull_at'],
+      ),
+    );
+  }
+
+  @override
+  $SyncStateTable createAlias(String alias) {
+    return $SyncStateTable(attachedDatabase, alias);
+  }
+}
+
+class SyncStateRow extends DataClass implements Insertable<SyncStateRow> {
+  final int singleton;
+  final bool captureSuppressed;
+
+  /// `headRev` máy chủ đã biết gần nhất (con trỏ pull/CAS đẩy) — P8.2 dùng.
+  final int? serverHeadRev;
+  final DateTime? lastPushAt;
+  final DateTime? lastPullAt;
+  const SyncStateRow({
+    required this.singleton,
+    required this.captureSuppressed,
+    this.serverHeadRev,
+    this.lastPushAt,
+    this.lastPullAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['singleton'] = Variable<int>(singleton);
+    map['capture_suppressed'] = Variable<bool>(captureSuppressed);
+    if (!nullToAbsent || serverHeadRev != null) {
+      map['server_head_rev'] = Variable<int>(serverHeadRev);
+    }
+    if (!nullToAbsent || lastPushAt != null) {
+      map['last_push_at'] = Variable<DateTime>(lastPushAt);
+    }
+    if (!nullToAbsent || lastPullAt != null) {
+      map['last_pull_at'] = Variable<DateTime>(lastPullAt);
+    }
+    return map;
+  }
+
+  SyncStateCompanion toCompanion(bool nullToAbsent) {
+    return SyncStateCompanion(
+      singleton: Value(singleton),
+      captureSuppressed: Value(captureSuppressed),
+      serverHeadRev: serverHeadRev == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverHeadRev),
+      lastPushAt: lastPushAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPushAt),
+      lastPullAt: lastPullAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPullAt),
+    );
+  }
+
+  factory SyncStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncStateRow(
+      singleton: serializer.fromJson<int>(json['singleton']),
+      captureSuppressed: serializer.fromJson<bool>(json['captureSuppressed']),
+      serverHeadRev: serializer.fromJson<int?>(json['serverHeadRev']),
+      lastPushAt: serializer.fromJson<DateTime?>(json['lastPushAt']),
+      lastPullAt: serializer.fromJson<DateTime?>(json['lastPullAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'singleton': serializer.toJson<int>(singleton),
+      'captureSuppressed': serializer.toJson<bool>(captureSuppressed),
+      'serverHeadRev': serializer.toJson<int?>(serverHeadRev),
+      'lastPushAt': serializer.toJson<DateTime?>(lastPushAt),
+      'lastPullAt': serializer.toJson<DateTime?>(lastPullAt),
+    };
+  }
+
+  SyncStateRow copyWith({
+    int? singleton,
+    bool? captureSuppressed,
+    Value<int?> serverHeadRev = const Value.absent(),
+    Value<DateTime?> lastPushAt = const Value.absent(),
+    Value<DateTime?> lastPullAt = const Value.absent(),
+  }) => SyncStateRow(
+    singleton: singleton ?? this.singleton,
+    captureSuppressed: captureSuppressed ?? this.captureSuppressed,
+    serverHeadRev: serverHeadRev.present
+        ? serverHeadRev.value
+        : this.serverHeadRev,
+    lastPushAt: lastPushAt.present ? lastPushAt.value : this.lastPushAt,
+    lastPullAt: lastPullAt.present ? lastPullAt.value : this.lastPullAt,
+  );
+  SyncStateRow copyWithCompanion(SyncStateCompanion data) {
+    return SyncStateRow(
+      singleton: data.singleton.present ? data.singleton.value : this.singleton,
+      captureSuppressed: data.captureSuppressed.present
+          ? data.captureSuppressed.value
+          : this.captureSuppressed,
+      serverHeadRev: data.serverHeadRev.present
+          ? data.serverHeadRev.value
+          : this.serverHeadRev,
+      lastPushAt: data.lastPushAt.present
+          ? data.lastPushAt.value
+          : this.lastPushAt,
+      lastPullAt: data.lastPullAt.present
+          ? data.lastPullAt.value
+          : this.lastPullAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncStateRow(')
+          ..write('singleton: $singleton, ')
+          ..write('captureSuppressed: $captureSuppressed, ')
+          ..write('serverHeadRev: $serverHeadRev, ')
+          ..write('lastPushAt: $lastPushAt, ')
+          ..write('lastPullAt: $lastPullAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    singleton,
+    captureSuppressed,
+    serverHeadRev,
+    lastPushAt,
+    lastPullAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncStateRow &&
+          other.singleton == this.singleton &&
+          other.captureSuppressed == this.captureSuppressed &&
+          other.serverHeadRev == this.serverHeadRev &&
+          other.lastPushAt == this.lastPushAt &&
+          other.lastPullAt == this.lastPullAt);
+}
+
+class SyncStateCompanion extends UpdateCompanion<SyncStateRow> {
+  final Value<int> singleton;
+  final Value<bool> captureSuppressed;
+  final Value<int?> serverHeadRev;
+  final Value<DateTime?> lastPushAt;
+  final Value<DateTime?> lastPullAt;
+  const SyncStateCompanion({
+    this.singleton = const Value.absent(),
+    this.captureSuppressed = const Value.absent(),
+    this.serverHeadRev = const Value.absent(),
+    this.lastPushAt = const Value.absent(),
+    this.lastPullAt = const Value.absent(),
+  });
+  SyncStateCompanion.insert({
+    this.singleton = const Value.absent(),
+    this.captureSuppressed = const Value.absent(),
+    this.serverHeadRev = const Value.absent(),
+    this.lastPushAt = const Value.absent(),
+    this.lastPullAt = const Value.absent(),
+  });
+  static Insertable<SyncStateRow> custom({
+    Expression<int>? singleton,
+    Expression<bool>? captureSuppressed,
+    Expression<int>? serverHeadRev,
+    Expression<DateTime>? lastPushAt,
+    Expression<DateTime>? lastPullAt,
+  }) {
+    return RawValuesInsertable({
+      if (singleton != null) 'singleton': singleton,
+      if (captureSuppressed != null) 'capture_suppressed': captureSuppressed,
+      if (serverHeadRev != null) 'server_head_rev': serverHeadRev,
+      if (lastPushAt != null) 'last_push_at': lastPushAt,
+      if (lastPullAt != null) 'last_pull_at': lastPullAt,
+    });
+  }
+
+  SyncStateCompanion copyWith({
+    Value<int>? singleton,
+    Value<bool>? captureSuppressed,
+    Value<int?>? serverHeadRev,
+    Value<DateTime?>? lastPushAt,
+    Value<DateTime?>? lastPullAt,
+  }) {
+    return SyncStateCompanion(
+      singleton: singleton ?? this.singleton,
+      captureSuppressed: captureSuppressed ?? this.captureSuppressed,
+      serverHeadRev: serverHeadRev ?? this.serverHeadRev,
+      lastPushAt: lastPushAt ?? this.lastPushAt,
+      lastPullAt: lastPullAt ?? this.lastPullAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (singleton.present) {
+      map['singleton'] = Variable<int>(singleton.value);
+    }
+    if (captureSuppressed.present) {
+      map['capture_suppressed'] = Variable<bool>(captureSuppressed.value);
+    }
+    if (serverHeadRev.present) {
+      map['server_head_rev'] = Variable<int>(serverHeadRev.value);
+    }
+    if (lastPushAt.present) {
+      map['last_push_at'] = Variable<DateTime>(lastPushAt.value);
+    }
+    if (lastPullAt.present) {
+      map['last_pull_at'] = Variable<DateTime>(lastPullAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncStateCompanion(')
+          ..write('singleton: $singleton, ')
+          ..write('captureSuppressed: $captureSuppressed, ')
+          ..write('serverHeadRev: $serverHeadRev, ')
+          ..write('lastPushAt: $lastPushAt, ')
+          ..write('lastPullAt: $lastPullAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WalletSettingsTable extends WalletSettings
+    with TableInfo<$WalletSettingsTable, WalletSetting> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WalletSettingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _valueMeta = const VerificationMeta('value');
+  @override
+  late final GeneratedColumn<String> value = GeneratedColumn<String>(
+    'value',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, value];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'wallet_settings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WalletSetting> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('value')) {
+      context.handle(
+        _valueMeta,
+        value.isAcceptableOrUnknown(data['value']!, _valueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_valueMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  WalletSetting map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WalletSetting(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      value: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}value'],
+      )!,
+    );
+  }
+
+  @override
+  $WalletSettingsTable createAlias(String alias) {
+    return $WalletSettingsTable(attachedDatabase, alias);
+  }
+}
+
+class WalletSetting extends DataClass implements Insertable<WalletSetting> {
+  final String key;
+  final String value;
+  const WalletSetting({required this.key, required this.value});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['value'] = Variable<String>(value);
+    return map;
+  }
+
+  WalletSettingsCompanion toCompanion(bool nullToAbsent) {
+    return WalletSettingsCompanion(key: Value(key), value: Value(value));
+  }
+
+  factory WalletSetting.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WalletSetting(
+      key: serializer.fromJson<String>(json['key']),
+      value: serializer.fromJson<String>(json['value']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'value': serializer.toJson<String>(value),
+    };
+  }
+
+  WalletSetting copyWith({String? key, String? value}) =>
+      WalletSetting(key: key ?? this.key, value: value ?? this.value);
+  WalletSetting copyWithCompanion(WalletSettingsCompanion data) {
+    return WalletSetting(
+      key: data.key.present ? data.key.value : this.key,
+      value: data.value.present ? data.value.value : this.value,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletSetting(')
+          ..write('key: $key, ')
+          ..write('value: $value')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, value);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WalletSetting &&
+          other.key == this.key &&
+          other.value == this.value);
+}
+
+class WalletSettingsCompanion extends UpdateCompanion<WalletSetting> {
+  final Value<String> key;
+  final Value<String> value;
+  final Value<int> rowid;
+  const WalletSettingsCompanion({
+    this.key = const Value.absent(),
+    this.value = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WalletSettingsCompanion.insert({
+    required String key,
+    required String value,
+    this.rowid = const Value.absent(),
+  }) : key = Value(key),
+       value = Value(value);
+  static Insertable<WalletSetting> custom({
+    Expression<String>? key,
+    Expression<String>? value,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (value != null) 'value': value,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WalletSettingsCompanion copyWith({
+    Value<String>? key,
+    Value<String>? value,
+    Value<int>? rowid,
+  }) {
+    return WalletSettingsCompanion(
+      key: key ?? this.key,
+      value: value ?? this.value,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (value.present) {
+      map['value'] = Variable<String>(value.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WalletSettingsCompanion(')
+          ..write('key: $key, ')
+          ..write('value: $value, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4363,6 +5995,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WalletMetaTable walletMeta = $WalletMetaTable(this);
   late final $FinancialMemberRowsTable financialMemberRows =
       $FinancialMemberRowsTable(this);
+  late final $CloudBindingTable cloudBinding = $CloudBindingTable(this);
+  late final $SyncOutboxTable syncOutbox = $SyncOutboxTable(this);
+  late final $SyncStateTable syncState = $SyncStateTable(this);
+  late final $WalletSettingsTable walletSettings = $WalletSettingsTable(this);
   late final Index uxTransactionClientTxId = Index(
     'ux_transaction_client_tx_id',
     'CREATE UNIQUE INDEX ux_transaction_client_tx_id ON transaction_rows (client_tx_id)',
@@ -4413,6 +6049,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     obligationRows,
     walletMeta,
     financialMemberRows,
+    cloudBinding,
+    syncOutbox,
+    syncState,
+    walletSettings,
     uxTransactionClientTxId,
     ixTransactionSource,
     ixTransactionDestination,
@@ -7541,6 +9181,894 @@ typedef $$FinancialMemberRowsTableProcessedTableManager =
       FinancialMemberRow,
       PrefetchHooks Function()
     >;
+typedef $$CloudBindingTableCreateCompanionBuilder =
+    CloudBindingCompanion Function({
+      Value<int> singleton,
+      required String walletId,
+      required String accountId,
+      required String selfMemberId,
+      required String environment,
+      required String state,
+      Value<String?> claimRequestId,
+      Value<int?> cryptoVersion,
+      Value<int?> keyringRev,
+      required DateTime updatedAt,
+    });
+typedef $$CloudBindingTableUpdateCompanionBuilder =
+    CloudBindingCompanion Function({
+      Value<int> singleton,
+      Value<String> walletId,
+      Value<String> accountId,
+      Value<String> selfMemberId,
+      Value<String> environment,
+      Value<String> state,
+      Value<String?> claimRequestId,
+      Value<int?> cryptoVersion,
+      Value<int?> keyringRev,
+      Value<DateTime> updatedAt,
+    });
+
+class $$CloudBindingTableFilterComposer
+    extends Composer<_$AppDatabase, $CloudBindingTable> {
+  $$CloudBindingTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get walletId => $composableBuilder(
+    column: $table.walletId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get selfMemberId => $composableBuilder(
+    column: $table.selfMemberId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get claimRequestId => $composableBuilder(
+    column: $table.claimRequestId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cryptoVersion => $composableBuilder(
+    column: $table.cryptoVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get keyringRev => $composableBuilder(
+    column: $table.keyringRev,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CloudBindingTableOrderingComposer
+    extends Composer<_$AppDatabase, $CloudBindingTable> {
+  $$CloudBindingTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get walletId => $composableBuilder(
+    column: $table.walletId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get selfMemberId => $composableBuilder(
+    column: $table.selfMemberId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get claimRequestId => $composableBuilder(
+    column: $table.claimRequestId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cryptoVersion => $composableBuilder(
+    column: $table.cryptoVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get keyringRev => $composableBuilder(
+    column: $table.keyringRev,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CloudBindingTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CloudBindingTable> {
+  $$CloudBindingTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get singleton =>
+      $composableBuilder(column: $table.singleton, builder: (column) => column);
+
+  GeneratedColumn<String> get walletId =>
+      $composableBuilder(column: $table.walletId, builder: (column) => column);
+
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get selfMemberId => $composableBuilder(
+    column: $table.selfMemberId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get claimRequestId => $composableBuilder(
+    column: $table.claimRequestId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get cryptoVersion => $composableBuilder(
+    column: $table.cryptoVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get keyringRev => $composableBuilder(
+    column: $table.keyringRev,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CloudBindingTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CloudBindingTable,
+          CloudBindingRow,
+          $$CloudBindingTableFilterComposer,
+          $$CloudBindingTableOrderingComposer,
+          $$CloudBindingTableAnnotationComposer,
+          $$CloudBindingTableCreateCompanionBuilder,
+          $$CloudBindingTableUpdateCompanionBuilder,
+          (
+            CloudBindingRow,
+            BaseReferences<_$AppDatabase, $CloudBindingTable, CloudBindingRow>,
+          ),
+          CloudBindingRow,
+          PrefetchHooks Function()
+        > {
+  $$CloudBindingTableTableManager(_$AppDatabase db, $CloudBindingTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CloudBindingTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CloudBindingTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CloudBindingTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                Value<String> walletId = const Value.absent(),
+                Value<String> accountId = const Value.absent(),
+                Value<String> selfMemberId = const Value.absent(),
+                Value<String> environment = const Value.absent(),
+                Value<String> state = const Value.absent(),
+                Value<String?> claimRequestId = const Value.absent(),
+                Value<int?> cryptoVersion = const Value.absent(),
+                Value<int?> keyringRev = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => CloudBindingCompanion(
+                singleton: singleton,
+                walletId: walletId,
+                accountId: accountId,
+                selfMemberId: selfMemberId,
+                environment: environment,
+                state: state,
+                claimRequestId: claimRequestId,
+                cryptoVersion: cryptoVersion,
+                keyringRev: keyringRev,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                required String walletId,
+                required String accountId,
+                required String selfMemberId,
+                required String environment,
+                required String state,
+                Value<String?> claimRequestId = const Value.absent(),
+                Value<int?> cryptoVersion = const Value.absent(),
+                Value<int?> keyringRev = const Value.absent(),
+                required DateTime updatedAt,
+              }) => CloudBindingCompanion.insert(
+                singleton: singleton,
+                walletId: walletId,
+                accountId: accountId,
+                selfMemberId: selfMemberId,
+                environment: environment,
+                state: state,
+                claimRequestId: claimRequestId,
+                cryptoVersion: cryptoVersion,
+                keyringRev: keyringRev,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CloudBindingTable, CloudBindingRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $CloudBindingTable,
+                    CloudBindingRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CloudBindingTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CloudBindingTable,
+      CloudBindingRow,
+      $$CloudBindingTableFilterComposer,
+      $$CloudBindingTableOrderingComposer,
+      $$CloudBindingTableAnnotationComposer,
+      $$CloudBindingTableCreateCompanionBuilder,
+      $$CloudBindingTableUpdateCompanionBuilder,
+      (
+        CloudBindingRow,
+        BaseReferences<_$AppDatabase, $CloudBindingTable, CloudBindingRow>,
+      ),
+      CloudBindingRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncOutboxTableCreateCompanionBuilder = SyncOutboxCompanion Function({
+  Value<int> seq,
+  required String entityKind,
+  required String entityId,
+  required String op,
+  required DateTime changedAt,
+  Value<int> attempts,
+});
+typedef $$SyncOutboxTableUpdateCompanionBuilder = SyncOutboxCompanion Function({
+  Value<int> seq,
+  Value<String> entityKind,
+  Value<String> entityId,
+  Value<String> op,
+  Value<DateTime> changedAt,
+  Value<int> attempts,
+});
+
+class $$SyncOutboxTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get seq => $composableBuilder(
+    column: $table.seq,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get op => $composableBuilder(
+    column: $table.op,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncOutboxTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get seq => $composableBuilder(
+    column: $table.seq,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get entityId => $composableBuilder(
+    column: $table.entityId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get op => $composableBuilder(
+    column: $table.op,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get changedAt => $composableBuilder(
+    column: $table.changedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attempts => $composableBuilder(
+    column: $table.attempts,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncOutboxTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncOutboxTable> {
+  $$SyncOutboxTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get seq =>
+      $composableBuilder(column: $table.seq, builder: (column) => column);
+
+  GeneratedColumn<String> get entityKind => $composableBuilder(
+    column: $table.entityKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get entityId =>
+      $composableBuilder(column: $table.entityId, builder: (column) => column);
+
+  GeneratedColumn<String> get op =>
+      $composableBuilder(column: $table.op, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get changedAt =>
+      $composableBuilder(column: $table.changedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get attempts =>
+      $composableBuilder(column: $table.attempts, builder: (column) => column);
+}
+
+class $$SyncOutboxTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncOutboxTable,
+          SyncOutboxRow,
+          $$SyncOutboxTableFilterComposer,
+          $$SyncOutboxTableOrderingComposer,
+          $$SyncOutboxTableAnnotationComposer,
+          $$SyncOutboxTableCreateCompanionBuilder,
+          $$SyncOutboxTableUpdateCompanionBuilder,
+          (
+            SyncOutboxRow,
+            BaseReferences<_$AppDatabase, $SyncOutboxTable, SyncOutboxRow>,
+          ),
+          SyncOutboxRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncOutboxTableTableManager(_$AppDatabase db, $SyncOutboxTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncOutboxTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncOutboxTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncOutboxTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> seq = const Value.absent(),
+                Value<String> entityKind = const Value.absent(),
+                Value<String> entityId = const Value.absent(),
+                Value<String> op = const Value.absent(),
+                Value<DateTime> changedAt = const Value.absent(),
+                Value<int> attempts = const Value.absent(),
+              }) => SyncOutboxCompanion(
+                seq: seq,
+                entityKind: entityKind,
+                entityId: entityId,
+                op: op,
+                changedAt: changedAt,
+                attempts: attempts,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> seq = const Value.absent(),
+                required String entityKind,
+                required String entityId,
+                required String op,
+                required DateTime changedAt,
+                Value<int> attempts = const Value.absent(),
+              }) => SyncOutboxCompanion.insert(
+                seq: seq,
+                entityKind: entityKind,
+                entityId: entityId,
+                op: op,
+                changedAt: changedAt,
+                attempts: attempts,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncOutboxTable, SyncOutboxRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncOutboxTable,
+                    SyncOutboxRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncOutboxTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncOutboxTable,
+      SyncOutboxRow,
+      $$SyncOutboxTableFilterComposer,
+      $$SyncOutboxTableOrderingComposer,
+      $$SyncOutboxTableAnnotationComposer,
+      $$SyncOutboxTableCreateCompanionBuilder,
+      $$SyncOutboxTableUpdateCompanionBuilder,
+      (
+        SyncOutboxRow,
+        BaseReferences<_$AppDatabase, $SyncOutboxTable, SyncOutboxRow>,
+      ),
+      SyncOutboxRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncStateTableCreateCompanionBuilder = SyncStateCompanion Function({
+  Value<int> singleton,
+  Value<bool> captureSuppressed,
+  Value<int?> serverHeadRev,
+  Value<DateTime?> lastPushAt,
+  Value<DateTime?> lastPullAt,
+});
+typedef $$SyncStateTableUpdateCompanionBuilder = SyncStateCompanion Function({
+  Value<int> singleton,
+  Value<bool> captureSuppressed,
+  Value<int?> serverHeadRev,
+  Value<DateTime?> lastPushAt,
+  Value<DateTime?> lastPullAt,
+});
+
+class $$SyncStateTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get captureSuppressed => $composableBuilder(
+    column: $table.captureSuppressed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get serverHeadRev => $composableBuilder(
+    column: $table.serverHeadRev,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPullAt => $composableBuilder(
+    column: $table.lastPullAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncStateTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get singleton => $composableBuilder(
+    column: $table.singleton,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get captureSuppressed => $composableBuilder(
+    column: $table.captureSuppressed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get serverHeadRev => $composableBuilder(
+    column: $table.serverHeadRev,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPullAt => $composableBuilder(
+    column: $table.lastPullAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncStateTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncStateTable> {
+  $$SyncStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get singleton =>
+      $composableBuilder(column: $table.singleton, builder: (column) => column);
+
+  GeneratedColumn<bool> get captureSuppressed => $composableBuilder(
+    column: $table.captureSuppressed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get serverHeadRev => $composableBuilder(
+    column: $table.serverHeadRev,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPushAt => $composableBuilder(
+    column: $table.lastPushAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPullAt => $composableBuilder(
+    column: $table.lastPullAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncStateTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncStateTable,
+          SyncStateRow,
+          $$SyncStateTableFilterComposer,
+          $$SyncStateTableOrderingComposer,
+          $$SyncStateTableAnnotationComposer,
+          $$SyncStateTableCreateCompanionBuilder,
+          $$SyncStateTableUpdateCompanionBuilder,
+          (
+            SyncStateRow,
+            BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateRow>,
+          ),
+          SyncStateRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncStateTableTableManager(_$AppDatabase db, $SyncStateTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                Value<bool> captureSuppressed = const Value.absent(),
+                Value<int?> serverHeadRev = const Value.absent(),
+                Value<DateTime?> lastPushAt = const Value.absent(),
+                Value<DateTime?> lastPullAt = const Value.absent(),
+              }) => SyncStateCompanion(
+                singleton: singleton,
+                captureSuppressed: captureSuppressed,
+                serverHeadRev: serverHeadRev,
+                lastPushAt: lastPushAt,
+                lastPullAt: lastPullAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> singleton = const Value.absent(),
+                Value<bool> captureSuppressed = const Value.absent(),
+                Value<int?> serverHeadRev = const Value.absent(),
+                Value<DateTime?> lastPushAt = const Value.absent(),
+                Value<DateTime?> lastPullAt = const Value.absent(),
+              }) => SyncStateCompanion.insert(
+                singleton: singleton,
+                captureSuppressed: captureSuppressed,
+                serverHeadRev: serverHeadRev,
+                lastPushAt: lastPushAt,
+                lastPullAt: lastPullAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SyncStateTable, SyncStateRow>(table),
+                  BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncStateTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncStateTable,
+      SyncStateRow,
+      $$SyncStateTableFilterComposer,
+      $$SyncStateTableOrderingComposer,
+      $$SyncStateTableAnnotationComposer,
+      $$SyncStateTableCreateCompanionBuilder,
+      $$SyncStateTableUpdateCompanionBuilder,
+      (
+        SyncStateRow,
+        BaseReferences<_$AppDatabase, $SyncStateTable, SyncStateRow>,
+      ),
+      SyncStateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$WalletSettingsTableCreateCompanionBuilder =
+    WalletSettingsCompanion Function({
+      required String key,
+      required String value,
+      Value<int> rowid,
+    });
+typedef $$WalletSettingsTableUpdateCompanionBuilder =
+    WalletSettingsCompanion Function({
+      Value<String> key,
+      Value<String> value,
+      Value<int> rowid,
+    });
+
+class $$WalletSettingsTableFilterComposer
+    extends Composer<_$AppDatabase, $WalletSettingsTable> {
+  $$WalletSettingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WalletSettingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WalletSettingsTable> {
+  $$WalletSettingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get value => $composableBuilder(
+    column: $table.value,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WalletSettingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WalletSettingsTable> {
+  $$WalletSettingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get value =>
+      $composableBuilder(column: $table.value, builder: (column) => column);
+}
+
+class $$WalletSettingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WalletSettingsTable,
+          WalletSetting,
+          $$WalletSettingsTableFilterComposer,
+          $$WalletSettingsTableOrderingComposer,
+          $$WalletSettingsTableAnnotationComposer,
+          $$WalletSettingsTableCreateCompanionBuilder,
+          $$WalletSettingsTableUpdateCompanionBuilder,
+          (
+            WalletSetting,
+            BaseReferences<_$AppDatabase, $WalletSettingsTable, WalletSetting>,
+          ),
+          WalletSetting,
+          PrefetchHooks Function()
+        > {
+  $$WalletSettingsTableTableManager(
+    _$AppDatabase db,
+    $WalletSettingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WalletSettingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WalletSettingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WalletSettingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> key = const Value.absent(),
+            Value<String> value = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => WalletSettingsCompanion(key: key, value: value, rowid: rowid),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String value,
+                Value<int> rowid = const Value.absent(),
+              }) => WalletSettingsCompanion.insert(
+                key: key,
+                value: value,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WalletSettingsTable, WalletSetting>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $WalletSettingsTable,
+                    WalletSetting
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WalletSettingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WalletSettingsTable,
+      WalletSetting,
+      $$WalletSettingsTableFilterComposer,
+      $$WalletSettingsTableOrderingComposer,
+      $$WalletSettingsTableAnnotationComposer,
+      $$WalletSettingsTableCreateCompanionBuilder,
+      $$WalletSettingsTableUpdateCompanionBuilder,
+      (
+        WalletSetting,
+        BaseReferences<_$AppDatabase, $WalletSettingsTable, WalletSetting>,
+      ),
+      WalletSetting,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -7563,4 +10091,12 @@ class $AppDatabaseManager {
       $$WalletMetaTableTableManager(_db, _db.walletMeta);
   $$FinancialMemberRowsTableTableManager get financialMemberRows =>
       $$FinancialMemberRowsTableTableManager(_db, _db.financialMemberRows);
+  $$CloudBindingTableTableManager get cloudBinding =>
+      $$CloudBindingTableTableManager(_db, _db.cloudBinding);
+  $$SyncOutboxTableTableManager get syncOutbox =>
+      $$SyncOutboxTableTableManager(_db, _db.syncOutbox);
+  $$SyncStateTableTableManager get syncState =>
+      $$SyncStateTableTableManager(_db, _db.syncState);
+  $$WalletSettingsTableTableManager get walletSettings =>
+      $$WalletSettingsTableTableManager(_db, _db.walletSettings);
 }

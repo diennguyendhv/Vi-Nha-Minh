@@ -168,3 +168,12 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - **Mất khoá ⇒ màn cần khôi phục, giữ nguyên file, TUYỆT ĐỐI không tạo khoá mới/ghi đè.** Đường khôi phục tương lai = P8 cloud restore.
 - Di trú bản rõ → mã hoá chỉ qua `WalletDbEncryption` (read-only nguồn → `sqlcipher_export` ra file tạm → so snapshot đầy đủ → swap nguyên tử → xác minh lại → mới xoá bản gốc; lỗi ⇒ giữ bản gốc dùng được). Không viết đường sao chép/xuất DB nào tạo bản rõ.
 - Máy mất và luôn offline không xoá từ xa được; dữ liệu trên đó được bảo vệ bởi SQLCipher + FBE + App Lock.
+
+## 24. P8.1 — Nền đồng bộ cloud CỤC BỘ (schema v10, 2026-09-26)
+- **v10 thuần cộng thêm:** `cloud_binding` (singleton; KHÔNG dòng = NONE), `sync_outbox`, `sync_state`, `wallet_settings`. Không dòng tài chính nào bị viết lại.
+- **`cloud_binding` trong DB là nguồn sự thật** (registry chỉ cache). Chỉ chuyển tường minh qua `CloudBindingStore`: NONE → CLAIMING (`beginClaim`, người dùng chọn `selfMemberId` ĐÃ CÓ; walletId lấy từ `wallet_meta`) → ACTIVE (`activate` đúng `claimRequestId`). Không bao giờ gắn chỉ vì đăng nhập Firebase.
+- **Ghi nhận thay đổi = trigger SQLite** (`data/local/sync/sync_capture.dart`) trên mọi bảng trong `syncCapturedTables`; chỉ ghi khi binding ACTIVE và không trong `withoutSyncCapture` (cờ bật/tắt trong CÙNG 1 DB transaction — restore/pull dùng hàm này). Outbox chỉ có (loại, id cục bộ, upsert|delete, seq) — KHÔNG nội dung; envelope mã hoá chỉ tạo lúc đẩy từ dòng hiện tại. Gộp: 1 dòng/thực thể, thay đổi sau thắng; xoá = tombstone; xác nhận theo `seq`. `recursive_triggers=ON` để INSERT OR REPLACE vẫn tạo tombstone.
+- **Bảng mới BẮT BUỘC phân loại** vào `syncCapturedTables` hoặc `syncExcludedTables` — test phủ `test/data/local/sync_foundation_v10_test.dart` fail nếu thiếu. Trạng thái thiết bị (App Lock, P7, Keystore, sắp xếp Explorer) không nằm trong DB ví.
+- **Quỹ chính = `wallet_settings.primary_fund_id`** (`LocalWalletSettingsRepository`); prefs cũ chỉ là nguồn đọc dự phòng + di trú 1 lần; ghi mới chỉ vào DB.
+- **`SeedProfile.none`** = ví rỗng tuyệt đối (kể cả `wallet_meta`/thành viên) cho khôi phục; vẫn mở qua `AppDatabase` ⇒ SQLCipher từ lúc tạo, không có file bản rõ. Khoá DB gắn theo tên file — đổi tên `.restoring` → file thật cần xử lý khoá ở engine khôi phục (P8.x).
+- Chưa làm (P8.2+): claim/backend, đẩy/kéo, mốc nền khi ACTIVE (`SyncOutboxStore.enqueueFullSnapshot` đã có, chưa ai gọi), rev theo thực thể, engine khôi phục.

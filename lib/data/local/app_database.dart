@@ -10,6 +10,7 @@ import '../../domain/entities/wallet_identity.dart';
 import 'db_encryption/db_key_store.dart';
 import 'db_encryption/sqlcipher_wallet.dart';
 import 'seed_defaults.dart';
+import 'sync/sync_capture.dart';
 import 'wallet_descriptor.dart';
 
 part 'app_database.g.dart';
@@ -199,6 +200,91 @@ class FinancialMemberRows extends Table {
   Set<Column> get primaryKey => {memberId};
 }
 
+/// v10 (P8.1) — ràng buộc Wallet ↔ cloud. SINGLETON; KHÔNG có dòng = `NONE`
+/// (chưa claim). DB là nguồn sự thật; `wallet_registry.json` chỉ là cache. Chỉ đổi
+/// qua `LocalCloudBindingRepository` bằng hành động claim TƯỜNG MINH (người dùng chọn
+/// `selfMemberId`) — không bao giờ tự gắn chỉ vì đã đăng nhập Firebase.
+@DataClassName('CloudBindingRow')
+class CloudBinding extends Table {
+  IntColumn get singleton =>
+      // ignore: recursive_getters
+      integer().withDefault(const Constant(1)).check(singleton.equals(1))();
+  TextColumn get walletId => text()();
+  TextColumn get accountId => text()();
+  TextColumn get selfMemberId => text()();
+  TextColumn get environment => text()();
+  TextColumn get state =>
+      // ignore: recursive_getters
+      text().check(state.isIn(const ['NONE', 'CLAIMING', 'ACTIVE']))();
+  TextColumn get claimRequestId => text().nullable()();
+
+  /// Chỉ metadata phiên bản (KHÔNG khoá): cryptoVersion + rev keyring đã biết.
+  IntColumn get cryptoVersion => integer().nullable()();
+  IntColumn get keyringRev => integer().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {singleton};
+
+  @override
+  List<String> get customConstraints => [
+    "CHECK (state <> 'CLAIMING' OR claim_request_id IS NOT NULL)",
+  ];
+}
+
+/// v10 (P8.1) — hàng đợi thay đổi bền cho sao lưu mã hoá. CHỈ danh tính + ý định
+/// (loại thực thể, id cục bộ, upsert/delete) — KHÔNG BAO GIỜ chứa nội dung tài chính;
+/// envelope mã hoá chỉ được tạo lúc đẩy, từ dòng HIỆN TẠI. Mỗi thực thể tối đa 1 dòng
+/// (gộp); đổi lại ⇒ dòng mới với `seq` mới (AUTOINCREMENT, không tái dùng) để xác
+/// nhận theo `seq` không nuốt thay đổi đến sau. Được ghi bởi trigger (`sync_capture`).
+@DataClassName('SyncOutboxRow')
+class SyncOutbox extends Table {
+  IntColumn get seq => integer().autoIncrement()();
+  TextColumn get entityKind => text()();
+  TextColumn get entityId => text()();
+  TextColumn get op =>
+      // ignore: recursive_getters
+      text().check(op.isIn(const ['upsert', 'delete']))();
+  DateTimeColumn get changedAt => dateTime()();
+  IntColumn get attempts => integer().withDefault(const Constant(0))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {entityKind, entityId},
+  ];
+}
+
+/// v10 (P8.1) — trạng thái đồng bộ cục bộ. SINGLETON; không có dòng = mặc định.
+/// `captureSuppressed` chỉ được bật TRONG 1 DB transaction (`withoutSyncCapture`) —
+/// crash/lỗi ⇒ rollback, cờ không bao giờ kẹt ở 1.
+@DataClassName('SyncStateRow')
+class SyncState extends Table {
+  IntColumn get singleton =>
+      // ignore: recursive_getters
+      integer().withDefault(const Constant(1)).check(singleton.equals(1))();
+  BoolColumn get captureSuppressed =>
+      boolean().withDefault(const Constant(false))();
+
+  /// `headRev` máy chủ đã biết gần nhất (con trỏ pull/CAS đẩy) — P8.2 dùng.
+  IntColumn get serverHeadRev => integer().nullable()();
+  DateTimeColumn get lastPushAt => dateTime().nullable()();
+  DateTimeColumn get lastPullAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {singleton};
+}
+
+/// v10 (P8.1) — cài đặt thuộc WALLET (đồng bộ cùng ví), dạng khoá/giá trị. Khác
+/// SharedPreferences (thiết bị). Hiện có: `primary_fund_id` (xem
+/// `LocalWalletSettingsRepository`).
+class WalletSettings extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
 @DriftDatabase(
   tables: [
     TransactionRows,
@@ -210,6 +296,10 @@ class FinancialMemberRows extends Table {
     ObligationRows,
     WalletMeta,
     FinancialMemberRows,
+    CloudBinding,
+    SyncOutbox,
+    SyncState,
+    WalletSettings,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -260,13 +350,16 @@ class AppDatabase extends _$AppDatabase {
   /// recreate → copy → drop như v4→v5 (bảng đã có FK/unique index từ v4).
   /// Version 8 (P2 — Local Wallet Identity): thêm 2 bảng THUẦN CỘNG THÊM
   /// (`wallet_meta`, `financial_member_rows`), không đụng dòng/cột nào của dữ liệu cũ.
+  /// Version 10 (P8.1): 4 bảng THUẦN CỘNG THÊM (`cloud_binding`, `sync_outbox`,
+  /// `sync_state`, `wallet_settings`) + trigger ghi nhận thay đổi; không ghi dòng nào.
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) async {
       await m.createAll();
+      await installSyncCaptureTriggers(this);
     },
     onUpgrade: (Migrator m, int from, int to) async {
       if (from < 3) {
@@ -317,12 +410,28 @@ class AppDatabase extends _$AppDatabase {
           }
         });
       }
+      if (from < 10) {
+        // v9 → v10: CHỈ tạo bảng mới + trigger. Không INSERT/UPDATE dòng nào; chưa có
+        // cloud_binding ⇒ trigger không ghi gì. Lỗi ⇒ rollback, DB vẫn là v9.
+        await transaction(() async {
+          await m.createTable(cloudBinding);
+          await m.createTable(syncOutbox);
+          await m.createTable(syncState);
+          await m.createTable(walletSettings);
+          await installSyncCaptureTriggers(this);
+        });
+      }
     },
     beforeOpen: (details) async {
       // sqlite3 tắt FK enforcement theo mặc định mỗi connection — phải bật
       // lại mỗi lần mở DB (không chỉ lúc tạo mới).
       await customStatement('PRAGMA foreign_keys = ON');
-      if (details.wasCreated) {
+      // Để INSERT OR REPLACE xoá ngầm 1 dòng vẫn kích hoạt trigger DELETE (tombstone).
+      // Trigger chỉ ghi `sync_outbox` (không có trigger) ⇒ không đệ quy thật.
+      await customStatement('PRAGMA recursive_triggers = ON');
+      // SeedProfile.none: ví RỖNG TUYỆT ĐỐI cho khôi phục — kể cả wallet_meta/thành
+      // viên (walletId lấy từ bản sao lưu, do engine khôi phục ghi).
+      if (details.wasCreated && seedProfile != SeedProfile.none) {
         await seedDefaults(this, seedProfile);
         await _ensureWalletIdentity(
           legacyIds: seedProfile == SeedProfile.demo,

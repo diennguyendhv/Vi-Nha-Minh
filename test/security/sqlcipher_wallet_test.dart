@@ -16,36 +16,12 @@ import 'package:vi_nha_minh/data/local/seed_defaults.dart';
 import 'package:vi_nha_minh/data/local/wallet_descriptor.dart';
 import 'package:vi_nha_minh/domain/entities/wallet_identity.dart';
 
-/// In-memory stand-in for the Keystore bridge (same contract: never
-/// overwrites, can simulate a lost/unwrappable key).
-class MemoryDbKeyStore implements DbKeyStore {
-  final entries = <String, DbKeyEntry>{};
-  bool unavailable = false;
-  int creates = 0;
-  @override
-  Future<DbKeyEntry?> load(String f) async {
-    if (unavailable && entries.containsKey(f)) throw const DbKeyUnavailable();
-    return entries[f];
-  }
+import '../support/memory_db_key_store.dart';
 
-  @override
-  Future<DbKeyEntry> create(String f, {String? walletId}) async {
-    if (entries.containsKey(f)) throw StateError('db_key_exists');
-    creates++;
-    return entries[f] = DbKeyEntry(BackupCrypto.randomBytes(32), walletId, 1);
-  }
-
-  @override
-  Future<void> bindWallet(String f, String walletId) async {
-    final e = entries[f]!;
-    if (e.walletId != null && e.walletId != walletId) throw StateError('mismatch');
-    entries[f] = DbKeyEntry(e.key, walletId, e.version);
-  }
-}
 
 const fileName = 'vi_nha_minh.sqlite';
 
-/// Plaintext v9 Wallet with the full demo seed + transactions (incl. notes).
+/// Plaintext (current schema) Wallet with the full demo seed + transactions (incl. notes).
 Future<File> plaintextFixture(Directory dir, {int transactions = 40}) async {
   final file = File('${dir.path}/$fileName');
   final db = AppDatabase.forTesting(NativeDatabase(file), seed: SeedProfile.demo);
@@ -132,11 +108,11 @@ void main() {
     expect(String.fromCharCodes(bytes).contains('wallet_meta'), isFalse);
   });
 
-  test('plaintext v9 → SQLCipher: every table/field/ids/walletId identical', () async {
+  test('plaintext Wallet → SQLCipher: every table/field/ids/walletId identical', () async {
     final file = await plaintextFixture(dir);
     final before = snapshotPlain(file);
     expect(before.healthy, isTrue);
-    expect(before.userVersion, 9);
+    expect(before.userVersion, 10);
     expect(before.count('transaction_rows'), 40);
     final keys = MemoryDbKeyStore();
     final plan = await WalletDbEncryption(keys).prepare(file, fileName);

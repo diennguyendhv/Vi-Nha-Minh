@@ -139,8 +139,26 @@ Found + fixed on device: secret dialogs disposed their TextEditingController
 while the route was still animating out (red debug screen); dialogs now own
 their controllers (regression tests `test/auth/secret_dialog_lifecycle_test.dart`).
 
+## 8c. P8.1 — local sync foundation (schema v10, 2026-09-26)
+Local only; nothing uploaded, PROD not claimed, BackupGate still closed.
+- `cloud_binding` (singleton, absent = NONE; NONE → CLAIMING → ACTIVE only via
+  `CloudBindingStore`, explicit `selfMemberId`, walletId from `wallet_meta`).
+- `sync_outbox` filled by SQLite triggers on every Wallet-data table
+  (`syncCapturedTables`: transaction, category, status, fund, savingsAssetType,
+  counterparty, obligation, financialMember, walletSetting). Only while ACTIVE
+  and not inside `withoutSyncCapture`. Rows = `(seq, kind, localId,
+  upsert|delete)`; no content. Coalesced per entity, delete = tombstone intent,
+  ack by exact `seq`. Excluded: `wallet_meta`, `cloud_binding`, `sync_outbox`,
+  `sync_state` (coverage test).
+- `sync_state` (singleton: suppression flag, server head rev, push/pull times).
+- `wallet_settings` (key/value Wallet data): `primary_fund_id` moved here from
+  SharedPreferences (old key = read fallback + one-time migration).
+- `SeedProfile.none`: absolutely empty (no wallet_meta/members/categories/funds/
+  savings) and SQLCipher-encrypted from creation — target for restore.
+
 ## 9. Remaining before full P8
-SQLCipher phase (hard gate) → Wallet claim flow → outbox + incremental upload of
+~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → Wallet claim flow
+(P8.2) + baseline enqueue + per-entity rev tracking → incremental upload of
 real entity kinds → restore into a fresh Wallet (no seed) + reconciliation →
 tombstone/idempotency review → Recovery Key regeneration + disable backup +
 trusted-device removal endpoints (each with step-up) → PILOT only after owner

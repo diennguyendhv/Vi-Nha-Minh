@@ -6,8 +6,9 @@ import '../../core/constants/default_savings_asset_types.dart';
 import 'app_database.dart';
 
 /// Bộ seed: [fresh] = người dùng mới (tối giản), [demo] = bộ đầy đủ của hộ chủ
-/// dự án (test/golden).
-enum SeedProfile { fresh, demo }
+/// dự án (test/golden), [none] = ví RỖNG TUYỆT ĐỐI để engine khôi phục đổ dữ liệu
+/// vào (không danh mục, trạng thái, thành viên, quỹ, tiết kiệm, wallet_meta).
+enum SeedProfile { fresh, demo, none }
 
 /// Chạy đúng 1 lần — lúc file DB được tạo mới (`AppDatabase.migration`,
 /// `beforeOpen` với `details.wasCreated`). Insert 10 category seed (+status
@@ -17,6 +18,7 @@ Future<void> seedDefaults(
   AppDatabase db, [
   SeedProfile profile = SeedProfile.demo,
 ]) async {
+  if (profile == SeedProfile.none) return;
   final categories = profile == SeedProfile.fresh
       ? DefaultCategories.freshSystem
       : DefaultCategories.all;
