@@ -49,13 +49,15 @@ dependencies:
 
   # Lưu trữ local-first (Giai đoạn A) — dùng trước khi có Firebase, xem spec.md.
   drift: ^2.21.0
-  sqlite3_flutter_libs: ^0.5.24
   path_provider: ^2.1.5
   path: ^1.9.0
   shared_preferences: ^2.5.5
   google_sign_in: ^7.2.0
   cryptography: ^2.9.0
   unorm_dart: ^0.3.2
+  # SQLCipher build via hooks (see `hooks:` below). Pinned: the hook verifies
+  # binaries against sha256 values shipped in this exact package version.
+  sqlite3: 3.5.2
 
 dev_dependencies:
   flutter_test:
@@ -70,15 +72,6 @@ dev_dependencies:
 
   drift_dev: ^2.21.0
   build_runner: ^2.4.13
-  # Dùng trực tiếp trong test để dựng fixture schema v3 cho persistence test
-  # migration (test/data/local/app_database_test.dart) — vốn chỉ là
-  # transitive dependency của sqlite3_flutter_libs/drift.
-  sqlite3: ^3.5.2
-
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
   generate: true
 
@@ -117,3 +110,11 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Local DB encryption (SQLCipher phase): package:sqlite3 build hook bundles the
+# SQLCipher community build (sha256-pinned + SLSA-attested GitHub release
+# binaries) instead of plain SQLite, on Android AND on the host for tests.
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlcipher

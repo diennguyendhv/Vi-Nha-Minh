@@ -8,8 +8,10 @@ import 'data/auth/firebase_bootstrap.dart';
 import 'data/auth/firebase_auth_repository.dart';
 import 'presentation/providers/session_provider.dart';
 import 'l10n/session_localizations.dart';
+import 'data/local/db_encryption/db_preflight.dart';
 import 'data/local/wallet_registry_bootstrap.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
+import 'presentation/features/security/db_recovery_screen.dart';
 import 'presentation/features/security/lock_gate.dart';
 import 'presentation/providers/app_lock_provider.dart';
 import 'presentation/providers/auth_providers.dart';
@@ -37,6 +39,15 @@ Future<void> main() async {
 
   // Quỹ chính của Trang chủ lưu bền vững (thiết lập hiển thị, không phải sổ cái).
   final prefs = await SharedPreferences.getInstance();
+
+  // Mã hoá DB cục bộ (SQLCipher): di trú bản rõ → mã hoá một lần (kiểm chứng +
+  // rollback) TRƯỚC khi bất kỳ thứ gì mở ví. Mất khoá ⇒ màn khôi phục, KHÔNG mở,
+  // KHÔNG tạo khoá mới, KHÔNG ghi đè file.
+  final dbRecovery = await preflightLocalWalletDatabase();
+  if (dbRecovery != null) {
+    runApp(DbRecoveryRequiredApp(reason: dbRecovery.reason));
+    return;
+  }
 
   // Khoá ứng dụng: đọc trạng thái từ native TRƯỚC `runApp` để nếu đã bật thì khung hình
   // đầu tiên là màn khoá (không có khung hình UI tài chính nào lộ ra).

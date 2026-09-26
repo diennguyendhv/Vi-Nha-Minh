@@ -176,4 +176,19 @@ class SessionLocalizationsVi extends SessionLocalizations {
   @override
   String get deviceRevoked =>
       'Thiết bị này đã bị thay bằng khôi phục khi mất máy. Credential cloud và khoá sao lưu trên máy này đã được xoá.';
+
+  @override
+  String get dbEncryptionOn =>
+      'Mã hoá dữ liệu trên máy: đang bật (SQLCipher, khoá bảo vệ bằng Android Keystore). Độc lập với Khoá ứng dụng.';
+
+  @override
+  String get dbEncryptionPending =>
+      'Mã hoá dữ liệu trên máy: chưa áp dụng được. App sẽ thử lại ở lần mở sau; dữ liệu của bạn không thay đổi.';
+
+  @override
+  String get dbRecoveryTitle => 'Không mở được dữ liệu ví trên máy này';
+
+  @override
+  String get dbRecoveryBody =>
+      'Khoá mã hoá bảo vệ ví trên máy này không còn dùng được (ví dụ sau khi hệ thống đặt lại bảo mật). Dữ liệu đã mã hoá được giữ nguyên, không bị xoá hay ghi đè. App KHÔNG tạo khoá mới. Khôi phục từ bản sao lưu cloud mã hoá sẽ là cách lấy lại ở phiên bản sau.';
 }

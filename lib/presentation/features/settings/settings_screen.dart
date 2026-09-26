@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'db_encryption_status.dart';
+import 'debug_db_benchmark_screen.dart';
 import '../../../core/theme/app_colors.dart';
 import '../security/security_settings_section.dart';
 import '../fund/fund_list_screen.dart';
@@ -92,6 +94,7 @@ class SettingsScreen extends ConsumerWidget {
                 const Divider(height: 1, color: AppColors.divider),
                 const _SettingsRow(label: 'Ngân sách theo tháng'),
                 const Divider(height: 1, color: AppColors.divider),
+                const DbEncryptionStatusLine(),
                 const SecuritySettingsSection(),
                 // Công cụ dev tạm thời (V2-2C): CHỈ có trong bản debug, không
                 // bao giờ xuất hiện ở release.
@@ -102,6 +105,15 @@ class SettingsScreen extends ConsumerWidget {
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const DebugImportScreen(),
+                      ),
+                    ),
+                  ),
+                  const Divider(height: 1, color: AppColors.divider),
+                  _SettingsRow(
+                    label: 'Đo hiệu năng DB (debug)',
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const DebugDbBenchmarkScreen(),
                       ),
                     ),
                   ),

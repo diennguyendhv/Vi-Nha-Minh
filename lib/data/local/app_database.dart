@@ -4,10 +4,11 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 import '../../core/utils/opaque_id.dart';
 import '../../domain/entities/wallet_identity.dart';
+import 'db_encryption/db_key_store.dart';
+import 'db_encryption/sqlcipher_wallet.dart';
 import 'seed_defaults.dart';
 import 'wallet_descriptor.dart';
 
@@ -214,10 +215,17 @@ class FinancialMemberRows extends Table {
 class AppDatabase extends _$AppDatabase {
   /// DB thật trên máy: người dùng mới bắt đầu với bộ seed TỐI GIẢN
   /// ([SeedProfile.fresh]).
+  ///
+  /// Mọi file ví được mở bằng SQLCipher với khoá riêng của ví (Keystore) —
+  /// xem `db_encryption/`. [directory] chỉ để test trỏ tới thư mục tạm.
   AppDatabase({
     this.seedProfile = SeedProfile.fresh,
     WalletDescriptor wallet = WalletDescriptor.legacyLocal,
-  }) : super(_openWalletConnection(wallet));
+    DbKeyStore keyStore = const KeystoreDbKeyStore(),
+    Future<Directory> Function()? directory,
+  }) : _keyStore = keyStore,
+       _dbFileName = wallet.dbFileName,
+       super(_openWalletConnection(wallet, keyStore, directory));
 
   /// Dùng cho unit/widget test: cơ sở dữ liệu tạm trong bộ nhớ, không đụng
   /// file thật trên máy. Mặc định seed đầy đủ của hộ chủ dự án
@@ -226,7 +234,12 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(
     super.executor, {
     SeedProfile seed = SeedProfile.demo,
-  }) : seedProfile = seed;
+  }) : seedProfile = seed,
+       _keyStore = null,
+       _dbFileName = null;
+
+  final DbKeyStore? _keyStore;
+  final String? _dbFileName;
 
   /// Bộ seed dùng khi file DB được tạo mới.
   final SeedProfile seedProfile;
@@ -314,6 +327,15 @@ class AppDatabase extends _$AppDatabase {
         await _ensureWalletIdentity(
           legacyIds: seedProfile == SeedProfile.demo,
         );
+      }
+      // Ví mới: khoá DB được tạo trước khi có walletId ⇒ gắn ngay lần mở đầu.
+      // Idempotent; khoá đã gắn ví khác ⇒ native từ chối.
+      final store = _keyStore;
+      final file = _dbFileName;
+      if (store != null && file != null && lastDbEncryptionStatus[file] ==
+          DbEncryptionStatus.encrypted) {
+        final meta = await select(walletMeta).getSingleOrNull();
+        if (meta != null) await store.bindWallet(file, meta.walletId);
       }
     },
   );
@@ -495,11 +517,29 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-QueryExecutor _openWalletConnection(WalletDescriptor wallet) {
+/// Trạng thái mã hoá của lần mở gần nhất theo file ví (chỉ bộ nhớ; không có
+/// khoá). Dùng cho màn Cài đặt/nghiệm thu.
+final lastDbEncryptionStatus = <String, DbEncryptionStatus>{};
+
+QueryExecutor _openWalletConnection(
+  WalletDescriptor wallet,
+  DbKeyStore keyStore,
+  Future<Directory> Function()? directory,
+) {
   return LazyDatabase(() async {
-    await applyWorkaroundToOpenSqlite3OnOldAndroidVersions();
-    final dbFolder = await getApplicationDocumentsDirectory();
+    final dbFolder = await (directory ?? getApplicationDocumentsDirectory)();
     final file = File(p.join(dbFolder.path, wallet.dbFileName));
-    return NativeDatabase.createInBackground(file);
+    // Di trú bản rõ → SQLCipher (một lần, có kiểm chứng + rollback) hoặc lấy khoá.
+    // Khoá mất ⇒ ném DbRecoveryRequired: KHÔNG bao giờ tạo khoá mới cho DB đã mã hoá.
+    final plan = await WalletDbEncryption(keyStore).prepare(
+      file,
+      wallet.dbFileName,
+    );
+    lastDbEncryptionStatus[wallet.dbFileName] = plan.status;
+    final key = plan.key;
+    return NativeDatabase.createInBackground(
+      file,
+      setup: key == null ? null : (db) => applySqlcipherKey(db, key),
+    );
   });
 }

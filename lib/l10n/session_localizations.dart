@@ -394,6 +394,30 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'This device was replaced by lost-device recovery. Its cloud credential and backup key were removed from this device.'**
   String get deviceRevoked;
+
+  /// No description provided for @dbEncryptionOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device data encryption: on (SQLCipher, key protected by Android Keystore). Separate from App Lock.'**
+  String get dbEncryptionOn;
+
+  /// No description provided for @dbEncryptionPending.
+  ///
+  /// In en, this message translates to:
+  /// **'On-device data encryption: not yet applied. The app will retry on next start; your data is unchanged.'**
+  String get dbEncryptionPending;
+
+  /// No description provided for @dbRecoveryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet data cannot be opened on this device'**
+  String get dbRecoveryTitle;
+
+  /// No description provided for @dbRecoveryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version.'**
+  String get dbRecoveryBody;
 }
 
 class _SessionLocalizationsDelegate

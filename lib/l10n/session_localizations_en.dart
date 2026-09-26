@@ -176,4 +176,19 @@ class SessionLocalizationsEn extends SessionLocalizations {
   @override
   String get deviceRevoked =>
       'This device was replaced by lost-device recovery. Its cloud credential and backup key were removed from this device.';
+
+  @override
+  String get dbEncryptionOn =>
+      'On-device data encryption: on (SQLCipher, key protected by Android Keystore). Separate from App Lock.';
+
+  @override
+  String get dbEncryptionPending =>
+      'On-device data encryption: not yet applied. The app will retry on next start; your data is unchanged.';
+
+  @override
+  String get dbRecoveryTitle => 'Wallet data cannot be opened on this device';
+
+  @override
+  String get dbRecoveryBody =>
+      'The encryption key protecting this Wallet on this device is no longer available (for example after a system security reset). Your encrypted data has been kept exactly as it was and has not been deleted or overwritten. A new key was NOT created. Recovery from an encrypted cloud backup will be the way back in a future version.';
 }

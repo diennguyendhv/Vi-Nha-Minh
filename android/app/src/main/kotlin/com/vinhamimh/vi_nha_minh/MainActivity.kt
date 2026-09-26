@@ -14,6 +14,8 @@ class MainActivity : FlutterFragmentActivity() {
         lockStore = AppLockStore(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "homewallet/session")
             .setMethodCallHandler(SessionBridge(this))
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "homewallet/db_key")
+            .setMethodCallHandler(DbKeyBridge(this))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "homewallet/backup_key")
             .setMethodCallHandler(BackupKeyBridge(this))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AppLockBridge.CHANNEL)
