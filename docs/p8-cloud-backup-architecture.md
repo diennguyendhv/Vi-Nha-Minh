@@ -155,6 +155,11 @@ Local only; nothing uploaded, PROD not claimed, BackupGate still closed.
   SharedPreferences (old key = read fallback + one-time migration).
 - `SeedProfile.none`: absolutely empty (no wallet_meta/members/categories/funds/
   savings) and SQLCipher-encrypted from creation — target for restore.
+- PROD acceptance (2026-09-26): v9 → v10 in place, 1,849 → 1,849 tx, 9/9 old
+  tables identical (count + digest), walletId unchanged, integrity ok, FK 0,
+  still SQLCipher; cloud_binding/sync_outbox/sync_state empty (sqlite_sequence
+  seq 0 = no outbox row ever written); primary fund migrated (`an_uong`); Home
+  pixel-identical. Nothing uploaded.
 
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → Wallet claim flow
