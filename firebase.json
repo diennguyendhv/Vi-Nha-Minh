@@ -1,5 +1,9 @@
 {
-  "functions": [{"source": "functions", "codebase": "p7-session"}],
+  "functions": [{
+    "source": "functions",
+    "codebase": "p7-session",
+    "ignore": ["node_modules", ".npm-cache", ".env*", "test", "firebase-debug.log", ".git"]
+  }],
   "firestore": {"rules": "firestore.rules"},
   "emulators": {
     "auth": {"port": 9099},

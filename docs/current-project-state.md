@@ -7,12 +7,10 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P7 — Exclusive Account Session Foundation — chưa PASS, chờ triển khai/nghiệm thu DEV** (2026-09-26). Trusted backend + Keystore client đã có; emulator chứng minh secret A cũ bị từ chối dù Firebase token còn hợp lệ. 3 nhóm emulator + 52 focused test đạt; full Flutter 1.036 pass/3 skip; analyze 17 info cũ, 0 error/warning. PROD chỉ đọc: schema v8, integrity ok, FK 0, 1.847 giao dịch. Chưa triển khai cloud, chưa sửa PROD. Chi tiết: `docs/p7-exclusive-session.md`. P6/P6.1 giữ nguyên; P8 chưa bắt đầu.
-
-> P6.1 follow-up (2026-09-25): shared Fund/Savings transaction history, creation-time display/sorting, conditional Summary filters, and unallocated-savings display fix are included in the user-requested commit. Summary/explorer: 110 tests passed; latest PROD debug APK installed in place on Pixel 7a. `docs/p6-1-codex-handoff.md` preserves the earlier handoff and remaining edit-flow limitations. P7 has not started.
+**P7 — Exclusive Account Session Foundation — PASS** (2026-09-26). Callable DEV `vi-nha-minh-55c60` (Node 22) đã triển khai; Pixel: kích hoạt tường minh, Keystore giữ qua force-stop, thiết bị cũ bị SERVER từ chối (403), đăng xuất cũ không tắt được phiên mới, kích hoạt lại thay thế, đăng xuất xoá credential. Rules deny-all. Không dữ liệu tài chính trên cloud; Wallet không claim. PROD chỉ đọc: v8, integrity ok, FK 0, 1.849 giao dịch. Chi tiết: `docs/p7-exclusive-session.md`. **P8 chưa bắt đầu.**
 
 ## Last Completed Phase
-P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
+P7 (phiên độc quyền, PASS). P6/P6.1 (cách ly Wallet, PASS). P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
 
 ## Current Schema
 **v8** (v7→v8 cộng thêm, nguyên tử): `wallet_meta` (singleton) + `financial_member_rows`. P3 và P4 KHÔNG đổi schema.
@@ -91,7 +89,7 @@ Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối ph
 
 ## Known Backlog
 - Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
-- P7: hoàn tất gate/triển khai DEV/nghiệm thu Pixel; xem `docs/p7-exclusive-session.md`.
+- P7 giới hạn (giữ trung thực): token Firebase của thiết bị cũ không bị thu hồi; secret là bearer, không phải attestation; đăng xuất offline có thể để bản ghi server active tới khi bị thay; App Check chưa là quyền phiên; P8+ ghi tài chính phải kiểm tra phiên trong CÙNG transaction.
 - Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
 - Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
 - Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.

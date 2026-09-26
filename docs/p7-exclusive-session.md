@@ -1,7 +1,7 @@
 # P7 — Exclusive Account Session Foundation
 
-Status: implementation and emulator proof available; final device/deployment gates
-pending. **Do not declare overall PASS yet. P8 has not started.**
+Status: **PASS (2026-09-26)** — deployed DEV backend rejects stale device credentials
+and Pixel lifecycle acceptance passed. P8 has not started.
 
 ## Architecture and scope
 
@@ -116,16 +116,59 @@ flutter analyze
 flutter build apk --debug --flavor dev --dart-define-from-file=env/dev.json
 ```
 
-Emulators ran with host Node 24 while deployment runtime is Node 22; live DEV
-verification is still required. Lockfile pins backend/test dependencies.
+Emulators ran with host Node 24; the deployed DEV runtime is Node 22 (verified below).
+Lockfile pins backend/test dependencies.
 
-Pending: Firebase CLI authentication and DEV-only deployment, DEV activation/check/sign-out,
-Keystore persistence over force-stop/reopen, and second logical client replacement
-against the same deployed DEV service. No need for two physical phones.
+Deploy (DEV only; no `.firebaserc`, project always explicit):
 
-Use only `--project vi-nha-minh-55c60` for an eventual DEV deployment. Inspect DEV
-Firestore setup first; do not deploy these deny-all Rules to another environment.
-No private key/service account is required in Flutter or the repository.
+```powershell
+.unctions
+ode_modules\.binirebase.cmd deploy --only functions:p7-session,firestore:rules --project vi-nha-minh-55c60
+```
+
+Never deploy these deny-all Rules to another environment. No private key/service
+account is required in Flutter or the repository. `firebase.json` excludes
+`node_modules`, `.npm-cache`, `test`, `.env*` from the Functions upload (~100 KB).
+
+## DEV deployment and live acceptance (2026-09-26)
+
+- Project `vi-nha-minh-55c60` on Blaze. `functions:list`: `activateSession`,
+  `protectedPing`, `deactivateSession` — v2 callable, us-central1, **nodejs22**.
+  Artifact cleanup policy 1 day. Released ruleset read back = deny-all file above.
+- Before acceptance DEV Firestore had no collections; afterwards only
+  `accounts/<uid>/session/current` with fields `activatedAt, active, generation,
+  installationId, sessionSecretHash` (64-hex). No secret field, no financial data.
+- Pixel 7a, `com.vinhamimh.vi_nha_minh.dev`, Google sign-in. The second logical
+  device was simulated on the same Pixel (owner-approved): the app's own AES-GCM
+  ciphertext file was copied/restored inside its sandbox between activations (never
+  decrypted or exported; copies deleted afterwards). Server verdicts come from Cloud
+  Run request logs of the deployed functions (403 = PERMISSION_DENIED with a valid
+  Firebase token):
+  1. Signed in, no credential: status "unchecked"; server had no session (no auto activation).
+  2. Explicit confirm → gen 1, `protectedPing` 200. Force-stop/reopen → status
+     "unchecked" (no auto call); Check → 200 (Keystore credential survived).
+  3. Re-activate → gen 2 (B). Restored gen 1 (A) → `protectedPing` **403**; reopen
+     again → still **403** (stale stays stale).
+  4. Sign-out while holding stale A → `deactivateSession` **403**; server gen 2 still
+     active; local credential/account removed, installation UUID kept.
+  5. Sign in again → no credential, server unchanged (no auto activation). Restored
+     gen 2 → 200 (B survived stale logout).
+  6. Explicit Pixel reactivation → gen 3, 200. Old gen 2 → **403**. Gen 3 after
+     force-stop/reopen → 200.
+  7. Current sign-out → `deactivateSession` 200, server `active=false`, local
+     credential cleared.
+- App Lock setting unchanged (off on DEV; separate prefs/key). DEV Wallet DB and
+  `wallet_registry.json` byte-identical before/after (SHA-256 `4be03e82…`,
+  `0047c5e8…`); registry has no `boundAccountId` (not claimed).
+- Not live-tested: direct client Firestore REST with a DEV ID token (emulator suite
+  covers it; deployed ruleset verified deny-all); true offline logout (wireless adb).
+- No source change after 76c162f except `firebase.json` upload ignore ⇒ Flutter
+  suite not rerun (results above stand).
+
+PROD read-only after acceptance (2026-09-26): two byte-identical reads, in memory
+only, no WAL/journal. Schema **v8**, integrity **ok**, FK **0**, transactions
+**1,849** (live data), wallet_meta 1, financial members 2, walletId `3cbd8878…`
+unchanged. SHA-256 `0848c9effcc6792738f7a8a5b3e355848db67f1a812f0e60ad4e548f1d440ef5`.
 
 ## References
 
