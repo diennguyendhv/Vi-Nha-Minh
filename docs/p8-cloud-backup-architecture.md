@@ -230,6 +230,45 @@ after takeover, DEVICE_REVOKED after lost-device recovery), abandon rules, Rules
 deny direct read/write. App: `test/cloud/wallet_claim_test.dart` (28),
 `test/cloud/wallet_claim_controls_test.dart` (2), registry tests.
 
+**DEV live acceptance (Pixel 7a, `vi-nha-minh-55c60`, 2026-09-26) — PASS.**
+Deploy: `claimWallet`/`getWalletClaim`/`abandonClaim` created, 13 functions
+updated, Rules unchanged. DEV fixture Wallet `dc268fde…` (4 tx, SQLCipher).
+Server verdicts from Cloud Run request logs; Firestore read back read-only.
+- Signed in, card shows "chưa gắn với tài khoản nào"; `cloud_binding` 0
+  (on-device `[db-report]`); no claim docs in Firestore.
+- Explicit claim (member Chồng, confirmation, step-up with Google reauth):
+  `claimwallet 200` once; local `cloud_binding` 1, `wallet_meta` → personal,
+  every financial table digest unchanged, outbox 0; registry
+  `kind: personal, boundAccountId = uid`.
+- Firestore: exactly `wallets/{id}` (kind, state, owner, selfMemberId,
+  memberIds, payloadSchema 10, cryptoVersion 1, env dev, claimRequestId,
+  headRev 0, claimedAt) + `memberships/{uid}` OWNER + `walletIndex/personal`;
+  only subcollection `memberships`; no amount/note/label/category/fund/savings.
+- Stale device (credential ciphertext replay after rotation): `getwalletclaim
+  403`; claim from stale credential `claimwallet 403` ⇒ local stays CLAIMING,
+  nothing written server-side. Firebase Auth alone (signed in again, no P7.1
+  credential): blocked on device, no request sent.
+- Retry: CLAIMING DB snapshot → valid session reopen ⇒ same id committed
+  (`200`); restore the CLAIMING snapshot again (= crash after server commit) ⇒
+  same id replayed `200`, wallet `updateTime == createTime` (no write), still 1
+  membership + 1 index.
+- Sign-out: `deactivatesession 200`, credential wiped, claim card gone; app
+  network blocked (OEM_DENY_3) + force-stop ⇒ Wallet opens, `[db-report]`
+  identical digests, binding + registry intact. Sign in again ⇒ cloud ops
+  blocked until "Kích hoạt thiết bị này", then server confirms Owner.
+- Wrong Account (another Google account on the phone): card says the Wallet
+  belongs to another account, no claim/check/abandon actions, no request sent.
+- abandonClaim (headRev 0, no entity/batch): `abandonclaim 200`, all 3 docs
+  gone, registry back to `local`, DB digests identical to pre-claim.
+- App Lock on (test PIN) ⇒ cold start locked, unlock ⇒ same Wallet/claim;
+  turned off again. SQLCipher `encrypted`, integrity ok, FK 0 throughout.
+- Deployed Rules re-read: deny-all (== repo). PROD package untouched.
+- Found + fixed live: "Bạn là ai?" opened before the P7.1 credential check;
+  the card now checks the credential first (widget test added).
+- Not live (emulator only): DEVICE_REVOKED claim rejection (needs lost-device
+  recovery with the DEV Backup Password), two-Account race.
+Final DEV state: fixture Wallet claimed by the owner Account (headRev 0).
+
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow
 (P8.2)~~ ✅ → P8.3 encrypted initial backup: baseline enqueue + per-entity rev tracking → incremental upload of

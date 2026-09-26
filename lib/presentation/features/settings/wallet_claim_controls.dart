@@ -119,6 +119,8 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
 
   Future<void> _start() => _guard(() async {
     setState(() => _message = null);
+    // Bước 2 trước bước 3: không có phiên P7.1 hiện hành ⇒ dừng, chưa hỏi gì.
+    await widget.service.session.credential();
     final candidates = await widget.service.candidates();
     if (!mounted) return;
     final chosen = await showDialog<ClaimCandidate>(

@@ -104,6 +104,17 @@ void main() {
     expect(await t.runAsync(() => CloudBindingStore(db).read()), isNull);
   });
 
+  testWidgets('chưa có phiên P7.1 ⇒ không mở "Bạn là ai?", báo kích hoạt thiết bị', (t) async {
+    await t.runAsync(() => service.session.storage.clear());
+    await pump(t);
+    await t.tap(find.byKey(const Key('claim_start')));
+    await settle(t);
+    expect(find.text('Who are you in this Wallet?'), findsNothing);
+    expect(find.textContaining('Activate this device for cloud first'), findsOneWidget);
+    expect(sent, isEmpty);
+    expect(stepUps, 0);
+  });
+
   testWidgets('chọn thành viên → xác nhận rõ hệ quả → step-up → claim đúng thành viên', (t) async {
     await pump(t);
     await t.tap(find.byKey(const Key('claim_start')));
