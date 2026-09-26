@@ -120,7 +120,8 @@ void main() {
       await repo.updateTransaction('e1', amountMinor: 250000);
 
       final list = await all();
-      expect(list.any((t) => t.id == 'e1'), isFalse);
+      expect(list.where((t) => t.id == 'e1'), hasLength(1), reason: 'giữ nguyên id');
+      expect(list.firstWhere((t) => t.id == 'e1').amountMinor, 250000);
       expect(list.length, 2);
       expect(list.every((t) => t.reversalOfTxId == null && t.reversedByTxId == null && t.correctsTxId == null), isTrue);
       expect(await avail(), 750000);
@@ -178,7 +179,7 @@ void main() {
       expect(await avail(), 200000);
     });
 
-    test('G — bấm Lưu liên tiếp nhiều lần: đúng 1 giao dịch mới (các lần sau báo không còn tồn tại, không nhân đôi)', () async {
+    test('G — bấm Lưu liên tiếp nhiều lần: vẫn đúng 1 giao dịch, không nhân đôi (các lần sau không đổi gì)', () async {
       await repo.addTransaction(income('i1', 1000000));
       await repo.addTransaction(expense('e1', 100000));
 
@@ -187,7 +188,7 @@ void main() {
           repo.updateTransaction('e1', amountMinor: 300000).then((_) => 'ok').catchError((_) => 'err'),
       ]);
 
-      expect(results.where((r) => r == 'ok').length, 1);
+      expect(results, everyElement('ok'));
       final list = await all();
       expect(list.where((t) => t.type == TransactionType.expense).length, 1);
       expect(await avail(), 700000);

@@ -41,6 +41,7 @@ class _Repo implements TransactionRepository {
   List<Transaction> _current;
   final updates = <({String id, int? amount})>[];
   final deletes = <String>[];
+  final calls = <Map<String, Object?>>[];
 
   @override
   Stream<List<Transaction>> watchTransactions() async* {
@@ -55,10 +56,13 @@ class _Repo implements TransactionRepository {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   }) async {
     updates.add((id: transactionId, amount: amountMinor));
+    calls.add({'member': memberRefId, 'src': sourceRefId, 'dst': destinationRefId});
   }
 
   @override
@@ -236,5 +240,34 @@ void main() {
     await tester.tap(save);
     await tester.pumpAndSettle();
     expect(repo.updates.single, (id: 'sav-topup', amount: 250000));
+  });
+
+  testWidgets('Chi từ Quỹ: chọn người thực hiện riêng với Quỹ nguồn rồi Lưu', (tester) async {
+    final repo = await _pump(tester, const FundDetailScreen(fundId: DefaultFunds.anUongId));
+    await _openDetail(tester, 'fund_transaction_fund-spend', 'fund-spend');
+    expect(find.text('NGƯỜI THỰC HIỆN'), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byKey(const Key('detail_member_field')), matching: find.text('Vợ')));
+    await tester.pump();
+    final save = find.widgetWithText(ElevatedButton, 'Lưu thay đổi');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(repo.calls.single, {'member': 'vo', 'src': null, 'dst': null});
+  });
+
+  testWidgets('Nạp quỹ: sửa người nạp gửi đúng đầu nguồn; đầu không đổi không gửi', (tester) async {
+    final repo = await _pump(tester, const FundDetailScreen(fundId: DefaultFunds.anUongId));
+    await _openDetail(tester, 'fund_transaction_fund-topup', 'fund-topup');
+    expect(find.byKey(const Key('detail_source_ref')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('detail_source_ref')));
+    await tester.tap(find.byKey(const Key('detail_source_ref')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Vợ').last);
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(ElevatedButton, 'Lưu thay đổi');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    expect(repo.calls.single, {'member': null, 'src': 'vo', 'dst': null});
   });
 }

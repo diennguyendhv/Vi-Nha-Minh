@@ -35,6 +35,7 @@ class Transaction {
     this.recoveryOfTxId,
     this.obligationId,
     this.settlementGroupId,
+    this.actorMemberId,
     required this.clientTxId,
     this.version = 1,
   });
@@ -129,6 +130,10 @@ class Transaction {
   /// tách biệt, không dùng lẫn cho nhau.
   final String? settlementGroupId;
 
+  /// Người thực hiện khoản Chi có nguồn là Quỹ (nguồn Quỹ không thuộc thành viên nào).
+  /// null với dòng cũ và mọi giao dịch khác — không bao giờ suy ngược.
+  final String? actorMemberId;
+
   /// Idempotency key chống double-submit (bấm Lưu 2 lần).
   final String clientTxId;
 
@@ -167,6 +172,7 @@ class Transaction {
       recoveryOfTxId: recoveryOfTxId,
       obligationId: obligationId,
       settlementGroupId: settlementGroupId,
+      actorMemberId: actorMemberId,
       clientTxId: clientTxId,
       version: version ?? this.version,
     );

@@ -122,7 +122,7 @@ void main() {
 
     final db = AppDatabase.forTesting(NativeDatabase(file));
     final version = await db.customSelect('PRAGMA user_version').getSingle();
-    expect(version.read<int>('user_version'), 8);
+    expect(version.read<int>('user_version'), 9);
 
     // 1) Dữ liệu cũ y hệt, từng trường của từng dòng.
     final after = await dumpOld(db);

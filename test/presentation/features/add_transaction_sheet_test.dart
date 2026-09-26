@@ -101,6 +101,8 @@ class _FakeTransactionRepository implements TransactionRepository {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   }) async {}
@@ -786,6 +788,7 @@ void main() {
       expect(tx.sourceRefId, DefaultFunds.anUongId);
       expect(tx.destinationKind, PoolKind.external);
       expect(tx.amountMinor, 30000);
+      expect(tx.actorMemberId, isNotNull, reason: 'Chi từ Quỹ ghi người thực hiện (người chi đang chọn)');
     });
 
     testWidgets('5 — SAVINGS_TOPUP map đúng', (tester) async {

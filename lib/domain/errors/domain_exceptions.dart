@@ -232,6 +232,30 @@ class MainGroupChangeException implements Exception {
       'MainGroupChangeException: danh mục $categoryId khác nhóm chính của giao dịch $transactionId';
 }
 
+/// Ném ra khi sửa đầu nguồn/đích của giao dịch sai hình dạng theo loại Chuyển
+/// (vd Quỹ → Quỹ, đổi thành viên tiết kiệm lệch, loại tài sản trùng nhau), hoặc
+/// sửa đầu nguồn/đích của giao dịch không phải Chuyển.
+class InvalidTransferEditException implements Exception {
+  const InvalidTransferEditException(this.transactionId, this.reason);
+
+  final String transactionId;
+  final String reason;
+
+  @override
+  String toString() => 'InvalidTransferEditException: $transactionId — $reason';
+}
+
+/// Ném ra khi thành viên / Quỹ / loại tiết kiệm được chọn không tồn tại (hoặc Quỹ đã ngừng).
+class UnknownEndpointException implements Exception {
+  const UnknownEndpointException(this.kind, this.refId);
+
+  final PoolKind kind;
+  final String? refId;
+
+  @override
+  String toString() => 'UnknownEndpointException: $kind $refId';
+}
+
 /// Ném ra khi `amountMinor` không hợp lệ — Invariant 12
 /// (`docs/financial-core-v2.md` mục 18): luôn phải dương, không chấp nhận 0
 /// hay số âm. Đây là validate THẬT ở tầng Financial Engine (không bị strip

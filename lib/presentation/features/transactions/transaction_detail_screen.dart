@@ -8,6 +8,10 @@ import '../../../domain/usecases/selectable_categories.dart';
 import '../../../domain/entities/status.dart';
 import '../../../domain/entities/member_directory.dart';
 import '../../../domain/entities/pool_kind.dart';
+import '../../../domain/entities/savings_asset_type.dart';
+import '../../../domain/entities/transfer_kind.dart';
+import '../../providers/fund_providers.dart';
+import '../../providers/savings_asset_type_providers.dart';
 import '../../../domain/entities/field_update.dart';
 import '../../../domain/entities/transaction.dart';
 import '../../../domain/entities/transaction_type.dart';
@@ -78,6 +82,10 @@ class _TransactionDetailScreenState
   /// `memberId` đang chọn ở form Sửa (null = giao dịch không có "người tiêu" sửa được).
   String? _member;
 
+  /// Đầu nguồn/đích đang chọn (chỉ dùng cho giao dịch Chuyển).
+  String? _srcRef;
+  String? _dstRef;
+
   MemberDirectory get _directory => ref.read(memberDirectoryProvider);
 
   @override
@@ -117,7 +125,10 @@ class _TransactionDetailScreenState
         : (t.type == TransactionType.expense &&
                   t.sourceKind == PoolKind.memberAvailable
               ? t.sourceRefId
-              : null);
+              : (t.type == TransactionType.expense &&
+                        t.sourceKind == PoolKind.fund
+                    ? t.actorMemberId
+                    : null));
     // ID lạ (không thuộc Wallet) → không sửa người được, không đoán.
     return _directory.contains(refId) ? refId : null;
   }
@@ -133,6 +144,67 @@ class _TransactionDetailScreenState
     _transactionDate = t.transactionDate;
     _statusId = t.statusId;
     _member = _currentMember(t);
+    _srcRef = t.sourceRefId;
+    _dstRef = t.destinationRefId;
+  }
+
+  bool _isFundExpense(Transaction t) =>
+      t.type == TransactionType.expense && t.sourceKind == PoolKind.fund;
+
+  bool _canPickMember(Transaction t) =>
+      _isFundExpense(t) || _currentMember(t) != null;
+
+  bool _isSavingsKind(TransferKind? k) =>
+      k == TransferKind.savingsTopup ||
+      k == TransferKind.savingsWithdraw ||
+      k == TransferKind.savingsConvert;
+
+  /// Chuyển sửa được đầu nguồn/đích khi có `transferKind` chuẩn (không phải Vay/dữ liệu cũ).
+  bool _canEditEndpoints(Transaction t) =>
+      t.type == TransactionType.transfer &&
+      t.transferKind != null &&
+      t.obligationId == null;
+
+  String? _savingsMember(Transaction t) {
+    for (final e in [
+      (t.sourceKind, _srcRef),
+      (t.destinationKind, _dstRef),
+    ]) {
+      if (e.$1 == PoolKind.memberSavingsAsset && e.$2 != null) {
+        return parseSavingsAssetRefId(e.$2!)?.memberId;
+      }
+    }
+    return null;
+  }
+
+  /// Đặt thành viên cho cả 2 đầu của giao dịch tiết kiệm (luôn cùng 1 người).
+  void _setSavingsMember(Transaction t, String m) {
+    String? re(PoolKind k, String? ref) {
+      if (k == PoolKind.memberAvailable) return m;
+      if (k == PoolKind.memberSavingsAsset && ref != null) {
+        final p = parseSavingsAssetRefId(ref);
+        return p == null ? ref : savingsAssetRefId(p.assetTypeId, m);
+      }
+      return ref;
+    }
+
+    setState(() {
+      _srcRef = re(t.sourceKind, _srcRef);
+      _dstRef = re(t.destinationKind, _dstRef);
+    });
+  }
+
+  /// Lựa chọn Chuyển hiện tại có hợp lệ để Lưu không (repository vẫn kiểm lại).
+  bool _endpointsValid(Transaction t) {
+    if (!_canEditEndpoints(t)) return true;
+    final k = t.transferKind;
+    if (k == TransferKind.memberToMember) return _srcRef != _dstRef;
+    if (k == TransferKind.savingsConvert) {
+      final a = _srcRef == null ? null : parseSavingsAssetRefId(_srcRef!);
+      final b = _dstRef == null ? null : parseSavingsAssetRefId(_dstRef!);
+      return a != null && b != null && a.assetTypeId != b.assetTypeId;
+    }
+    return true;
   }
 
   Future<void> _pickDate() async {
@@ -174,6 +246,13 @@ class _TransactionDetailScreenState
         categoryId: _categoryId,
         note: _noteController.text.trim(),
         memberRefId: _member,
+        sourceRefId: _canEditEndpoints(current) && _srcRef != current.sourceRefId
+            ? _srcRef
+            : null,
+        destinationRefId:
+            _canEditEndpoints(current) && _dstRef != current.destinationRefId
+            ? _dstRef
+            : null,
         transactionDate: _transactionDate,
         status: _statusUpdateFor(current),
       );
@@ -297,6 +376,15 @@ class _TransactionDetailScreenState
           ? 'Giao dịch này thuộc một khoản vay / cho vay nên chưa thể xóa ở đây.'
           : 'Giao dịch này liên quan đến một khoản hoàn tiền / thu hồi nên chưa thể xóa ở đây.';
     }
+    if (error is InvalidTransferEditException) {
+      return 'Nguồn / đích đã chọn không hợp lệ cho loại chuyển này.';
+    }
+    if (error is UnknownEndpointException) {
+      return 'Thành viên, quỹ hoặc loại tiết kiệm đã chọn không còn dùng được.';
+    }
+    if (error is SavingsMemberMismatchException) {
+      return 'Giao dịch tiết kiệm phải cùng một thành viên.';
+    }
     if (error is MainGroupChangeException) {
       return 'Không thể đổi giao dịch sang nhóm Thu / Chi / Chuyển khác.';
     }
@@ -310,6 +398,136 @@ class _TransactionDetailScreenState
       return 'Có lỗi khi lưu dữ liệu, vui lòng thử lại.';
     }
     return 'Có lỗi xảy ra, vui lòng thử lại.';
+  }
+
+  static const _label = TextStyle(
+    fontSize: 11.5,
+    fontWeight: FontWeight.w700,
+    color: AppColors.textMuted,
+  );
+
+  Widget _dropdown({
+    required Key key,
+    required String title,
+    required String? value,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: _label),
+          const SizedBox(height: 6),
+          DropdownButtonFormField<String>(
+            key: key,
+            value: items.any((i) => i.value == value) ? value : null,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: items,
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Điều khiển sửa đầu nguồn/đích theo loại Chuyển. Chỉ `refId` đổi được; loại pool
+  /// cố định. Repository kiểm lại hình dạng, sự tồn tại và số dư khi Lưu.
+  List<Widget> _endpointEditor(Transaction t) {
+    final members = [
+      for (final m in _directory.members)
+        DropdownMenuItem(value: m.memberId, child: Text(m.label)),
+    ];
+    final funds = [
+      for (final f in ref.watch(fundsStreamProvider).valueOrNull ?? const [])
+        if (f.isActive || f.id == _srcRef || f.id == _dstRef)
+          DropdownMenuItem<String>(value: f.id, child: Text(f.name)),
+    ];
+    final dbAssets =
+        ref.watch(savingsAssetTypesStreamProvider).valueOrNull ?? const [];
+    final assets = [
+      for (final a in [SystemSavingsAssets.unallocated, ...dbAssets])
+        DropdownMenuItem<String>(value: a.id, child: Text(a.name)),
+    ];
+
+    if (_isSavingsKind(t.transferKind)) {
+      final member = _savingsMember(t);
+      Widget assetSide(String title, String? refId, bool src) {
+        final p = refId == null ? null : parseSavingsAssetRefId(refId);
+        return _dropdown(
+          key: Key(src ? 'detail_source_asset' : 'detail_destination_asset'),
+          title: title,
+          value: p?.assetTypeId,
+          items: assets,
+          onChanged: (a) => setState(() {
+            final r = savingsAssetRefId(a, member ?? p!.memberId);
+            if (src) {
+              _srcRef = r;
+            } else {
+              _dstRef = r;
+            }
+          }),
+        );
+      }
+
+      return [
+        _dropdown(
+          key: const Key('detail_transfer_member'),
+          title: 'THÀNH VIÊN',
+          value: member,
+          items: members,
+          onChanged: (m) => _setSavingsMember(t, m),
+        ),
+        if (t.sourceKind == PoolKind.memberSavingsAsset)
+          assetSide('TỪ LOẠI TIẾT KIỆM', _srcRef, true),
+        if (t.destinationKind == PoolKind.memberSavingsAsset)
+          assetSide('ĐẾN LOẠI TIẾT KIỆM', _dstRef, false),
+        if (!_endpointsValid(t))
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text(
+              'Hai loại tiết kiệm phải khác nhau.',
+              style: TextStyle(fontSize: 12, color: AppColors.expenseAmount),
+            ),
+          ),
+      ];
+    }
+
+    Widget side(String title, PoolKind kind, String? value, bool src) {
+      return _dropdown(
+        key: Key(src ? 'detail_source_ref' : 'detail_destination_ref'),
+        title: title,
+        value: value,
+        items: kind == PoolKind.fund ? funds : members,
+        onChanged: (v) => setState(() {
+          if (src) {
+            _srcRef = v;
+          } else {
+            _dstRef = v;
+          }
+        }),
+      );
+    }
+
+    return [
+      side('TỪ', t.sourceKind, _srcRef, true),
+      side('ĐẾN', t.destinationKind, _dstRef, false),
+      if (!_endpointsValid(t))
+        const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text(
+            'Nguồn và đích phải khác nhau.',
+            style: TextStyle(fontSize: 12, color: AppColors.expenseAmount),
+          ),
+        ),
+    ];
   }
 
   @override
@@ -351,7 +569,7 @@ class _TransactionDetailScreenState
       currentCategoryId: _categoryId,
     );
     final canEditCategory = transaction.type != TransactionType.transfer;
-    final canEditMember = _currentMember(transaction) != null;
+    final canEditMember = _canPickMember(transaction);
 
     // Phase 8.6 — chỉ giao dịch Chi CHƯA từng là 1 khoản recovery mới được
     // phép làm target ("Hoàn tiền/Thu hồi") — khớp đúng
@@ -476,9 +694,9 @@ class _TransactionDetailScreenState
           ],
           if (canEditMember) ...[
             const SizedBox(height: 16),
-            const Text(
-              'NGƯỜI TIÊU',
-              style: TextStyle(
+            Text(
+              _isFundExpense(transaction) ? 'NGƯỜI THỰC HIỆN' : 'NGƯỜI TIÊU',
+              style: const TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textMuted,
@@ -486,16 +704,22 @@ class _TransactionDetailScreenState
             ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
+              key: const Key('detail_member_field'),
+              emptySelectionAllowed: _isFundExpense(transaction),
               segments: _directory.members
                   .map(
                     (m) =>
                         ButtonSegment(value: m.memberId, label: Text(m.label)),
                   )
                   .toList(),
-              selected: {_member ?? _directory.defaultMemberId!},
-              onSelectionChanged: (s) => setState(() => _member = s.first),
+              selected: _isFundExpense(transaction)
+                  ? {if (_member != null) _member!}
+                  : {_member ?? _directory.defaultMemberId!},
+              onSelectionChanged: (s) =>
+                  setState(() => _member = s.isEmpty ? null : s.first),
             ),
           ],
+          if (_canEditEndpoints(transaction)) ..._endpointEditor(transaction),
           const SizedBox(height: 16),
           const Text(
             'NGÀY',
@@ -565,7 +789,8 @@ class _TransactionDetailScreenState
           ValueListenableBuilder<int>(
             valueListenable: _amount,
             builder: (_, amount, _) => ElevatedButton(
-              onPressed: (_submitting || amount <= 0)
+              onPressed:
+                  (_submitting || amount <= 0 || !_endpointsValid(transaction))
                   ? null
                   : () => _save(transaction),
               style: ElevatedButton.styleFrom(

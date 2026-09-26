@@ -306,6 +306,11 @@ class _AddTransactionSheetState extends ConsumerState<AddTransactionSheet> {
               note: intent.note,
               statusId: intent.statusId,
               recoveryOfTxId: intent.recoveryOfTxId,
+              actorMemberId:
+                  intent.type == TransactionType.expense &&
+                      intent.sourceKind == PoolKind.fund
+                  ? _member
+                  : null,
             );
         _pendingCommand = command;
         _pendingIntent = intent;

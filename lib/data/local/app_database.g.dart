@@ -1253,6 +1253,17 @@ class $TransactionRowsTable extends TransactionRows
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _actorMemberIdMeta = const VerificationMeta(
+    'actorMemberId',
+  );
+  @override
+  late final GeneratedColumn<String> actorMemberId = GeneratedColumn<String>(
+    'actor_member_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _clientTxIdMeta = const VerificationMeta(
     'clientTxId',
   );
@@ -1299,6 +1310,7 @@ class $TransactionRowsTable extends TransactionRows
     recoveryOfTxId,
     obligationId,
     settlementGroupId,
+    actorMemberId,
     clientTxId,
     version,
   ];
@@ -1492,6 +1504,15 @@ class $TransactionRowsTable extends TransactionRows
         ),
       );
     }
+    if (data.containsKey('actor_member_id')) {
+      context.handle(
+        _actorMemberIdMeta,
+        actorMemberId.isAcceptableOrUnknown(
+          data['actor_member_id']!,
+          _actorMemberIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('client_tx_id')) {
       context.handle(
         _clientTxIdMeta,
@@ -1602,6 +1623,10 @@ class $TransactionRowsTable extends TransactionRows
         DriftSqlType.string,
         data['${effectivePrefix}settlement_group_id'],
       ),
+      actorMemberId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actor_member_id'],
+      ),
       clientTxId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}client_tx_id'],
@@ -1655,6 +1680,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
   /// tương ứng ở `domain/entities/transaction.dart` — field BẮT BUỘC lưu
   /// riêng (không suy ra được từ `clientTxId`).
   final String? settlementGroupId;
+
+  /// v9 — người thực hiện khoản Chi từ Quỹ (nullable; dòng cũ luôn null, không suy ngược).
+  final String? actorMemberId;
   final String clientTxId;
   final int version;
   const TransactionRow({
@@ -1679,6 +1707,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     this.recoveryOfTxId,
     this.obligationId,
     this.settlementGroupId,
+    this.actorMemberId,
     required this.clientTxId,
     required this.version,
   });
@@ -1727,6 +1756,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     }
     if (!nullToAbsent || settlementGroupId != null) {
       map['settlement_group_id'] = Variable<String>(settlementGroupId);
+    }
+    if (!nullToAbsent || actorMemberId != null) {
+      map['actor_member_id'] = Variable<String>(actorMemberId);
     }
     map['client_tx_id'] = Variable<String>(clientTxId);
     map['version'] = Variable<int>(version);
@@ -1778,6 +1810,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       settlementGroupId: settlementGroupId == null && nullToAbsent
           ? const Value.absent()
           : Value(settlementGroupId),
+      actorMemberId: actorMemberId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actorMemberId),
       clientTxId: Value(clientTxId),
       version: Value(version),
     );
@@ -1812,6 +1847,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       settlementGroupId: serializer.fromJson<String?>(
         json['settlementGroupId'],
       ),
+      actorMemberId: serializer.fromJson<String?>(json['actorMemberId']),
       clientTxId: serializer.fromJson<String>(json['clientTxId']),
       version: serializer.fromJson<int>(json['version']),
     );
@@ -1841,6 +1877,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       'recoveryOfTxId': serializer.toJson<String?>(recoveryOfTxId),
       'obligationId': serializer.toJson<String?>(obligationId),
       'settlementGroupId': serializer.toJson<String?>(settlementGroupId),
+      'actorMemberId': serializer.toJson<String?>(actorMemberId),
       'clientTxId': serializer.toJson<String>(clientTxId),
       'version': serializer.toJson<int>(version),
     };
@@ -1868,6 +1905,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     Value<String?> recoveryOfTxId = const Value.absent(),
     Value<String?> obligationId = const Value.absent(),
     Value<String?> settlementGroupId = const Value.absent(),
+    Value<String?> actorMemberId = const Value.absent(),
     String? clientTxId,
     int? version,
   }) => TransactionRow(
@@ -1904,6 +1942,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     settlementGroupId: settlementGroupId.present
         ? settlementGroupId.value
         : this.settlementGroupId,
+    actorMemberId: actorMemberId.present
+        ? actorMemberId.value
+        : this.actorMemberId,
     clientTxId: clientTxId ?? this.clientTxId,
     version: version ?? this.version,
   );
@@ -1960,6 +2001,9 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
       settlementGroupId: data.settlementGroupId.present
           ? data.settlementGroupId.value
           : this.settlementGroupId,
+      actorMemberId: data.actorMemberId.present
+          ? data.actorMemberId.value
+          : this.actorMemberId,
       clientTxId: data.clientTxId.present
           ? data.clientTxId.value
           : this.clientTxId,
@@ -1991,6 +2035,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           ..write('recoveryOfTxId: $recoveryOfTxId, ')
           ..write('obligationId: $obligationId, ')
           ..write('settlementGroupId: $settlementGroupId, ')
+          ..write('actorMemberId: $actorMemberId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version')
           ..write(')'))
@@ -2020,6 +2065,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
     recoveryOfTxId,
     obligationId,
     settlementGroupId,
+    actorMemberId,
     clientTxId,
     version,
   ]);
@@ -2048,6 +2094,7 @@ class TransactionRow extends DataClass implements Insertable<TransactionRow> {
           other.recoveryOfTxId == this.recoveryOfTxId &&
           other.obligationId == this.obligationId &&
           other.settlementGroupId == this.settlementGroupId &&
+          other.actorMemberId == this.actorMemberId &&
           other.clientTxId == this.clientTxId &&
           other.version == this.version);
 }
@@ -2074,6 +2121,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
   final Value<String?> recoveryOfTxId;
   final Value<String?> obligationId;
   final Value<String?> settlementGroupId;
+  final Value<String?> actorMemberId;
   final Value<String> clientTxId;
   final Value<int> version;
   final Value<int> rowid;
@@ -2099,6 +2147,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.recoveryOfTxId = const Value.absent(),
     this.obligationId = const Value.absent(),
     this.settlementGroupId = const Value.absent(),
+    this.actorMemberId = const Value.absent(),
     this.clientTxId = const Value.absent(),
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2125,6 +2174,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     this.recoveryOfTxId = const Value.absent(),
     this.obligationId = const Value.absent(),
     this.settlementGroupId = const Value.absent(),
+    this.actorMemberId = const Value.absent(),
     required String clientTxId,
     this.version = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2159,6 +2209,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Expression<String>? recoveryOfTxId,
     Expression<String>? obligationId,
     Expression<String>? settlementGroupId,
+    Expression<String>? actorMemberId,
     Expression<String>? clientTxId,
     Expression<int>? version,
     Expression<int>? rowid,
@@ -2185,6 +2236,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       if (recoveryOfTxId != null) 'recovery_of_tx_id': recoveryOfTxId,
       if (obligationId != null) 'obligation_id': obligationId,
       if (settlementGroupId != null) 'settlement_group_id': settlementGroupId,
+      if (actorMemberId != null) 'actor_member_id': actorMemberId,
       if (clientTxId != null) 'client_tx_id': clientTxId,
       if (version != null) 'version': version,
       if (rowid != null) 'rowid': rowid,
@@ -2213,6 +2265,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     Value<String?>? recoveryOfTxId,
     Value<String?>? obligationId,
     Value<String?>? settlementGroupId,
+    Value<String?>? actorMemberId,
     Value<String>? clientTxId,
     Value<int>? version,
     Value<int>? rowid,
@@ -2239,6 +2292,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
       recoveryOfTxId: recoveryOfTxId ?? this.recoveryOfTxId,
       obligationId: obligationId ?? this.obligationId,
       settlementGroupId: settlementGroupId ?? this.settlementGroupId,
+      actorMemberId: actorMemberId ?? this.actorMemberId,
       clientTxId: clientTxId ?? this.clientTxId,
       version: version ?? this.version,
       rowid: rowid ?? this.rowid,
@@ -2311,6 +2365,9 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
     if (settlementGroupId.present) {
       map['settlement_group_id'] = Variable<String>(settlementGroupId.value);
     }
+    if (actorMemberId.present) {
+      map['actor_member_id'] = Variable<String>(actorMemberId.value);
+    }
     if (clientTxId.present) {
       map['client_tx_id'] = Variable<String>(clientTxId.value);
     }
@@ -2347,6 +2404,7 @@ class TransactionRowsCompanion extends UpdateCompanion<TransactionRow> {
           ..write('recoveryOfTxId: $recoveryOfTxId, ')
           ..write('obligationId: $obligationId, ')
           ..write('settlementGroupId: $settlementGroupId, ')
+          ..write('actorMemberId: $actorMemberId, ')
           ..write('clientTxId: $clientTxId, ')
           ..write('version: $version, ')
           ..write('rowid: $rowid')
@@ -5303,6 +5361,7 @@ typedef $$TransactionRowsTableCreateCompanionBuilder =
       Value<String?> recoveryOfTxId,
       Value<String?> obligationId,
       Value<String?> settlementGroupId,
+      Value<String?> actorMemberId,
       required String clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -5330,6 +5389,7 @@ typedef $$TransactionRowsTableUpdateCompanionBuilder =
       Value<String?> recoveryOfTxId,
       Value<String?> obligationId,
       Value<String?> settlementGroupId,
+      Value<String?> actorMemberId,
       Value<String> clientTxId,
       Value<int> version,
       Value<int> rowid,
@@ -5481,6 +5541,11 @@ class $$TransactionRowsTableFilterComposer
 
   ColumnFilters<String> get settlementGroupId => $composableBuilder(
     column: $table.settlementGroupId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actorMemberId => $composableBuilder(
+    column: $table.actorMemberId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5645,6 +5710,11 @@ class $$TransactionRowsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get actorMemberId => $composableBuilder(
+    column: $table.actorMemberId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => ColumnOrderings(column),
@@ -5796,6 +5866,11 @@ class $$TransactionRowsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get actorMemberId => $composableBuilder(
+    column: $table.actorMemberId,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get clientTxId => $composableBuilder(
     column: $table.clientTxId,
     builder: (column) => column,
@@ -5902,6 +5977,7 @@ class $$TransactionRowsTableTableManager
                 Value<String?> recoveryOfTxId = const Value.absent(),
                 Value<String?> obligationId = const Value.absent(),
                 Value<String?> settlementGroupId = const Value.absent(),
+                Value<String?> actorMemberId = const Value.absent(),
                 Value<String> clientTxId = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5927,6 +6003,7 @@ class $$TransactionRowsTableTableManager
                 recoveryOfTxId: recoveryOfTxId,
                 obligationId: obligationId,
                 settlementGroupId: settlementGroupId,
+                actorMemberId: actorMemberId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,
@@ -5954,6 +6031,7 @@ class $$TransactionRowsTableTableManager
                 Value<String?> recoveryOfTxId = const Value.absent(),
                 Value<String?> obligationId = const Value.absent(),
                 Value<String?> settlementGroupId = const Value.absent(),
+                Value<String?> actorMemberId = const Value.absent(),
                 required String clientTxId,
                 Value<int> version = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5979,6 +6057,7 @@ class $$TransactionRowsTableTableManager
                 recoveryOfTxId: recoveryOfTxId,
                 obligationId: obligationId,
                 settlementGroupId: settlementGroupId,
+                actorMemberId: actorMemberId,
                 clientTxId: clientTxId,
                 version: version,
                 rowid: rowid,

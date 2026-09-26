@@ -443,7 +443,7 @@ void main() {
 
       final rows = await db.select(db.transactionRows).get();
       expect(rows, hasLength(1), reason: 'chỉ còn dòng mới, không hoàn tác/bản gốc ẩn');
-      expect(rows.single.id, isNot(original.id));
+      expect(rows.single.id, original.id, reason: 'giữ nguyên Transaction.id');
       expect(rows.single.amountMinor, 250000);
       expect(rows.single.correctsTxId, isNull);
       expect(rows.single.reversalOfTxId, isNull);
@@ -451,16 +451,13 @@ void main() {
       expect(rows.single.clientTxId, isNot(original.clientTxId), reason: 'không tái dùng mù clientTxId cũ');
     });
 
-    test('20 — dòng cũ không còn tồn tại sau khi sửa (không mutate, không giữ lại)', () async {
+    test('20 — sửa số tiền thay đúng 1 dòng (cùng id), không giữ bản cũ', () async {
       final original = buildTx(clientTxId: 'nomut-1', amountMinor: 100000, destinationRefId: 'vo');
       await repo.addTransaction(original);
       await repo.updateTransaction(original.id, amountMinor: 999000);
 
-      final old = await (db.select(
-        db.transactionRows,
-      )..where((r) => r.id.equals(original.id))).getSingleOrNull();
-      expect(old, isNull);
       final row = (await db.select(db.transactionRows).get()).single;
+      expect(row.id, original.id);
       expect(row.amountMinor, 999000);
       expect(row.type, 'income');
       expect(row.sourceKind, 'external');

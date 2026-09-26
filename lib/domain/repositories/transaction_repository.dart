@@ -102,6 +102,8 @@ abstract class TransactionRepository {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   });

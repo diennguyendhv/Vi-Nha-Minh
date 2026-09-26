@@ -42,8 +42,12 @@ class GroupedTotals {
 }
 
 /// Người chi (ví khả dụng hoặc pool tiết kiệm của thành viên); `null` nếu
-/// nguồn không thuộc 1 thành viên (vd Quỹ dùng chung).
+/// nguồn là Quỹ mà chưa ghi người thực hiện. Chi từ Quỹ: người thực hiện là
+/// `actorMemberId` (không suy từ Quỹ/ghi chú).
 String? expenseSpender(Transaction t) {
+  if (t.type == TransactionType.expense && t.sourceKind == PoolKind.fund) {
+    return t.actorMemberId;
+  }
   final refId = t.sourceRefId;
   if (refId == null) return null;
   switch (t.sourceKind) {

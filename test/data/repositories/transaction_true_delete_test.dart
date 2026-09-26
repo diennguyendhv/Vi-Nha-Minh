@@ -509,7 +509,7 @@ void main() {
       await repo.updateTransaction('e1', categoryId: 'sinh_hoat', amountMinor: 2000);
 
       final list = await all();
-      expect(list.any((t) => t.id == 'e1'), isFalse, reason: 'dòng cũ mất');
+      expect(list.where((t) => t.id == 'e1'), hasLength(1), reason: 'cùng id, chỉ 1 dòng');
       expect(list.length, 2, reason: 'chỉ còn khoản thu + dòng mới');
       final head = list.firstWhere((t) => t.type == TransactionType.expense);
       expect(head.categoryId, 'sinh_hoat');

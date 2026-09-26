@@ -18,6 +18,7 @@ Transaction transactionFromCommand(CreateTransactionCommand command) {
     statusId: command.statusId,
     recoveryOfTxId: command.recoveryOfTxId,
     obligationId: command.obligationId,
+    actorMemberId: command.actorMemberId,
     transactionDate: command.transactionDate,
     createdAt: DateTime.now(),
     clientTxId: command.clientTxId,

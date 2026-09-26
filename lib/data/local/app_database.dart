@@ -70,6 +70,8 @@ class TransactionRows extends Table {
   /// tương ứng ở `domain/entities/transaction.dart` — field BẮT BUỘC lưu
   /// riêng (không suy ra được từ `clientTxId`).
   TextColumn get settlementGroupId => text().nullable()();
+  /// v9 — người thực hiện khoản Chi từ Quỹ (nullable; dòng cũ luôn null, không suy ngược).
+  TextColumn get actorMemberId => text().nullable()();
   TextColumn get clientTxId => text()();
   IntColumn get version => integer().withDefault(const Constant(1))();
 
@@ -246,7 +248,7 @@ class AppDatabase extends _$AppDatabase {
   /// Version 8 (P2 — Local Wallet Identity): thêm 2 bảng THUẦN CỘNG THÊM
   /// (`wallet_meta`, `financial_member_rows`), không đụng dòng/cột nào của dữ liệu cũ.
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -291,6 +293,16 @@ class AppDatabase extends _$AppDatabase {
         // v7 → v8: 2 bảng mới + danh tính Wallet di sản. ATOMIC: lỗi ở bất kỳ bước
         // nào ⇒ rollback toàn bộ, DB vẫn là v7 hợp lệ (không có Wallet nửa vời).
         await transaction(() => _migrateToV8(m));
+      }
+      if (from < 9) {
+        // v8 → v9: chỉ ADD COLUMN nullable `actor_member_id`; không viết lại dòng nào.
+        // Các bước v4–v6 tạo lại bảng theo schema HIỆN TẠI (đã có cột) nên chỉ thêm khi thiếu.
+        await transaction(() async {
+          final cols = await customSelect('PRAGMA table_info(transaction_rows)').get();
+          if (!cols.any((c) => c.read<String>('name') == 'actor_member_id')) {
+            await m.addColumn(transactionRows, transactionRows.actorMemberId);
+          }
+        });
       }
     },
     beforeOpen: (details) async {

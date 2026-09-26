@@ -131,6 +131,8 @@ class FakeLoanTransactionRepository implements TransactionRepository {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   }) => throw UnimplementedError('not exercised by loans_screen_test.dart');

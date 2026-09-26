@@ -83,6 +83,37 @@ void validateNewTransaction(Transaction tx) {
   validateSavingsMembers(tx);
 }
 
+/// Hình dạng đầu nguồn/đích hợp lệ theo từng `transferKind` (ngoài bất biến thành
+/// viên của Tiết kiệm ở [validateSavingsMembers]). Dùng khi SỬA đầu nguồn/đích của
+/// giao dịch Chuyển: loại pool cố định theo loại Chuyển, chỉ `refId` được đổi.
+/// Loại Chuyển khác (Vay/Hoàn tiền/dữ liệu cũ không có `transferKind`) không được sửa đầu.
+void validateTransferShape(Transaction tx) {
+  bool member(PoolKind k, String? r) => k == PoolKind.memberAvailable && r != null;
+  bool fund(PoolKind k, String? r) => k == PoolKind.fund && r != null;
+  final ok = switch (tx.transferKind) {
+    TransferKind.memberToMember =>
+      member(tx.sourceKind, tx.sourceRefId) &&
+          member(tx.destinationKind, tx.destinationRefId) &&
+          tx.sourceRefId != tx.destinationRefId,
+    TransferKind.fundTopup =>
+      member(tx.sourceKind, tx.sourceRefId) &&
+          fund(tx.destinationKind, tx.destinationRefId),
+    TransferKind.fundWithdraw =>
+      fund(tx.sourceKind, tx.sourceRefId) &&
+          member(tx.destinationKind, tx.destinationRefId),
+    TransferKind.savingsTopup ||
+    TransferKind.savingsWithdraw => true, // hình dạng do validateSavingsMembers
+    TransferKind.savingsConvert =>
+      tx.sourceRefId != null &&
+          tx.destinationRefId != null &&
+          parseSavingsAssetRefId(tx.sourceRefId!)?.assetTypeId !=
+              parseSavingsAssetRefId(tx.destinationRefId!)?.assetTypeId,
+    null => false,
+  };
+  if (!ok) throw InvalidTransferEditException(tx.id, 'sai hình dạng ${tx.transferKind?.name}');
+  validateSavingsMembers(tx);
+}
+
 /// Bất biến thành viên của Tiết kiệm (Savings 2 tầng): nạp = Khả dụng(X) →
 /// Tiết kiệm(X); rút = Tiết kiệm(X) → Khả dụng(X); chuyển đổi/phân bổ =
 /// Tiết kiệm(X) → Tiết kiệm(X). Sai hình dạng hoặc lệch thành viên →
@@ -212,7 +243,8 @@ bool isSameLogicalTransaction(Transaction a, Transaction b) {
       a.note == b.note &&
       a.statusId == b.statusId &&
       a.recoveryOfTxId == b.recoveryOfTxId &&
-      a.obligationId == b.obligationId;
+      a.obligationId == b.obligationId &&
+      a.actorMemberId == b.actorMemberId;
 }
 
 /// Phase 8.6 — kiểm tra [recovery] (transaction sắp ghi, `recoveryOfTxId ==
@@ -380,6 +412,7 @@ Transaction buildReplacement(
   String? newNote,
   String? newSourceRefId,
   String? newDestinationRefId,
+  String? newActorMemberId,
   DateTime? newTransactionDate,
   String? newStatusId,
   bool clearStatus = false,
@@ -406,6 +439,7 @@ Transaction buildReplacement(
     transactionDate: newTransactionDate ?? original.transactionDate,
     createdAt: now,
     recoveryOfTxId: original.recoveryOfTxId,
+    actorMemberId: newActorMemberId ?? original.actorMemberId,
     clientTxId: clientTxId,
   );
   validateNewTransaction(replacement);
@@ -464,6 +498,7 @@ Transaction buildReversal(
   String? newNote,
   String? newSourceRefId,
   String? newDestinationRefId,
+  String? newActorMemberId,
   DateTime? newTransactionDate,
   String? newStatusId,
   bool clearStatus = false,
@@ -500,6 +535,7 @@ Transaction buildReversal(
     // Phase 8.6 — quan hệ recovery KHÔNG được mất khi sửa (mục 7F): 1
     // recovery bị correction vẫn phải trỏ về đúng target cũ.
     recoveryOfTxId: original.recoveryOfTxId,
+    actorMemberId: newActorMemberId ?? original.actorMemberId,
     clientTxId: clientTxId,
   );
   validateNewTransaction(replacement);

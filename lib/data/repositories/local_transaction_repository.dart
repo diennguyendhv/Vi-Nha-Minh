@@ -53,6 +53,7 @@ class LocalTransactionRepository implements TransactionRepository {
       recoveryOfTxId: row.recoveryOfTxId,
       obligationId: row.obligationId,
       settlementGroupId: row.settlementGroupId,
+      actorMemberId: row.actorMemberId,
       clientTxId: row.clientTxId,
       version: row.version,
     );
@@ -81,6 +82,7 @@ class LocalTransactionRepository implements TransactionRepository {
       recoveryOfTxId: Value(t.recoveryOfTxId),
       obligationId: Value(t.obligationId),
       settlementGroupId: Value(t.settlementGroupId),
+      actorMemberId: Value(t.actorMemberId),
       clientTxId: t.clientTxId,
       version: Value(t.version),
     );
@@ -476,6 +478,51 @@ class LocalTransactionRepository implements TransactionRepository {
     }
   }
 
+  Future<void> _assertMemberExists(String memberId) async {
+    final row = await (_db.select(
+      _db.financialMemberRows,
+    )..where((r) => r.memberId.equals(memberId))).getSingleOrNull();
+    if (row == null) throw UnknownEndpointException(PoolKind.memberAvailable, memberId);
+  }
+
+  /// Đầu nguồn/đích ĐÃ ĐỔI phải tồn tại (thành viên, Quỹ đang dùng, loại tiết kiệm) và
+  /// loại tiết kiệm nhận tiền không được đã ngừng. Đầu không đổi giữ nguyên, không kiểm lại.
+  Future<void> _assertEndpointsExist(
+    domain.Transaction t, {
+    required bool sourceChanged,
+    required bool destinationChanged,
+  }) async {
+    Future<void> check(PoolKind kind, String? ref) async {
+      switch (kind) {
+        case PoolKind.memberAvailable:
+          await _assertMemberExists(ref!);
+        case PoolKind.fund:
+          final row = await (_db.select(
+            _db.fundRows,
+          )..where((r) => r.id.equals(ref!))).getSingleOrNull();
+          if (row == null || !row.isActive) throw UnknownEndpointException(kind, ref);
+        case PoolKind.memberSavingsAsset:
+          final parsed = parseSavingsAssetRefId(ref!);
+          if (parsed == null) throw UnknownEndpointException(kind, ref);
+          await _assertMemberExists(parsed.memberId);
+          if (!SystemSavingsAssets.isSystem(parsed.assetTypeId)) {
+            final row = await (_db.select(
+              _db.savingsAssetTypeRows,
+            )..where((r) => r.id.equals(parsed.assetTypeId))).getSingleOrNull();
+            if (row == null) throw UnknownEndpointException(kind, ref);
+          }
+        default:
+          throw UnknownEndpointException(kind, ref);
+      }
+    }
+
+    if (sourceChanged) await check(t.sourceKind, t.sourceRefId);
+    if (destinationChanged) {
+      await check(t.destinationKind, t.destinationRefId);
+      await _assertSavingsDestinationActive(t);
+    }
+  }
+
   /// Với INCOME, "người tiêu" = `destinationRefId`; với EXPENSE nguồn ví
   /// (`sourceKind == memberAvailable`), = `sourceRefId`. TRANSFER hoặc
   /// EXPENSE nguồn Quỹ không có khái niệm "người tiêu" đơn — trả về
@@ -501,6 +548,8 @@ class LocalTransactionRepository implements TransactionRepository {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   }) async {
@@ -547,8 +596,33 @@ class LocalTransactionRepository implements TransactionRepository {
             amountMinor != null && amountMinor != original.amountMinor;
         String? newSourceRefId;
         String? newDestinationRefId;
+        String? newActor;
         var memberChanged = false;
-        if (memberRefId != null) {
+        var endpointChanged = false;
+        if (sourceRefId != null || destinationRefId != null) {
+          if (original.type != TransactionType.transfer) {
+            throw InvalidTransferEditException(
+              transactionId,
+              'chỉ giao dịch Chuyển mới sửa được đầu nguồn/đích',
+            );
+          }
+          if (sourceRefId != null && sourceRefId != original.sourceRefId) {
+            newSourceRefId = sourceRefId;
+            endpointChanged = true;
+          }
+          if (destinationRefId != null &&
+              destinationRefId != original.destinationRefId) {
+            newDestinationRefId = destinationRefId;
+            endpointChanged = true;
+          }
+        }
+        if (memberRefId != null &&
+            original.type == TransactionType.expense &&
+            original.sourceKind == PoolKind.fund &&
+            memberRefId != original.actorMemberId) {
+          await _assertMemberExists(memberRefId);
+          newActor = memberRefId;
+        } else if (memberRefId != null) {
           final (targetSource, targetDestination) = _memberFieldTargets(
             original,
             memberRefId,
@@ -564,7 +638,7 @@ class LocalTransactionRepository implements TransactionRepository {
           }
         }
 
-        if (amountChanged || memberChanged) {
+        if (amountChanged || memberChanged || endpointChanged) {
           // Sửa số tiền / người = THAY dòng cũ bằng dòng mới trong cùng 1 DB
           // transaction (không tạo hoàn tác / bản thay thế → không để lại lịch
           // sử ẩn giữ danh mục/trạng thái cũ). Họ giao dịch cũ (nếu là dữ liệu
@@ -583,13 +657,22 @@ class LocalTransactionRepository implements TransactionRepository {
             newNote: note,
             newSourceRefId: newSourceRefId,
             newDestinationRefId: newDestinationRefId,
+            newActorMemberId: newActor,
             newTransactionDate: transactionDate,
             newStatusId: statusId,
             clearStatus: clearStatus,
-            newId: IdGenerator.generate(),
+            newId: transactionId,
             clientTxId: IdGenerator.generate(),
             now: DateTime.now(),
           );
+          if (endpointChanged) {
+            validateTransferShape(replacement);
+            await _assertEndpointsExist(
+              replacement,
+              sourceChanged: newSourceRefId != null,
+              destinationChanged: newDestinationRefId != null,
+            );
+          }
           // Pool NGUỒN phải đủ tiền khi bỏ dòng cũ (báo thiếu số dư như khi thêm mới).
           _assertWontGoNegative(
             replacement,
@@ -625,6 +708,7 @@ class LocalTransactionRepository implements TransactionRepository {
             note == null &&
             transactionDate == null &&
             statusId == null &&
+            newActor == null &&
             !clearStatus) {
           return;
         }
@@ -636,6 +720,9 @@ class LocalTransactionRepository implements TransactionRepository {
                 ? Value(categoryId)
                 : const Value.absent(),
             note: note != null ? Value(note) : const Value.absent(),
+            actorMemberId: newActor != null
+                ? Value(newActor)
+                : const Value.absent(),
             transactionDate: transactionDate != null
                 ? Value(transactionDate)
                 : const Value.absent(),

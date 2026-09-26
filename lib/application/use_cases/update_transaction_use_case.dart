@@ -20,6 +20,8 @@ class UpdateTransactionUseCase {
     String? categoryId,
     String? note,
     String? memberRefId,
+    String? sourceRefId,
+    String? destinationRefId,
     DateTime? transactionDate,
     FieldUpdate<String>? status,
   }) {
@@ -29,6 +31,8 @@ class UpdateTransactionUseCase {
       categoryId: categoryId,
       note: note,
       memberRefId: memberRefId,
+      sourceRefId: sourceRefId,
+      destinationRefId: destinationRefId,
       transactionDate: transactionDate,
       status: status,
     );

@@ -102,7 +102,7 @@ void main() {
 
       final rows = await db.select(db.transactionRows).get();
       expect(rows, hasLength(1), reason: 'chỉ còn dòng mới');
-      expect(rows.single.id, isNot(tx.id));
+      expect(rows.single.id, tx.id, reason: 'giữ nguyên Transaction.id');
       expect(rows.single.amountMinor, 250000);
       expect(rows.single.correctsTxId, isNull);
     });

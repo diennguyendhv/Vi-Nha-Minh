@@ -135,7 +135,7 @@ void main() {
     await repo.updateTransaction('ads', amountMinor: 250000, note: 'Quảng cáo Facebook tháng 9');
 
     final all = await repo.watchTransactions().first;
-    expect(all.any((t) => t.id == 'ads'), isFalse, reason: 'dòng cũ mất hẳn');
+    expect(all.where((t) => t.id == 'ads'), hasLength(1), reason: 'cùng id, chỉ 1 dòng');
     final replacement = all.firstWhere((t) => t.type == TransactionType.expense);
     expect(replacement.note, 'Quảng cáo Facebook tháng 9');
     expect(replacement.amountMinor, 250000);

@@ -62,3 +62,10 @@ One Financial-Core hole closed: `LocalTransactionRepository.updateTransaction` n
 Known limitation (needs a separately approved data representation, no schema change made): a Fund-backed Expense stores no spending member, so "by member" filtering cannot include it; Transfer endpoint replacement (source/destination) is not editable.
 
 Tests: `test/data/repositories/transaction_unification_test.dart` (real in-memory DB: Husband→Fund, Fund expense, Wife↔Husband, Savings top-up/withdraw/convert, single id, edit, exact-once delete, main-group immutability) and `test/presentation/features/canonical_transaction_entry_test.dart` (Fund/Savings rows → canonical detail → edit/delete).
+
+## Schema v9 — actorMemberId + Transfer endpoint editing (2026-09-26)
+
+- `transaction_rows.actor_member_id` (nullable, additive; v8 → v9 migration guarded, no row rewrite; old rows stay null). Fund-backed Expense: spender = `actorMemberId`; wallet-sourced Expense: spender = source. `expenseSpender`, `involvesMember` and the row member label follow it, so "Chi + Vợ + Quỹ + danh mục" all match the same transaction. New Fund expenses record the Add-sheet payer as actor; historical null stays valid and the actor can be set explicitly on edit.
+- Edits keep `Transaction.id` (amount/endpoint replacement now reuses the id; clientTxId is new). Main group is immutable (`MainGroupChangeException`).
+- Transfer endpoint edit matrix (only refIds change, pool kinds fixed; validated in repository via `validateTransferShape`, existence checks, non-negative pools): member→member (sender/receiver, must differ), fund top-up/withdraw (member and/or fund), savings top-up/withdraw (member for both ends + asset), savings convert (member + both assets, must differ). Transfers without a standard `transferKind` (loans, legacy) stay fixed.
+- Pixel DEV: v8→v9 in place; Fund expense filtered by Vợ; actor set from the detail screen; overdrawing endpoint edit refused.

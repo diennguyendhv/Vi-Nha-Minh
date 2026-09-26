@@ -48,6 +48,7 @@ class CreateTransactionCommand {
     this.statusId,
     this.recoveryOfTxId,
     this.obligationId,
+    this.actorMemberId,
     String? id,
     String? clientTxId,
   }) : id = id ?? IdGenerator.generate(),
@@ -108,4 +109,7 @@ class CreateTransactionCommand {
   /// KHÔNG đi qua command này — dùng `SettleObligationCommand` riêng (có
   /// thể sinh 2 dòng atomic, khác lifecycle 1-dòng của command này).
   final String? obligationId;
+
+  /// Người thực hiện khoản Chi từ Quỹ (chỉ đặt khi `type == expense` và nguồn là Quỹ).
+  final String? actorMemberId;
 }

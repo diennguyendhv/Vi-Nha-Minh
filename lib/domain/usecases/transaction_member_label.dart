@@ -1,5 +1,6 @@
 import '../entities/pool_kind.dart';
 import '../entities/transaction.dart';
+import '../entities/transaction_type.dart';
 import '../entities/wallet_identity.dart';
 
 /// Nhãn thành viên của 1 giao dịch: tên của [FinancialMember] (vd "Vợ"/"Chồng");
@@ -33,7 +34,9 @@ String? transactionMemberLabel(
     return null;
   }
 
-  final from = labelOf(t.sourceKind, t.sourceRefId);
+  final from = t.type == TransactionType.expense && t.sourceKind == PoolKind.fund
+      ? labelOf(PoolKind.memberAvailable, t.actorMemberId)
+      : labelOf(t.sourceKind, t.sourceRefId);
   final to = labelOf(t.destinationKind, t.destinationRefId);
   if (from != null && to != null) {
     // Nạp / rút / phân bổ tiết kiệm luôn cùng 1 người → chỉ hiện 1 tên.
