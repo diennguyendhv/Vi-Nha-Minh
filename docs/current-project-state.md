@@ -7,6 +7,8 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
+**SQLCipher Local DB Encryption — PASS** (2026-09-26): mọi file ví mã hoá bằng SQLCipher 4.18, khoá riêng mỗi ví bọc bằng Keystore; PROD di trú tại chỗ (1.849 → 1.849 giao dịch, 9/9 bảng trùng digest, walletId/v9/integrity/FK giữ nguyên), bản sao PROD kéo ra không đọc được. Mất khoá ⇒ màn khôi phục, không tạo khoá mới. Chi tiết `docs/sqlcipher-local-encryption.md`. Cổng dữ liệu thật lên cloud VẪN ĐÓNG (chưa có engine P8).
+
 **P7.1 + P8 Security Foundation — PASS (DEV deploy + Pixel DEV, 2026-09-26)**. Mật khẩu sao lưu chuẩn hoá NFC (`kdf.norm`). Chưa live: B hoàn tất grant đã duyệt / dùng lại / hết hạn / sai installation và rate limit (chỉ emulator). P7.1: Auth một mình không thay thiết bị active (TAKEOVER_REQUIRED), chuyển máy cần A chấp thuận, mất máy cần credential suy ra từ Mật khẩu sao lưu/Recovery Key (epoch+1, máy cũ DEVICE_REVOKED). P8 crypto: BMK/DEK/IDK, Argon2id + Recovery Key, envelope chung không lộ loại thực thể, backend chỉ nhận ciphertext, chỉ fixture DEV (cổng SQLCipher). Chi tiết: `docs/p7-exclusive-session.md` (P7.1), `docs/p8-cloud-backup-architecture.md`. Full backup/restore engine, claim, đồng bộ: CHƯA.
 
 **P7 — Exclusive Account Session Foundation — PASS** (2026-09-26). Callable DEV `vi-nha-minh-55c60` (Node 22) đã triển khai; Pixel: kích hoạt tường minh, Keystore giữ qua force-stop, thiết bị cũ bị SERVER từ chối (403), đăng xuất cũ không tắt được phiên mới, kích hoạt lại thay thế, đăng xuất xoá credential. Rules deny-all. Không dữ liệu tài chính trên cloud; Wallet không claim. PROD chỉ đọc: v8, integrity ok, FK 0, 1.849 giao dịch. Chi tiết: `docs/p7-exclusive-session.md`. **P8 chưa bắt đầu.**
@@ -69,13 +71,13 @@ Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
 - Chặn dò PIN từ lần sai thứ 5 (30s→30p), lưu bền. Quên PIN = xác minh khóa màn hình hệ thống rồi đặt PIN mới; không cửa hậu, không xoá dữ liệu.
 - Sinh trắc tuỳ chọn (chỉ mở khoá phiên). Trạng thái mở khoá chỉ trong RAM; khởi động lạnh/nền ≥30s ⇒ khoá; `LockGate` không dựng nội dung tài chính khi khoá; `FLAG_SECURE` khi rời foreground.
 - **Android Auto Backup TẮT:** `allowBackup=false` + `backup_rules.xml` + `data_extraction_rules.xml` (loại trừ mọi domain, cloud & device-transfer).
-- **SQLCipher/mã hoá DB: CHƯA làm — vẫn BẮT BUỘC trước cloud pilot/Play.** App Lock không bảo vệ DB-at-rest.
+- **SQLCipher: ĐÃ BẬT (2026-09-26)** — khoá mỗi ví trong Keystore, độc lập App Lock; App Lock không phải lớp mã hoá.
 
 ## Release Gates
 - Gỡ/vô hiệu hoá cứng debug real-data importer trước Play (CLAUDE.md §19).
 - Không commit DB thật/Excel/backup; không đóng gói vào APK/AAB.
 - Android Auto Backup phải tắt (allowBackup=false + rules) — P3.
-- Mã hoá DB cục bộ trước cloud pilot/Play.
+- ~~Mã hoá DB cục bộ~~ ✅ (SQLCipher). Gỡ thêm công cụ debug DB benchmark/báo cáo toàn vẹn trước Play.
 - Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
 
 ## Testing (gate mới nhất — P6.1 đang nghiệm thu)

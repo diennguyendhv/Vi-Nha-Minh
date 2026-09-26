@@ -353,7 +353,7 @@ Ba khái niệm **khác nhau**, không được nhầm:
 | **SQLCipher** với **khoá DB ngẫu nhiên 256-bit được bọc bởi Keystore** | Chống chép file/backup/đọc offline | Dùng `sqlcipher_flutter_libs` thay `sqlite3_flutter_libs`; di trú DB thô → mã hoá (`sqlcipher_export`) cần sao lưu + kiểm tra; hiệu năng ~5–15% chậm hơn; kích thước app tăng |
 | Khoá DB suy ra từ PIN | Không cần Keystore | Đổi PIN phải mã hoá lại toàn bộ; PIN yếu ⇒ khoá yếu — **không khuyến nghị** |
 
-**ĐÃ CHỐT:** mã hoá DB cục bộ **BẮT BUỘC cho v1 sản xuất, trước mọi cloud/family pilot thật hoặc phát hành Play** (nhiều khả năng SQLCipher hoặc tương đương + vật liệu khoá được bảo vệ bằng Android Keystore, khoá DB độc lập với PIN). **KHÔNG triển khai ở P2**; một phase riêng sẽ audit di trú/hiệu năng/sao lưu. Trong lúc chờ: sandbox + FBE + `allowBackup=false` + khoá ứng dụng + bản release không debuggable. Đã ghi thành release gate trong `CLAUDE.md`.
+**ĐÃ THỰC HIỆN 2026-09-26:** SQLCipher 4.18 + DEK-DB mỗi ví bọc bằng Keystore, PROD đã di trú không mất dữ liệu — `docs/sqlcipher-local-encryption.md`. *(Bản chốt gốc:)* mã hoá DB cục bộ **BẮT BUỘC cho v1 sản xuất, trước mọi cloud/family pilot thật hoặc phát hành Play** (nhiều khả năng SQLCipher hoặc tương đương + vật liệu khoá được bảo vệ bằng Android Keystore, khoá DB độc lập với PIN). **KHÔNG triển khai ở P2**; một phase riêng sẽ audit di trú/hiệu năng/sao lưu. Trong lúc chờ: sandbox + FBE + `allowBackup=false` + khoá ứng dụng + bản release không debuggable. Đã ghi thành release gate trong `CLAUDE.md`.
 
 ### 18.4 Mã hoá cloud (mục 42)
 | Lớp | Có sẵn? |
