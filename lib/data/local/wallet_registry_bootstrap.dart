@@ -8,6 +8,7 @@ import 'sync/cloud_binding_store.dart';
 import 'wallet_descriptor.dart';
 import 'wallet_registry.dart';
 import '../../domain/entities/cloud_binding.dart';
+import '../../domain/entities/wallet_identity.dart';
 import '../sync/restore_storage.dart';
 
 /// Nạp registry và đăng ký ví cục bộ hiện tại TẠI CHỖ (đọc `wallet_id` từ chính file
@@ -53,11 +54,16 @@ Future<WalletRegistryEntry> reconcileRegistryFromDb(
   AppDatabase db,
   String dbFileName,
 ) async {
-  final walletId = (await db.select(db.walletMeta).getSingle()).walletId;
+  final meta = await db.select(db.walletMeta).getSingle();
+  final walletId = meta.walletId;
   final binding = await CloudBindingStore(db).read();
   return registry.reconcileBinding(
     walletId: walletId,
     dbFileName: dbFileName,
+    // Family (sau khi Owner nâng cấp ví Personal) giữ cổng Account chặt hơn.
+    boundKind: meta.kind == WalletKind.family.name
+        ? WalletKind.family
+        : WalletKind.personal,
     boundAccountId:
         binding != null &&
             binding.state == CloudBindingState.active &&

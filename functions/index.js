@@ -619,8 +619,15 @@ exports.getWalletClaim = onCall(options, async request => {
   authorize((await ref.get()).data(), data);
   const wallet = (await db.doc(`wallets/${data.walletId}`).get()).data();
   if (!wallet || wallet.state !== 'CLAIMED') return {claimed: false};
-  if (wallet.ownerAccountId !== uid) return {claimed: true, ownedByYou: false};
-  return {...claimResult(wallet, data.walletId, true), ownedByYou: true};
+  if (wallet.ownerAccountId !== uid) {
+    // Family Member (P10): its own bound memberId, never the Owner's.
+    const m = (await db.doc(`wallets/${data.walletId}/memberships/${uid}`).get()).data();
+    if (m?.status !== 'ACTIVE' || m.accountId !== uid) return {claimed: true, ownedByYou: false};
+    return {claimed: true, ownedByYou: false, isMember: true, walletId: data.walletId,
+      selfMemberId: m.memberId, kind: wallet.kind, headRev: wallet.headRev ?? 0,
+      backupState: wallet.backupState ?? null, checkpointRev: wallet.checkpointRev ?? null};
+  }
+  return {...claimResult(wallet, data.walletId, true), ownedByYou: true, kind: wallet.kind};
 });
 
 /**
@@ -662,5 +669,263 @@ exports.abandonClaim = onCall(options, async request => {
     tx.delete(membershipRef);
     if (index?.walletId === data.walletId) tx.delete(indexRef);
     return {abandoned: true, alreadyAbsent: false};
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// P10 Family v1: exactly 1 Owner + at most 1 Member. Account != FinancialMember:
+// an invite binds an Account (uid) to an EXISTING opaque memberId chosen by the
+// Owner. Email only routes the invite (must match the signed-in, verified
+// email); the accepted uid becomes the membership identity. Key sharing: the
+// Owner wraps the wallet BMK to the Member device's X25519 public key on the
+// client; the server stores only public keys and wrapped blobs (no decryption
+// key ever reaches it). All authorization is P7.1-session gated, one tx each.
+// ---------------------------------------------------------------------------
+const FAMILY_INVITE_MS = 48 * 60 * 60 * 1000;
+const MAX_FAMILY_ACCOUNTS = 2;
+const emailPattern = /^[^@\s]{1,64}@[^@\s]{1,190}$/;
+const normEmail = e => (typeof e === 'string' ? e.trim().toLowerCase() : '');
+function verifiedEmail(request) {
+  const t = request.auth.token;
+  const email = normEmail(t.email);
+  if (!emailPattern.test(email) || t.email_verified !== true) {
+    throw reject('failed-precondition', 'EMAIL_NOT_VERIFIED');
+  }
+  return email;
+}
+function onlyFields(data, keys) {
+  if (!onlyKeys(data, keys)) throw new HttpsError('invalid-argument', 'Invalid request');
+}
+const inviteRef = token => db.doc(`familyInvites/${hash(`hw-invite:${token}`)}`);
+async function activeMemberships(tx, walletRef) {
+  const snap = await tx.get(walletRef.collection('memberships').where('status', '==', 'ACTIVE'));
+  return snap.docs.map(d => d.data());
+}
+async function ownerWallet(tx, walletId, uid) {
+  const walletRef = db.doc(`wallets/${walletId}`);
+  const wallet = (await tx.get(walletRef)).data();
+  if (!wallet || wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'NOT_CLAIMED');
+  if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
+  return {walletRef, wallet};
+}
+const validWalletId = id => typeof id === 'string' && uuid.test(id);
+const validPublicKey = k => b64Bytes(k, 32, 32);
+
+/** Owner turns the claimed Personal Wallet into Family: same walletId, data, keys. */
+exports.promoteToFamily = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId']);
+  if (!validWalletId(data.walletId)) throw new HttpsError('invalid-argument', 'Invalid request');
+  requireRecentAuth(request);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {walletRef, wallet} = await ownerWallet(tx, data.walletId, uid);
+    if (wallet.kind === 'family') return {kind: 'family', idempotent: true};
+    if (wallet.kind !== 'personal') throw reject('failed-precondition', 'NOT_PROMOTABLE');
+    tx.update(walletRef, {kind: 'family', promotedAt: Timestamp.now()});
+    return {kind: 'family', idempotent: false};
+  });
+});
+
+/** Owner invites one Account (by verified email) to act as an EXISTING member. */
+exports.createFamilyInvite = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId', 'memberId', 'inviteeEmail']);
+  const invitee = normEmail(data.inviteeEmail);
+  if (!validWalletId(data.walletId) || typeof data.memberId !== 'string' ||
+      !memberIdPattern.test(data.memberId) || !emailPattern.test(invitee)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  requireRecentAuth(request);
+  const ownerEmail = normEmail(request.auth.token.email);
+  if (ownerEmail && ownerEmail === invitee) throw reject('failed-precondition', 'SELF_INVITE');
+  const token = randomBytes(32).toString('base64url');
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {walletRef, wallet} = await ownerWallet(tx, data.walletId, uid);
+    if (wallet.kind !== 'family') throw reject('failed-precondition', 'NOT_FAMILY');
+    if (!(wallet.memberIds ?? []).includes(data.memberId)) throw reject('failed-precondition', 'UNKNOWN_MEMBER');
+    if (data.memberId === wallet.selfMemberId) throw reject('failed-precondition', 'OWNER_MEMBER');
+    const active = await activeMemberships(tx, walletRef);
+    if (active.length >= MAX_FAMILY_ACCOUNTS) throw reject('failed-precondition', 'FAMILY_FULL');
+    if (active.some(m => m.memberId === data.memberId)) throw reject('failed-precondition', 'MEMBER_BOUND');
+    // One pending invite per wallet: a new one supersedes the old.
+    if (wallet.pendingInviteId) {
+      const old = db.doc(`familyInvites/${wallet.pendingInviteId}`);
+      const oldInvite = (await tx.get(old)).data();
+      if (oldInvite?.status === 'PENDING') tx.update(old, {status: 'SUPERSEDED'});
+    }
+    const now = Date.now();
+    const doc = inviteRef(token);
+    tx.create(doc, {walletId: data.walletId, memberId: data.memberId, inviteeEmail: invitee,
+      ownerAccountId: uid, status: 'PENDING', createdAt: Timestamp.fromMillis(now),
+      expiresAt: Timestamp.fromMillis(now + FAMILY_INVITE_MS)});
+    tx.update(walletRef, {pendingInviteId: doc.id});
+    // The token is returned once (owner shares it); only its hash is stored.
+    return {token, expiresAt: now + FAMILY_INVITE_MS};
+  });
+});
+
+function liveInvite(invite, email) {
+  if (!invite || invite.status !== 'PENDING' || invite.expiresAt.toMillis() <= Date.now() ||
+      invite.inviteeEmail !== email) {
+    // Uniform: wrong account, used, expired and unknown look the same.
+    throw reject('not-found', 'INVITE_INVALID');
+  }
+}
+
+/** Invitee preview: requires the invitee's own verified email + P7.1 session. */
+exports.getFamilyInvite = onCall(options, async request => {
+  const {data, ref} = context(request);
+  onlyFields(data, ['token']);
+  if (typeof data.token !== 'string' || !token43.test(data.token)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  const email = verifiedEmail(request);
+  authorize((await ref.get()).data(), data);
+  const invite = (await inviteRef(data.token).get()).data();
+  liveInvite(invite, email);
+  return {walletId: invite.walletId, memberId: invite.memberId,
+    expiresAt: invite.expiresAt.toMillis()};
+});
+
+/** Explicit acceptance binds THIS Account to the invited existing member. */
+exports.acceptFamilyInvite = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['token', 'publicKey']);
+  if (typeof data.token !== 'string' || !token43.test(data.token) || !validPublicKey(data.publicKey)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  const email = verifiedEmail(request);
+  requireRecentAuth(request);
+  const doc = inviteRef(data.token);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const invite = (await tx.get(doc)).data();
+    liveInvite(invite, email);
+    const walletRef = db.doc(`wallets/${invite.walletId}`);
+    const wallet = (await tx.get(walletRef)).data();
+    if (!wallet || wallet.state !== 'CLAIMED' || wallet.kind !== 'family') {
+      throw reject('failed-precondition', 'NOT_FAMILY');
+    }
+    if (wallet.ownerAccountId === uid) throw reject('failed-precondition', 'SELF_INVITE');
+    const indexRef = db.doc(`accounts/${uid}/walletIndex/family`);
+    const index = (await tx.get(indexRef)).data();
+    if (index && index.walletId !== invite.walletId) throw reject('failed-precondition', 'ACCOUNT_HAS_FAMILY');
+    const membershipRef = walletRef.collection('memberships').doc(uid);
+    const existing = (await tx.get(membershipRef)).data();
+    const active = await activeMemberships(tx, walletRef);
+    if (existing?.status === 'ACTIVE') throw reject('failed-precondition', 'ALREADY_MEMBER');
+    if (active.length >= MAX_FAMILY_ACCOUNTS) throw reject('failed-precondition', 'FAMILY_FULL');
+    if (active.some(m => m.memberId === invite.memberId)) throw reject('failed-precondition', 'MEMBER_BOUND');
+    const now = Timestamp.now();
+    tx.set(membershipRef, {accountId: uid, role: 'MEMBER', status: 'ACTIVE',
+      memberId: invite.memberId, publicKey: data.publicKey, createdAt: now});
+    tx.update(doc, {status: 'ACCEPTED', acceptedBy: uid, acceptedAt: now});
+    tx.update(walletRef, {pendingInviteId: null});
+    tx.set(indexRef, {walletId: invite.walletId, createdAt: now});
+    return {walletId: invite.walletId, memberId: invite.memberId};
+  });
+});
+
+/** Owner cancels the pending invite (token no longer usable). */
+exports.cancelFamilyInvite = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId']);
+  if (!validWalletId(data.walletId)) throw new HttpsError('invalid-argument', 'Invalid request');
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {walletRef, wallet} = await ownerWallet(tx, data.walletId, uid);
+    if (!wallet.pendingInviteId) return {cancelled: false};
+    const old = db.doc(`familyInvites/${wallet.pendingInviteId}`);
+    const invite = (await tx.get(old)).data();
+    if (invite?.status === 'PENDING') tx.update(old, {status: 'CANCELLED'});
+    tx.update(walletRef, {pendingInviteId: null});
+    return {cancelled: invite?.status === 'PENDING'};
+  });
+});
+
+/** Members + public keys (for the Owner's fingerprint check). Any active member. */
+exports.getFamilyMembers = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId']);
+  if (!validWalletId(data.walletId)) throw new HttpsError('invalid-argument', 'Invalid request');
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const walletRef = db.doc(`wallets/${data.walletId}`);
+    const {wallet} = await walletAccess(tx, walletRef, uid);
+    if (!wallet) throw new HttpsError('permission-denied', 'Not a member');
+    const all = await tx.get(walletRef.collection('memberships'));
+    return {kind: wallet.kind ?? null, ownerAccountId: wallet.ownerAccountId,
+      members: all.docs.map(d => d.data()).map(m => ({accountId: m.accountId, role: m.role,
+        status: m.status, memberId: m.memberId, publicKey: m.publicKey ?? null,
+        hasKey: Boolean(m.wrappedKey)}))};
+  }, {readOnly: true});
+});
+
+function validWrapped(w) {
+  return exactKeys(w, ['v', 'epk', 'n', 'c']) && w.v === 1 && validPublicKey(w.epk) &&
+    b64Bytes(w.n, 12, 12) && b64Bytes(w.c, 48, 48);
+}
+/**
+ * Owner stores the BMK wrapped to the Member's public key. `publicKeyHash` pins
+ * the exact key the Owner verified (fingerprint): a key swapped meanwhile fails.
+ */
+exports.putMemberKey = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId', 'memberAccountId', 'publicKeyHash', 'wrapped']);
+  if (!validWalletId(data.walletId) || typeof data.memberAccountId !== 'string' ||
+      data.memberAccountId.length < 1 || data.memberAccountId.length > 128 ||
+      typeof data.publicKeyHash !== 'string' || !/^[0-9a-f]{64}$/.test(data.publicKeyHash) ||
+      !validWrapped(data.wrapped)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  requireRecentAuth(request);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {walletRef} = await ownerWallet(tx, data.walletId, uid);
+    const mRef = walletRef.collection('memberships').doc(data.memberAccountId);
+    const m = (await tx.get(mRef)).data();
+    if (!m || m.status !== 'ACTIVE' || m.role !== 'MEMBER') throw reject('failed-precondition', 'NOT_MEMBER');
+    if (hash(Buffer.from(m.publicKey, 'base64')) !== data.publicKeyHash) {
+      throw reject('failed-precondition', 'PUBLIC_KEY_CHANGED');
+    }
+    tx.update(mRef, {wrappedKey: data.wrapped, keySharedAt: Timestamp.now()});
+    return {shared: true};
+  });
+});
+
+/** Member fetches its wrapped BMK (only while ACTIVE, current device session). */
+exports.getMemberKey = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId']);
+  if (!validWalletId(data.walletId)) throw new HttpsError('invalid-argument', 'Invalid request');
+  authorize((await ref.get()).data(), data);
+  const m = (await db.doc(`wallets/${data.walletId}/memberships/${uid}`).get()).data();
+  if (!m || m.status !== 'ACTIVE') throw new HttpsError('permission-denied', 'Not a member');
+  if (!m.wrappedKey) throw reject('failed-precondition', 'KEY_NOT_SHARED');
+  return {wrapped: m.wrappedKey, memberId: m.memberId};
+});
+
+/** Owner revokes the Member: future cloud access stops immediately. */
+exports.revokeFamilyMember = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId', 'memberAccountId']);
+  if (!validWalletId(data.walletId) || typeof data.memberAccountId !== 'string') {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  requireRecentAuth(request);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const {walletRef} = await ownerWallet(tx, data.walletId, uid);
+    const mRef = walletRef.collection('memberships').doc(data.memberAccountId);
+    const m = (await tx.get(mRef)).data();
+    if (!m || m.role !== 'MEMBER') throw reject('failed-precondition', 'NOT_MEMBER');
+    const indexRef = db.doc(`accounts/${data.memberAccountId}/walletIndex/family`);
+    const index = (await tx.get(indexRef)).data();
+    tx.update(mRef, {status: 'REVOKED', wrappedKey: null, revokedAt: Timestamp.now()});
+    if (index?.walletId === data.walletId) tx.delete(indexRef);
+    return {revoked: true};
   });
 });
