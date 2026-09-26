@@ -6,6 +6,12 @@ import '../../core/config/firebase_env_config.dart';
 import '../../domain/auth/auth_repository.dart';
 import 'firebase_auth_repository.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+
+import '../../domain/auth/cloud_session.dart';
+import 'session_storage.dart';
+import 'session_transport.dart';
+
 /// Khởi tạo Firebase (chỉ Auth) cho môi trường hiện tại. KHÔNG BAO GIỜ ném:
 /// mọi thất bại ⇒ [UnavailableAuthRepository], app local vẫn khởi động bình thường
 /// và không phụ thuộc mạng. `Firebase.initializeApp` với options tường minh không
@@ -17,7 +23,9 @@ Future<AuthRepository> bootstrapAuth({
   final environment = env ?? AppEnvironment.current;
   if (!config.isUsableFor(environment)) {
     if (kDebugMode) {
-      debugPrint('[auth] ${environment.flavor}: chưa cấu hình Firebase, Auth tắt');
+      debugPrint(
+        '[auth] ${environment.flavor}: chưa cấu hình Firebase, Auth tắt',
+      );
     }
     return const UnavailableAuthRepository();
   }
@@ -30,11 +38,22 @@ Future<AuthRepository> bootstrapAuth({
         projectId: config.projectId,
       ),
     );
-    return FirebaseAuthRepository(
+    final repository = FirebaseAuthRepository(
       googleServerClientId: config.googleServerClientId,
     );
+    if (environment == AppEnvironment.dev) {
+      final auth = FirebaseAuth.instance;
+      repository.cloudSession = CloudSession(
+        KeystoreSessionStorage(),
+        SessionTransportClient(auth, config.projectId).call,
+        () => auth.currentUser?.uid,
+      );
+    }
+    return repository;
   } on Object catch (e) {
-    if (kDebugMode) debugPrint('[auth] khởi tạo Firebase lỗi: ${e.runtimeType}');
+    if (kDebugMode) {
+      debugPrint('[auth] khởi tạo Firebase lỗi: ${e.runtimeType}');
+    }
     return const UnavailableAuthRepository();
   }
 }

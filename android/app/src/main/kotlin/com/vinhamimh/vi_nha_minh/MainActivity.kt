@@ -12,6 +12,8 @@ class MainActivity : FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         lockStore = AppLockStore(this)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "homewallet/session")
+            .setMethodCallHandler(SessionBridge(this))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, AppLockBridge.CHANNEL)
             .setMethodCallHandler(AppLockBridge(lockStore))
     }

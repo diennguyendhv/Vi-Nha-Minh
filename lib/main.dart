@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/auth/firebase_bootstrap.dart';
+import 'data/auth/firebase_auth_repository.dart';
+import 'presentation/providers/session_provider.dart';
+import 'l10n/session_localizations.dart';
 import 'data/local/wallet_registry_bootstrap.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/lock_gate.dart';
@@ -18,7 +21,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
-// P5: Firebase CHỈ dùng cho Authentication (danh tính). Dữ liệu tài chính vẫn
+// P5/P7: Firebase dùng cho Authentication và cổng phiên DEV. Dữ liệu tài chính vẫn
 // hoàn toàn local-first (SQLite); không có đường tải dữ liệu tài chính lên cloud.
 
 Future<void> main() async {
@@ -52,6 +55,11 @@ Future<void> main() async {
       overrides: [
         walletRegistryProvider.overrideWithValue(walletRegistry),
         authRepositoryProvider.overrideWithValue(authRepository),
+        cloudSessionProvider.overrideWithValue(
+          authRepository is FirebaseAuthRepository
+              ? authRepository.cloudSession
+              : null,
+        ),
         appLockPlatformProvider.overrideWithValue(lockPlatform),
         deviceAuthenticatorProvider.overrideWithValue(
           LocalAuthDeviceAuthenticator(),
@@ -79,11 +87,14 @@ class ViNhaMinhApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'HomeWallet',
+      localizationsDelegates: SessionLocalizations.localizationsDelegates,
+      supportedLocales: SessionLocalizations.supportedLocales,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       routerConfig: appRouter,
-      builder: (context, child) =>
-          LockGate(child: TapGuardScope(child: child ?? const SizedBox.shrink())),
+      builder: (context, child) => LockGate(
+        child: TapGuardScope(child: child ?? const SizedBox.shrink()),
+      ),
     );
   }
 }

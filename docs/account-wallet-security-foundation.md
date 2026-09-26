@@ -92,7 +92,7 @@ Account                         (Firebase Auth user)
   email                         (chỉ để liên hệ/đăng nhập, KHÔNG là khoá dữ liệu tài chính)
   authProviders[]
   createdAt
-  activeSession { deviceId, sessionGen, activatedAt }   ← §17
+  session/current { installationId, generation, sessionSecretHash, activatedAt, active } ← §21
 ```
 
 - Account chỉ là **danh tính xác thực + thiết bị**. Nó không "chứa" dữ liệu tài chính; nó **có quyền truy cập** vào Wallet thông qua Membership.
@@ -390,34 +390,40 @@ Wallet W, Owner A, Member B; hai tài khoản cùng thấy 1 ví; cả hai ghi g
 
 ## 21. Phiên thiết bị độc quyền — một Account, một thiết bị (mục 22–23)
 
-### 21.1 Các phương án
-| Phương án | Ưu | Nhược |
-|---|---|---|
-| Chỉ dựa vào claim trong token | Không tốn truy vấn | Token sống ~1 giờ, **không thu hồi tức thì**; thiết bị cũ còn quyền đến khi token hết hạn |
-| **Bản ghi phiên phía máy chủ (`sessionGen`) + Rules kiểm tra bằng `get()`** | **Tức thì** cho ghi; đơn giản | Mỗi thao tác ghi tốn thêm 1 lần đọc tài liệu (chấp nhận được ở quy mô này) |
-| Chỉ dùng Cloud Functions làm cổng cho mọi ghi | Kiểm soát tuyệt đối | Chậm, đắt, mất offline-first tự nhiên |
+### 21.1 Quyết định P7 thay thế thiết kế claims cũ (2026-09-25)
+Firebase Auth xác nhận Account; secret phiên do backend cấp xác nhận phiên cloud.
+Không dùng custom claims để nhận dạng thiết bị, không dùng `revokeRefreshTokens`
+làm cơ chế độc quyền. Claims cấp Account có thể lan sang token mới của cùng UID;
+token bị sao chép vẫn giữ nguyên mọi claim, không chứng minh phần cứng đang gọi.
 
-### 21.2 Khuyến nghị: bản ghi phiên máy chủ + `sessionGen`, kết hợp thu hồi token
-- `accounts/{uid}/session/current = { deviceId, sessionGen, activatedAt }`.
-- Đăng nhập trên thiết bị mới ⇒ cảnh báo *"Đăng nhập trên thiết bị này sẽ đăng xuất thiết bị cũ."* ⇒ xác nhận ⇒ Cloud Function `activateDevice(deviceId)`:
-  1. **tăng** `sessionGen` (transaction), ghi `deviceId` mới;
-  2. đặt custom claim `{ dev: deviceId, gen: sessionGen }` cho token;
-  3. gọi `revokeRefreshTokens(uid)` để các token làm mới của thiết bị cũ thất bại;
-  4. trả token mới cho thiết bị mới.
-- Security Rules cho **ghi**: yêu cầu `request.auth.token.gen == get(accounts/{uid}/session/current).sessionGen` **và** Membership `ACTIVE` (đọc tài liệu Membership, **không** đọc từ custom claim — tránh claim cũ).
-- Thiết bị cũ nhận thông báo qua listener vào `session/current` (best-effort) và hiện "Bạn đã đăng xuất vì đăng nhập ở thiết bị khác".
+### 21.2 Cổng phiên đáng tin cậy
+- `accounts/{uid}/session/current`: `generation`, `installationId`,
+  `sessionSecretHash`, `activatedAt`, `active`. Chỉ backend ghi; client không đọc.
+- Xác nhận kích hoạt → callable `activateSession`: kiểm Auth UID, tạo secret 256-bit
+  CSPRNG, tăng generation và thay hash trong một Firestore transaction, trả secret
+  cho lần kích hoạt đó. Installation UUID v4 chỉ nhận diện, không cấp quyền.
+- Mỗi thao tác được bảo vệ kiểm UID + secret hash + generation + installationId
+  + trạng thái hợp lệ/active. `protectedPing` là thao tác duy nhất của P7.
+- **P8+: mọi thao tác cloud cần phiên độc quyền phải đi qua backend gate này.**
+  Không cho phép đường client Firestore/Storage khác bỏ qua gate. Mutation phải
+  kiểm phiên và ghi trong cùng transaction; thêm Membership ACTIVE ở phase Family.
+- Secret lưu AES-256-GCM bằng khóa Android Keystore riêng, không dùng khóa PIN.
+  Không lưu plaintext trong prefs, không log secret/token/email. Không tự kích hoạt
+  khi Auth refresh, mở app hoặc reconnect; kích hoạt lại luôn là thao tác rõ ràng.
 
-### 21.3 Đe doạ "phiên cũ" và cách cưỡng chế (mục 23)
-| Tình huống | Điều gì xảy ra | Cưỡng chế |
-|---|---|---|
-| Thiết bị cũ **offline** rồi sau đó online | Token còn hạn nhưng `gen` cũ | **Mọi ghi bị Rules từ chối** (`gen != sessionGen`); làm mới token thất bại (đã revoke) |
-| Token bị sao chép sang máy khác | Cùng `gen`, khác `dev` | Rules kiểm tra `token.dev == session.deviceId` (thêm), làm mới bằng refresh token đã bị revoke |
-| Hàng đợi ghi ngoại tuyến (outbox) trên máy cũ | Mỗi lệnh mang `sessionGen`/`deviceId` cũ | Máy chủ từ chối; máy cũ đánh dấu outbox `BLOCKED`, **không thử lại vô hạn**, yêu cầu đăng nhập lại |
-| Tiến trình app còn sống, listener đang mở | Listener đọc có thể tiếp tục đến khi token hết hạn | Chấp nhận rủi ro **đọc** tối đa ~1 giờ (token TTL) vì **ghi** đã chặn; giảm bằng thu hồi refresh token + đóng listener khi nhận sự kiện phiên |
-| Đua làm mới token | Hai lần `activateDevice` gần nhau | `sessionGen` tăng trong transaction ⇒ chỉ phiên có `gen` mới nhất hợp lệ |
-| Thiết bị cũ mở lại sau khi đăng nhập ở máy mới | Dữ liệu cục bộ vẫn còn trên máy | Dữ liệu vật lý giữ nguyên nhưng **quyền cloud mất**; muốn dùng lại phải đăng nhập (đẩy thiết bị mới ra) và **đồng bộ lại theo phiên bản** (không tự gộp outbox cũ; xem §23.2) |
-
-Dữ liệu cục bộ trên máy cũ **không bị xoá từ xa**; điều bị chặn là **quyền cloud**.
+### 21.3 Giới hạn chính xác
+- Sau transaction kích hoạt B commit, request mới dùng secret A bị từ chối dù
+  Firebase ID token A còn hợp lệ hoặc refresh thành công. Request đã được xét trước
+  điểm thay thế không bị hủy hồi tố. Không tuyên bố Firebase Auth A bị thu hồi ngay.
+- Ai sở hữu secret hiện hành **và** Firebase credential cùng UID có quyền phiên đó;
+  không chống sao chép credential đã giải mã trên thiết bị bị chiếm quyền.
+- Offline/cached/local Wallet vẫn dùng được. Không có financial outbox ở P7.
+  Reconnect không cấp lại quyền; future outbox phải đi qua gate tại lúc server ghi.
+- Đăng xuất cố deactivation bằng chính credential hiện có, rồi xóa credential cục bộ
+  và Auth kể cả khi offline. A cũ không thể deactivation B. Offline logout có thể
+  để record server còn active; kích hoạt tiếp theo thay thế nó.
+- P7 không claim Wallet, không Membership, không upload tài chính, không thay schema v8.
+  Bằng chứng emulator và giới hạn nghiệm thu: `docs/p7-exclusive-session.md`.
 
 ---
 
@@ -511,7 +517,7 @@ Lý do: không nhân bản định nghĩa bất biến như bản ghi người d
 ### 27.1 Hình dạng đề xuất (khác mẫu ở vài điểm có chủ ý)
 ```
 accounts/{accountId}
-  profile, activeSession(sessionGen, deviceId), preferences/{walletId}   ← ACCOUNT-scoped
+  profile, session/current(generation, installationId, sessionSecretHash, activatedAt, active), preferences/{walletId} ← ACCOUNT-scoped
   wallets/{walletId}            ← chỉ mục "tài khoản này thuộc ví nào" (máy chủ ghi, client chỉ đọc)
 
 wallets/{walletId}                          meta: kind, systemCatalogVersion, entitlement(máy chủ ghi)
@@ -537,7 +543,7 @@ Khác mẫu: (1) thêm chỉ mục `accounts/{a}/wallets/{w}` để liệt kê v
 | Thay Member / Thu hồi | **Function (transaction)** | Nguyên tử, không có khoảng trống (§12, §13) |
 | Gán/đổi Owner, `accessRole`, `walletId`, `linkedAccountId` | **Chỉ Function**; Rules **từ chối mọi ghi từ client** | Không tin client gửi các trường này |
 | Entitlement (gói) | **Function** (xác minh Play Billing) | Client không được tự nâng gói |
-| Kích hoạt phiên thiết bị | **Function** | Tăng `sessionGen`, thu hồi token |
+| Kích hoạt phiên thiết bị | **Function** | Tăng generation, thay hash secret trong transaction (§21) |
 | Ghi giao dịch/danh mục/trạng thái/quỹ thường ngày | **Rules** (client trực tiếp) cho Personal | Kiểm tra: phiên hợp lệ + Membership ACTIVE + đúng `walletId` đường dẫn + `memberId` thuộc ví |
 | Ghi giao dịch Family (2 người) | **Function nhận lô** (P11) | Bảo toàn "pool không âm" |
 
@@ -610,8 +616,8 @@ Bật App Check (Play Integrity) làm **phòng thủ theo chiều sâu**: giảm
 | T7 | Owner đổi ý sau khi gửi | — | Huỷ mời (state `CANCELLED`) |
 | T8 | Hai lần thay thế đồng thời | Slot lệch | Chỉ 1 Invite REPLACEMENT PENDING; Firestore transaction |
 | T9 | Member cũ cố sửa membership | Nâng quyền | Rules từ chối mọi ghi vào `memberships`/`members`/`ownerAccountId` từ client |
-| T10 | Phiên cũ/offline/outbox ghi sau khi bị đá | Ghi trái phép | `sessionGen` + `dev` kiểm bằng Rules; outbox `BLOCKED` |
-| T11 | Token bị sao chép | Mạo danh thiết bị | `dev` trong claim, thu hồi refresh token |
+| T10 | Phiên cũ/offline/outbox ghi sau khi bị đá | Ghi trái phép | Backend kiểm secret hiện hành; cấm đường client bỏ qua gate (§21) |
+| T11 | Token bị sao chép | Mạo danh thiết bị | Firebase token riêng không đủ; token cùng secret hiện hành bị sao chép vẫn có quyền (§21.3) |
 | T12 | Owner mất tài khoản | Không quản trị được | §27.6 |
 | T13 | Đọc chéo giữa tài khoản trên cùng máy | Lộ ví cá nhân | DB theo ví + registry + ranh giới đăng xuất (§16.3) |
 | T14 | Lộ số tiền/ghi chú qua log | Lộ riêng tư | Chính sách §25 |
@@ -654,7 +660,7 @@ Bật App Check (Play Integrity) làm **phòng thủ theo chiều sâu**: giảm
 | **P4 — Thành viên là dữ liệu** | Thay enum `FamilyMember` bằng danh sách thành viên lấy từ `financial_member_rows` (vẫn `vo`/`chong`); Ví Personal 1 thành viên hợp lệ | Không (dùng bảng P2) | Không | Toàn bộ test hiện có + test ví 1 thành viên; Golden nguyên | Số dư/Trang chủ giống hệt | Cờ tính năng; sao lưu |
 | **P5 — Nền Auth & môi trường** | Flavors DEV/PILOT/PROD, Firebase DEV, Google Sign-In, thêm `INTERNET`, **chưa tải dữ liệu**; chính sách log | Không | Trung (bề mặt mạng mới) | Test cấu hình môi trường; quét log không lộ dữ liệu | Đăng nhập trên bản DEV; ví thật **không** hiện ở DEV | Xoá bản DEV; PROD không đổi |
 | **P6 — Cách ly Account/Wallet** | Registry ví; đường dẫn file theo ví; ranh giới đăng xuất; tiền tố khoá cài đặt | Registry (ngoài file ví) | Cao (T13) | Đăng xuất/đổi tài khoản không lộ dữ liệu; test provider bị huỷ | A đăng xuất, B đăng nhập không thấy ví A | Registry có thể xoá, file ví nguyên |
-| **P7 — Phiên thiết bị độc quyền** | Function `activateDevice`, `sessionGen`, Rules kiểm `gen`/`dev`, cảnh báo UI | Không (cloud) | Cao (T10, T11) | Emulator Rules: P-6, phiên cũ/offline/đua | Hai máy DEV: đăng nhập máy 2 đá máy 1 | Tắt Function; local không đổi |
+| **P7 — Phiên thiết bị độc quyền** | Callable activation, secret Keystore, backend gate; Rules deny client access | Không (cloud) | Cao (T10, T11) | Emulator Auth/Functions/Rules: token còn hợp lệ + secret cũ bị từ chối | DEV + client logic thứ hai; kích hoạt B chặn A | Tắt Function; local không đổi |
 | **P8 — Claim + Personal Pro sao lưu/khôi phục** | `claimWallet`, màn "Bạn là ai?", tải sổ cái, dấu vân tay, khôi phục ví mới **không seed**; **quyết định SQLCipher trước** | Có thể thêm metadata đồng bộ (outbox) | Cao (dữ liệu thật lên cloud) | Test §15.5, §30; Rules P-1..P-10 | Claim thật trên PILOT **chỉ sau khi chủ dự án duyệt**; khôi phục sang máy thử | Sao lưu bắt buộc; ví vẫn LOCAL nếu lỗi |
 | **P9 — Đồng bộ Personal (cứng hoá)** | Outbox, tombstone, `rev`, CAS theo `version`, App Check enforce | Bảng outbox/tombstone | Trung–Cao | Xoá/hồi sinh, offline, retry idempotent | Ngắt mạng thêm/xoá/sửa rồi đồng bộ | Tắt đồng bộ, dùng local |
 | **P10 — Nền tảng Membership Family** | Wallet/Member/Invite trên cloud, Rules Family, Function mời/chấp nhận | Cloud | Cao | Ma trận F-1..F-12 (emulator) | Hai tài khoản thử trên PILOT | Xoá dữ liệu PILOT |
@@ -679,7 +685,7 @@ Ghi chú thứ tự: P3 (khoá ứng dụng) **độc lập với cloud** và n�
 | Chỉ Owner quản trị membership | **LOCKED** | — | Cưỡng chế bằng Function+Rules | Client không đáng tin | Đã khoá |
 | Có thu hồi quyền ngay | **LOCKED** | — | — | Mất máy/lộ tài khoản | Đã khoá |
 | Family v1: cả hai thấy toàn Wallet | **LOCKED** | — | — | Số dư/báo cáo nhất quán | Đã khoá |
-| 1 Account = 1 thiết bị hoạt động | **LOCKED** | — | `sessionGen` + Rules | Yêu cầu sản phẩm | Đã khoá |
+| 1 Account = 1 thiết bị hoạt động | **LOCKED** | — | Secret phiên do backend cấp + gate (§21) | Yêu cầu sản phẩm | Đã khoá |
 | Personal & Family dùng chung mô hình Wallet | **LOCKED** | — | — | Tránh 2 hệ thống không tương thích | Đã khoá |
 | Personal Free có cần tài khoản không? | **LOCKED (duyệt sau P1)** | A: cục bộ, không đăng nhập | **A** — hoàn toàn cục bộ, không đăng nhập, không thanh toán; Pro sau này mới cần Account | Dữ liệu thật đang dùng không đăng nhập; riêng tư | Đã duyệt |
 | 1 SQLite hay DB theo ví? | **LOCKED (duyệt sau P1)** | D | **Mỗi Wallet 1 file SQLite; registry mỏng ở phase sau; UI v1 1 ví; P2 chỉ thêm trừu tượng `WalletDescriptor`, KHÔNG di chuyển DB** | Cách ly theo cấu trúc; giữ schema | Đã duyệt |

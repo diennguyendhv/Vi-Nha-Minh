@@ -59,3 +59,7 @@ env/*.json
 **/google-services.json
 **/GoogleService-Info.plist
 *service-account*.json
+functions/node_modules/
+functions/.npm-cache/
+functions/.env*
+.firebase/

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../domain/auth/auth_repository.dart';
 import '../../providers/auth_providers.dart';
+import '../../providers/session_provider.dart';
+import 'session_controls.dart';
 
 /// Thẻ Tài khoản (P5). Đăng nhập là TUỲ CHỌN: app cục bộ hoạt động đầy đủ khi chưa
 /// đăng nhập. Đăng nhập KHÔNG tải dữ liệu, KHÔNG gắn Vợ/Chồng, KHÔNG sao lưu/đồng bộ.
@@ -99,6 +101,11 @@ class AccountSettingsCard extends ConsumerWidget {
             ),
           ],
           const SizedBox(height: 10),
+          if (account != null && ref.watch(cloudSessionProvider) != null)
+            SessionControls(
+              key: ValueKey(account.uid),
+              session: ref.watch(cloudSessionProvider)!,
+            ),
           if (account == null)
             SizedBox(
               width: double.infinity,
@@ -126,7 +133,9 @@ class AccountSettingsCard extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton(
                 key: const Key('sign_out_button'),
-                onPressed: action.busy ? null : () => _confirmSignOut(context, controller),
+                onPressed: action.busy
+                    ? null
+                    : () => _confirmSignOut(context, controller),
                 child: const Text('Đăng xuất'),
               ),
             ),
@@ -166,7 +175,8 @@ class AccountSettingsCard extends ConsumerWidget {
     AuthFailureReason.network => 'Không có kết nối mạng. Vui lòng thử lại.',
     AuthFailureReason.providerFailure =>
       'Không đăng nhập được bằng Google. Vui lòng thử lại.',
-    AuthFailureReason.authFailure => 'Đăng nhập không thành công. Vui lòng thử lại.',
+    AuthFailureReason.authFailure =>
+      'Đăng nhập không thành công. Vui lòng thử lại.',
     AuthFailureReason.notConfigured => 'Đăng nhập chưa khả dụng ở bản này.',
     AuthFailureReason.cancelled => '',
   };

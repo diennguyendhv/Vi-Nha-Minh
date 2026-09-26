@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- P5: chỉ để Đăng nhập (Firebase Auth/Google). Không có luồng tải dữ liệu tài chính. -->
+    <!-- P5/P7: Auth và cổng phiên DEV. Không có luồng tải dữ liệu tài chính. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <application

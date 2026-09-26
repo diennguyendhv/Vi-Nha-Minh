@@ -7,7 +7,7 @@
 **Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
 
 ## Current Phase
-**P6.1 — Transaction / Summary UX + amount input — PASS** (2026-09-22). P6 về Cách ly Account/Wallet cục bộ vẫn PASS. P7 chưa bắt đầu.
+**P7 — Exclusive Account Session Foundation — chưa PASS, chờ triển khai/nghiệm thu DEV** (2026-09-26). Trusted backend + Keystore client đã có; emulator chứng minh secret A cũ bị từ chối dù Firebase token còn hợp lệ. 3 nhóm emulator + 52 focused test đạt; full Flutter 1.036 pass/3 skip; analyze 17 info cũ, 0 error/warning. PROD chỉ đọc: schema v8, integrity ok, FK 0, 1.847 giao dịch. Chưa triển khai cloud, chưa sửa PROD. Chi tiết: `docs/p7-exclusive-session.md`. P6/P6.1 giữ nguyên; P8 chưa bắt đầu.
 
 > P6.1 follow-up (2026-09-25): shared Fund/Savings transaction history, creation-time display/sorting, conditional Summary filters, and unallocated-savings display fix are included in the user-requested commit. Summary/explorer: 110 tests passed; latest PROD debug APK installed in place on Pixel 7a. `docs/p6-1-codex-handoff.md` preserves the earlier handoff and remaining edit-flow limitations. P7 has not started.
 
@@ -21,7 +21,7 @@ P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xo�
 - 3 môi trường qua Android flavor + `AppEnvironment.current` (nguồn duy nhất, từ `appFlavor`): dev=`com.vinhamimh.vi_nha_minh.dev`, pilot=`...pilot`, prod=`com.vinhamimh.vi_nha_minh` (không đổi). Mỗi môi trường 1 dự án Firebase riêng; cấu hình client công khai qua `--dart-define-from-file=env/<env>.json` (mẫu `env/*.example.json`; file thật gitignored; `FirebaseEnvConfig.isUsableFor(env)` từ chối cấu hình khác môi trường/giá trị mẫu). Không có google-services.json/service account trong repo.
 - `AuthRepository` (domain, độc lập nhà cung cấp) → `FirebaseAuthRepository` (Firebase Auth + `google_sign_in` 7.x) / `UnavailableAuthRepository` khi chưa cấu hình. `bootstrapAuth()` không bao giờ ném; app local khởi động không phụ thuộc mạng. `AccountIdentity` chỉ uid/email/tên/ảnh/provider — KHÔNG walletId/memberId/vai trò.
 - UI: thẻ Tài khoản đầu Cài đặt (`AccountSettingsCard`), đăng nhập TUỲ CHỌN, không claim/upload. Đăng xuất chỉ xoá phiên; Wallet cục bộ + App Lock giữ nguyên.
-- **Mạng (thay đổi quyền riêng tư):** từ P5 manifest có `INTERNET`, chỉ lưu lượng xác thực. Không import Firestore/Storage ở đâu trong `lib/` (test tĩnh). Financial data vẫn 100% local.
+- **Mạng:** P5 Auth; P7 thêm callable session DEV (UUID/credential phiên, không tài chính). Không import Firestore/Storage ở đâu trong `lib/` (test tĩnh). Financial data vẫn 100% local. `CloudSession` tách biệt App Lock/Wallet, secret lưu qua Keystore; chi tiết `docs/p7-exclusive-session.md`.
 
 ## Local Wallet Architecture (P6)
 - 1 Wallet = 1 file SQLite. Ví cục bộ hiện tại = `vi_nha_minh.sqlite` (không di chuyển), `wallet_meta` singleton, `walletId` mờ ổn định.
@@ -91,7 +91,7 @@ Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối ph
 
 ## Known Backlog
 - Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
-- Phiên thiết bị độc quyền (P7).
+- P7: hoàn tất gate/triển khai DEV/nghiệm thu Pixel; xem `docs/p7-exclusive-session.md`.
 - Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
 - Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
 - Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.

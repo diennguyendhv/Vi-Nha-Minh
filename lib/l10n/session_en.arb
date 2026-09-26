@@ -1,0 +1,11 @@
+{
+  "@@locale": "en",
+  "activateSession": "Activate this device",
+  "checkSession": "Check cloud session",
+  "confirmSession": "Use this device for cloud access? The previous device will lose cloud access. Local data stays on both devices.",
+  "cancelSession": "Cancel",
+  "sessionReady": "Session accepted by server at last check.",
+  "sessionDenied": "No current cloud session on this device. Activate explicitly to use it again.",
+  "sessionUnknown": "Cloud session could not be verified. Local data remains available.",
+  "sessionUnchecked": "Cloud session has not been checked."
+}

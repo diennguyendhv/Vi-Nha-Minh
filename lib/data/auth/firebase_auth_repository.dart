@@ -6,6 +6,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../../domain/auth/account_identity.dart';
 import '../../domain/auth/auth_repository.dart';
+import '../../domain/auth/cloud_session.dart';
 
 /// Ánh xạ `User` Firebase → [AccountIdentity] (tách hàm thuần để test).
 AccountIdentity mapFirebaseUser({
@@ -43,6 +44,7 @@ class FirebaseAuthRepository implements AuthRepository {
 
   final String googleServerClientId;
   final fb.FirebaseAuth _auth;
+  CloudSession? cloudSession;
   final GoogleSignIn _google;
   Future<void>? _googleInit;
 
@@ -102,6 +104,15 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() async {
+    final session = cloudSession;
+    if (session != null) {
+      await session.signOut(_signOutAuth);
+    } else {
+      await _signOutAuth();
+    }
+  }
+
+  Future<void> _signOutAuth() async {
     // Xoá phiên Firebase trước (nguồn sự thật); lỗi ở Google không được giữ
     // phiên Firebase còn sống.
     try {
