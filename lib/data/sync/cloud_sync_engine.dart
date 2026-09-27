@@ -582,7 +582,14 @@ class CloudSyncEngine {
         ),
       );
     });
-    if (applied > 0) lastOverdrawnPools = overdrawn;
+    if (applied > 0) {
+      lastOverdrawnPools = overdrawn;
+      // Dòng kéo về được ghi bằng SQL thô (EntityCodec) ⇒ Drift không tự biết; báo để
+      // mọi màn hình đang theo dõi đọc lại. Worker bỏ qua (outbox rỗng ⇒ 0 lời gọi).
+      db.notifyUpdates({
+        for (final table in syncCapturedTables.keys) TableUpdate(table),
+      });
+    }
     return PullReport(
       applied: applied,
       conflicts: conflicts,

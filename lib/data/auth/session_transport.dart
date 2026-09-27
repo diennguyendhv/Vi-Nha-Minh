@@ -32,6 +32,20 @@ class SessionTransportClient {
     'abandonClaim',
     // P8.3: turn on encrypted backup of a claimed Wallet (metadata only).
     'enableBackup',
+    // P10 Family: membership metadata, public keys and wrapped key packages
+    // only (never a plaintext key or financial payload).
+    'promoteToFamily',
+    'createFamilyInvite',
+    'getFamilyInvite',
+    'acceptFamilyInvite',
+    'cancelFamilyInvite',
+    'getFamilyMembers',
+    'putMemberKey',
+    'getMemberKey',
+    'registerMemberDeviceKey',
+    'getMyFamily',
+    'revokeFamilyMember',
+    'registerSyncSignal',
   };
 
   Future<Map<String, dynamic>> call(

@@ -468,6 +468,25 @@ FinancialMember: an invite binds an Account to an EXISTING `memberId` the Owner 
   ids + balances, batch-id regression, conflict, delete/edit, delete/delete, overdraw, revoke, A→X→A,
   B→Y→B, stale P7.1), `family_emulator_e2e_test` (REAL emulator backend, A/B/X, Firestore scan: no
   plaintext/BMK/token), `family_screen_test`, `remote_signal_test`, registry flags.
+- **LIVE DEV (2026-09-27, Pixel 7a = A `diennguyendhv@…` Chồng/Owner; Android emulator
+  `HW_Family_B` API 35 Google Play = B `diennguyenaz.com@…` Vợ/Member; X = `nguyenvangaara25@…`):**
+  promote dc268fde in place (Mã ví `6547 0921 2441`) → invite Vợ → B preview (neutral: expiry only) →
+  accept → both screens `2301 7547 8546` → A shares key → B "Đã tải và kiểm chứng", role Vợ, same Mã ví.
+  A→B: TA (+123.000 Chồng) pushed 1 call → FCM → B pulled automatically. B→A: TB (+45.600 Vợ) → FCM →
+  A home updated by itself. On-device integrity reports A vs B: same walletId, schema 11, SQLCipher,
+  integrity ok, FK 0, 8 transactions with identical ids/clientTxIds and per-row/per-column digests,
+  every financial table digest identical (only cloud_binding/sync_state/sqlite_sequence differ —
+  device-local). Delete on B → tombstone → gone on A. Idle 90 s both devices: 0 sync runs/calls.
+  A→X→A and B→Y→B: X/Y see only the install-time local wallet; X `getMyFamily` → not-member, reused
+  token → INVITE_INVALID; back to A/B ⇒ same file/walletId/data, no restore. Revoke: A shows "Đã thu
+  hồi"; B next sync → NOT_MEMBER → Wallet hidden, file kept, registry `accessRevoked: true`.
+  **Found + fixed live:** (1) app transport allowlist lacked the Family callables (all Family calls
+  denied locally) — added + static test `session_transport_allowlist_test`; (2) pulled rows are written
+  with raw SQL so Drift streams were not notified (UI stale until restart) — engine now
+  `notifyUpdates` after an applying pull (+ regression assert). An unplanned −10.000 đ "Chồng" expense
+  (17:57:00) was created by a misfired scripted tap on B while adb dropped; it synced consistently and
+  was then deleted from B (used as the live delete test). After sign-out/in the P7.1 session must be
+  re-activated (signal-triggered pull was blocked with 0 calls until then — by design).
 - **Pending / not done:** backend-sent invite email; forward secrecy after revoke; conflict review
   UI beyond the count; Member-side hiding of claim "abandon" (server rejects it anyway).
 

@@ -366,7 +366,12 @@ void main() {
     final b = await joinB();
     await a.db.into(a.db.transactionRows).insert(_income('tx-A', 50000, husband));
     await a.engine.syncNow();
+    // Màn hình đang theo dõi (Drift) phải được báo khi lượt kéo ghi dòng mới.
+    final notified = b.db
+        .tableUpdates(TableUpdateQuery.onTableName('transaction_rows'))
+        .first;
     final pulledB = await b.engine.syncNow(pullFirst: true);
+    await notified.timeout(const Duration(seconds: 2));
     expect(pulledB.pull!.applied, 1);
     expect((await _tx(b.db, 'tx-A'))!.clientTxId, 'client-tx-A');
 

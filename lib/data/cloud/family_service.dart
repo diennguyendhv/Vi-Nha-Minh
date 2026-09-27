@@ -499,3 +499,20 @@ class FamilyService {
   static String _hex(List<int> bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 }
+
+/// Endpoint máy chủ mà Family dùng (test đối chiếu với allowlist transport).
+abstract final class FamilyServiceOps {
+  static const all = {
+    'promoteToFamily',
+    'createFamilyInvite',
+    'getFamilyInvite',
+    'acceptFamilyInvite',
+    'cancelFamilyInvite',
+    'getFamilyMembers',
+    'putMemberKey',
+    'getMemberKey',
+    'registerMemberDeviceKey',
+    'getMyFamily',
+    'revokeFamilyMember',
+  };
+}
