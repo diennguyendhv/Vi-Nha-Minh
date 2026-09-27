@@ -371,9 +371,23 @@ DEV fixture Wallet `dc268fde…` only (`com.vinhamimh.vi_nha_minh.dev`); PROD un
   0 network calls; after activation Sync now = 1 call.
 - **Fixed during acceptance:** Transactions tab tie-break (createdAt, id) — restored Wallets insert in
   cloud order; stale "nothing uploaded" copy.
-- **Not done live:** Recovery Key restore (key not kept by the owner; covered by automated tests).
-- **Open F1:** after a restore on a fresh install, sign-out opens the empty install-time local Wallet
-  (resolveActive prefers unclaimed local); restored Wallet is intact but unreachable without a switcher.
+- **Recovery Key regeneration (7a6f378, approved 2026-09-27):** `putBackupKeyring` mode
+  `rotateRecovery` = current P7.1 session + recent sign-in (+ client device step-up) + CAS
+  `expectedRev`; atomically replaces `recovery` slot + `recoveryProofHash` (rev+1); idempotent
+  receipt by `rotationId` (same id + same proof ⇒ `{rev}`; same id + other proof ⇒ KEYRING_CHANGED).
+  Client first proves the held BMK opens live ciphertext, then wraps the SAME BMK under a new random
+  256-bit Recovery Key (independent KEK), retries network errors only, shows the key once. No BMK
+  change, no envelope rewrite, password slot untouched; old Recovery Key dead immediately (unwrap
+  fails + `recoverSession` rejects its proof). Live: keyring rev 1→2, new nonce/salt/proof hash,
+  password slot identical, headRev/batches unchanged, 3 calls. Then `pm clear` #3 → restore with the
+  NEW Recovery Key → every table/column/row digest identical, balances equal, integrity ok, FK 0,
+  SQLCipher from page 1.
+- **F1 fixed (9f49678, rule locked 2026-09-27):** registry keeps a device-local MRU (`active`) of
+  explicitly activated Wallets; restore registers + activates in ONE registry write; Firebase
+  sign-in/out never changes it; selection = preferred > MRU openable > fallback (bound, bootstrap
+  local); never by transaction count. Active non-legacy Wallet with missing file/key ⇒ recovery
+  screen (`preflightRegisteredWallet`), never a new DB/key or a silent switch. Live: sign-out and cold
+  start while signed out keep the restored Wallet active.
 - **Tooling note:** `a7955ab` also carries `dart format` churn in 16 presentation files — verified
   format-only (formatting the parent reproduces them exactly); left as is.
 - Failed-restore DB-key cleanup: accepted technical debt (orphan random alias, never reused, opens

@@ -190,6 +190,8 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - Đẩy: `rev = baseHeadRev+1`, `batchId` tất định (HMAC IDK) ⇒ gửi lại idempotent; ACK theo `seq` chính xác. Batch rút cạn outbox mang manifest mã hoá + checkpoint.
 - Kéo: 1 DB transaction, `withoutSyncCapture`, FK hoãn; xung đột với thay đổi cục bộ chưa đẩy của NGƯỜI KHÁC ⇒ lưu `sync_conflicts`, bản máy chủ thắng; FK vỡ ⇒ huỷ cả lần kéo. KHÔNG tự gộp.
 - Khôi phục: file đích tên cuối cùng ngẫu nhiên `wallet_<uuid>.sqlite` + khoá DB riêng (KHÔNG rename), kích hoạt = ghi registry SAU kiểm chứng; lỗi ⇒ xoá file tạm, ví hiện tại không bị mở. Bridge khoá DB vẫn KHÔNG có API xoá khoá.
+- **Tạo lại Recovery Key** = xoay slot recovery (`putBackupKeyring` mode `rotateRecovery`): CÙNG BMK, key 256-bit mới, phiên P7.1 + đăng nhập gần đây + step-up, CAS `rev`, biên nhận theo `rotationId`; không đổi BMK, không mã hoá lại envelope, slot mật khẩu giữ nguyên, key cũ vô hiệu ngay.
+- **Ví đang hoạt động (đã khoá):** registry giữ MRU `active` (dữ liệu THIẾT BỊ). Khôi phục thành công = đăng ký + kích hoạt trong 1 lần ghi; đăng nhập/đăng xuất Firebase KHÔNG đổi ví đang hoạt động; ví bootstrap lúc cài chỉ là dự phòng; không bao giờ chọn theo số giao dịch. Ví đang hoạt động (không phải di sản) mất file/khoá ⇒ màn cần khôi phục, không tạo DB/khoá mới, không lặng lẽ đổi ví.
 - Chỉ DEV (env dev + backend DEV). PROD chưa migrate v11, chưa claim, chưa upload.
 
 ## 27. Đổi tài khoản trên cùng máy — cổng quyền Wallet (2026-09-27)
