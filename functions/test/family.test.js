@@ -87,7 +87,7 @@ test('Owner invites B for the Wife member; only B (verified email) can accept, e
     ['expiresAt', 'memberId', 'walletId']);
   const bKey = b(32);
   assert.deepEqual(ok(await call('acceptFamilyInvite', bUser, {...bCred, token: t, publicKey: bKey})),
-    {walletId, memberId: 'm-b'});
+    {walletId, memberId: 'm-b', ownerAccountId: a.localId});
   reason(await call('acceptFamilyInvite', bUser, {...bCred, token: t, publicKey: bKey}), 'INVITE_INVALID');
   const claim = ok(await call('getWalletClaim', bUser, {...bCred, walletId}));
   assert.equal(claim.isMember, true);
@@ -104,16 +104,102 @@ test('Owner invites B for the Wife member; only B (verified email) can accept, e
   const members = ok(await call('getFamilyMembers', a, {...aCred, walletId})).members;
   const bm = members.find(m => m.accountId === bUser.localId);
   assert.equal(bm.publicKey, bKey);
+  // The device key is bound to the installation that accepted.
+  assert.equal(bm.keyInstallationId, bCred.installationId);
   const wrapped = {v: 1, epk: b(32), n: b(12), c: b(48)};
+  const pin = {publicKeyHash: pubHash(bKey), keyInstallationId: bCred.installationId};
   reason(await call('getMemberKey', bUser, {...bCred, walletId}), 'KEY_NOT_SHARED');
   reason(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
-    publicKeyHash: pubHash(b(32)), wrapped}), 'PUBLIC_KEY_CHANGED');
+    ...pin, publicKeyHash: pubHash(b(32)), wrapped}), 'PUBLIC_KEY_CHANGED');
+  reason(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
+    ...pin, keyInstallationId: randomUUID(), wrapped}), 'PUBLIC_KEY_CHANGED');
   denied(await call('putMemberKey', bUser, {...bCred, walletId, memberAccountId: bUser.localId,
-    publicKeyHash: pubHash(bKey), wrapped}));
-  ok(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
-    publicKeyHash: pubHash(bKey), wrapped}));
-  assert.deepEqual(ok(await call('getMemberKey', bUser, {...bCred, walletId})), {wrapped, memberId: 'm-b'});
+    ...pin, wrapped}));
+  ok(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId, ...pin, wrapped}));
+  assert.deepEqual(ok(await call('getMemberKey', bUser, {...bCred, walletId})),
+    {wrapped, memberId: 'm-b', ownerAccountId: a.localId, keyInstallationId: bCred.installationId,
+      publicKey: bKey});
   denied(await call('getMemberKey', x, {...xCred, walletId}));
+  // The Owner is never served a Member key package.
+  denied(await call('getMemberKey', a, {...aCred, walletId}));
+  assert.deepEqual(ok(await call('getMyFamily', bUser, {...bCred})),
+    {member: true, walletId, memberId: 'm-b', ownerAccountId: a.localId, hasKey: true,
+      keyInstallationId: bCred.installationId});
+  assert.deepEqual(ok(await call('getMyFamily', x, {...xCred})), {member: false});
+  // Member cannot manage membership.
+  denied(await call('createFamilyInvite', bUser, {...bCred, walletId, memberId: 'm-a', inviteeEmail: x.email}));
+  denied(await call('revokeFamilyMember', bUser, {...bCred, walletId, memberAccountId: a.localId}));
+  denied(await call('cancelFamilyInvite', bUser, {...bCred, walletId}));
+  denied(await call('promoteToFamily', bUser, {...bCred, walletId}));
+});
+
+test('two writers: equal batch ids never cross-acknowledge; membership denial has NOT_MEMBER', async () => {
+  const {a, aCred, walletId} = await familyWallet();
+  const bUser = await account();
+  const bCred = await activate(bUser);
+  const t = ok(await call('createFamilyInvite', a, {...aCred, walletId, memberId: 'm-b', inviteeEmail: bUser.email})).token;
+  ok(await call('acceptFamilyInvite', bUser, {...bCred, token: t, publicKey: b(32)}));
+  const batchId = token();
+  ok(await call('putEncryptedBatch', a, {...aCred, walletId, batchId, baseHeadRev: 0, envelopes: [env(1)]}));
+  // Same writer retry => receipt; other writer, same id => explicit conflict, nothing stored.
+  assert.equal(ok(await call('putEncryptedBatch', a, {...aCred, walletId, batchId, baseHeadRev: 0,
+    envelopes: [env(1)]})).duplicate, true);
+  reason(await call('putEncryptedBatch', bUser, {...bCred, walletId, batchId, baseHeadRev: 0,
+    envelopes: [env(1)]}), 'BATCH_ID_CONFLICT');
+  // Concurrent head: B still at 0 => HEAD_MOVED (must pull first; never overwrites A).
+  reason(await call('putEncryptedBatch', bUser, {...bCred, walletId, batchId: token(), baseHeadRev: 0,
+    envelopes: [env(1)]}), 'HEAD_MOVED');
+  const x = await account();
+  const xCred = await activate(x);
+  reason(await call('getEncryptedChanges', x, {...xCred, walletId, sinceRev: 0}), 'NOT_MEMBER');
+  // Remote-change signal registration: members only, token bound to the session installation.
+  const fcm = `fcm_${randomBytes(24).toString('hex')}`;
+  ok(await call('registerSyncSignal', bUser, {...bCred, walletId, token: fcm}));
+  const bm = (await db.doc(`wallets/${walletId}/memberships/${bUser.localId}`).get()).data();
+  assert.equal(bm.signalToken, fcm);
+  assert.equal(bm.signalInstallationId, bCred.installationId);
+  reason(await call('registerSyncSignal', x, {...xCred, walletId, token: fcm}), 'NOT_MEMBER');
+  assert.equal((await call('registerSyncSignal', bUser, {...bCred, walletId, token: 'bad token!'})).error?.status,
+    'INVALID_ARGUMENT');
+  // A write still succeeds while signalling (FCM is skipped in the emulator).
+  ok(await call('putEncryptedBatch', a, {...aCred, walletId, batchId: token(), baseHeadRev: 1, envelopes: [env(2)]}));
+  ok(await call('revokeFamilyMember', a, {...aCred, walletId, memberAccountId: bUser.localId}));
+  const revoked = (await db.doc(`wallets/${walletId}/memberships/${bUser.localId}`).get()).data();
+  assert.equal(revoked.signalToken, null);
+});
+
+test('member device key: bound installation only; new installation re-registers, Owner re-wraps', async () => {
+  const {a, aCred, walletId} = await familyWallet();
+  const bUser = await account();
+  const bCred = await activate(bUser);
+  const t = ok(await call('createFamilyInvite', a, {...aCred, walletId, memberId: 'm-b', inviteeEmail: bUser.email})).token;
+  const k1 = b(32);
+  ok(await call('acceptFamilyInvite', bUser, {...bCred, token: t, publicKey: k1}));
+  const wrapped = {v: 1, epk: b(32), n: b(12), c: b(48)};
+  ok(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
+    publicKeyHash: pubHash(k1), keyInstallationId: bCred.installationId, wrapped}));
+  // B moves to a new installation (P7.1 approved takeover).
+  const next = randomUUID();
+  const request = ok(await call('requestTakeover', bUser, {accountId: bUser.localId, installationId: next}));
+  ok(await call('approveTakeover', bUser, {...bCred, requestId: request.requestId}));
+  const bNew = {accountId: bUser.localId, installationId: next,
+    ...ok(await call('completeTakeover', bUser, {accountId: bUser.localId, installationId: next,
+      requestId: request.requestId, requestSecret: request.requestSecret}))};
+  denied(await call('getMemberKey', bUser, {...bCred, walletId}));
+  reason(await call('getMemberKey', bUser, {...bNew, walletId}), 'KEY_DEVICE_MISMATCH');
+  reason(await call('registerMemberDeviceKey', stale(bUser), {...bNew, walletId, publicKey: b(32)}),
+    'RECENT_LOGIN_REQUIRED');
+  const k2 = b(32);
+  ok(await call('registerMemberDeviceKey', bUser, {...bNew, walletId, publicKey: k2}));
+  reason(await call('getMemberKey', bUser, {...bNew, walletId}), 'KEY_NOT_SHARED');
+  // Old pin fails; Owner re-verifies the new fingerprint and wraps again.
+  reason(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
+    publicKeyHash: pubHash(k1), keyInstallationId: bCred.installationId, wrapped}), 'PUBLIC_KEY_CHANGED');
+  ok(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
+    publicKeyHash: pubHash(k2), keyInstallationId: next, wrapped}));
+  assert.equal(ok(await call('getMemberKey', bUser, {...bNew, walletId})).keyInstallationId, next);
+  // Owner cannot register a member key.
+  denied(await call('registerMemberDeviceKey', a, {...aCred, walletId, publicKey: b(32)}));
 });
 
 test('invite guards: owner only, not self, not owner member, family only, verified email, expiry, max 2', async () => {
@@ -185,7 +271,12 @@ test('revoke: Member loses cloud access at once; Owner can bind another Account 
   ok(await call('acceptFamilyInvite', bUser, {...bCred, token: t, publicKey: b(32)}));
   denied(await call('revokeFamilyMember', bUser, {...bCred, walletId, memberAccountId: bUser.localId}));
   ok(await call('revokeFamilyMember', a, {...aCred, walletId, memberAccountId: bUser.localId}));
-  denied(await call('getEncryptedChanges', bUser, {...bCred, walletId, sinceRev: 0}));
+  reason(await call('getEncryptedChanges', bUser, {...bCred, walletId, sinceRev: 0}), 'NOT_MEMBER');
+  assert.deepEqual(ok(await call('getMyFamily', bUser, {...bCred})), {member: false});
+  // Revocation drops the device key binding: no new wrapping possible.
+  reason(await call('putMemberKey', a, {...aCred, walletId, memberAccountId: bUser.localId,
+    publicKeyHash: pubHash(b(32)), keyInstallationId: bCred.installationId,
+    wrapped: {v: 1, epk: b(32), n: b(12), c: b(48)}}), 'NOT_MEMBER');
   denied(await call('putEncryptedBatch', bUser, {...bCred, walletId, batchId: token(), baseHeadRev: 0, envelopes: [env(1)]}));
   denied(await call('getMemberKey', bUser, {...bCred, walletId}));
   assert.equal((await db.doc(`accounts/${bUser.localId}/walletIndex/family`).get()).exists, false);

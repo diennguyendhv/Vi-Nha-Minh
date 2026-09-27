@@ -161,5 +161,105 @@
   "rotateRecoveryConfirmTitle": "Create a new Recovery Key?",
   "rotateRecoveryConfirmBody": "Your current Recovery Key will stop working immediately. The Backup Password and your backup data stay the same. The new key is shown only once.",
   "rotateRecoveryConfirm": "Create new key",
-  "rotateRecoveryFailed": "The Recovery Key was not replaced. Your Backup Password still works; try again."
+  "rotateRecoveryFailed": "The Recovery Key was not replaced. Your Backup Password still works; try again.",
+  "familyEntry": "Family (DEV)",
+  "familyTitle": "Family",
+  "familyPromote": "Share with family",
+  "familyPromoteBody": "This Wallet becomes a Family Wallet in place: same Wallet, same data, same backup. You stay the Owner. Nothing is copied. Afterwards it is only visible while you are signed in.",
+  "familyPromoted": "This Wallet is now a Family Wallet.",
+  "familyInvite": "Share with your spouse",
+  "familyInviteWho": "Who will the invited account be in this Wallet?",
+  "familyInviteEmail": "Invited account email",
+  "familyInviteConfirmTitle": "Send this invitation?",
+  "familyInviteConfirmBody": "{email} will be able to see and edit this whole Wallet as {member} after accepting, once you confirm the security code.",
+  "@familyInviteConfirmBody": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      },
+      "member": {
+        "type": "String"
+      }
+    }
+  },
+  "familyInviteCode": "Invitation code (single use, expires {time}). Send it to the invited person:",
+  "@familyInviteCode": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "familyInviteCancel": "Cancel invitation",
+  "familyCopy": "Copy",
+  "familyCopied": "Copied",
+  "familyOwner": "Owner",
+  "familyMember": "Member",
+  "familyRevoked": "Revoked",
+  "familyYou": "(you)",
+  "familyAwaitingKey": "Accepted. Compare this security code with the invited person's screen:",
+  "familyShareKey": "Codes match — share the Wallet key",
+  "familyKeyShared": "Wallet key shared.",
+  "familyRevoke": "Revoke",
+  "familyRevokeBody": "The member immediately loses cloud access to this Wallet. Data already on their phone cannot be erased remotely.",
+  "familyWalletCode": "Wallet code: {code}",
+  "@familyWalletCode": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "familyJoinTitle": "Join a Family Wallet",
+  "familyJoinCode": "Invitation code",
+  "familyJoinPreview": "View invitation",
+  "familyJoinInvite": "Invitation to a Family Wallet (expires {time}).",
+  "@familyJoinInvite": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "familyJoinAccept": "Accept",
+  "familyJoinFingerprint": "Read this security code to the person who invited you: {code}",
+  "@familyJoinFingerprint": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "familyJoinCheck": "Check and download the Wallet",
+  "familyJoinWaiting": "Waiting for the Owner to confirm the security code.",
+  "familyJoined": "Family Wallet downloaded and verified.",
+  "familyYouAre": "You are a Member of this Family Wallet as {member}.",
+  "@familyYouAre": {
+    "placeholders": {
+      "member": {
+        "type": "String"
+      }
+    }
+  },
+  "familyRefresh": "Refresh",
+  "familyFailed": "Could not complete. Nothing on this phone was changed.",
+  "familyNeedsBackup": "Turn on encrypted backup for this Wallet first.",
+  "familyNeedsClaim": "Register this Wallet with your account first.",
+  "familyNewDevice": "Register this phone's key",
+  "familyConflicts": "Conflicts to review: {count}",
+  "@familyConflicts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "familyOverdrawn": "After syncing, {count} balance(s) went negative. Please review recent transactions.",
+  "@familyOverdrawn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

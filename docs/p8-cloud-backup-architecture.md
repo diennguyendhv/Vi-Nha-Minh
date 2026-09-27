@@ -127,8 +127,8 @@ entity kinds, local ids, Backup Password, Recovery Key, BMK/KEKs/DEK.
   local data protection = App Lock + Android security + SQLCipher (required
   before any real-data cloud rollout).
 - Server cannot enforce financial invariants on ciphertext (e.g. non-negative
-  pools); the client engine remains authoritative. Family (two writers) needs a
-  separate design before P10.
+  pools); the client engine remains authoritative. Family (two writers): see §8g —
+  merged overdraws are detected client-side, not prevented server-side.
 
 ## 8b. DEV deployment + Pixel acceptance (2026-09-26)
 Deployed `functions:p7-session,firestore:rules` to `vi-nha-minh-55c60` only.
@@ -392,6 +392,84 @@ DEV fixture Wallet `dc268fde…` only (`com.vinhamimh.vi_nha_minh.dev`); PROD un
   format-only (formatting the parent reproduces them exactly); left as is.
 - Failed-restore DB-key cleanup: accepted technical debt (orphan random alias, never reused, opens
   nothing); ordinary code still cannot delete Wallet DB keys.
+
+## 8g. P10 — Family v1 app side + two-account sync (2026-09-27, DEV/emulator)
+Family v1 = exactly 1 Owner + at most 1 Member Account; Owner transfer unsupported. Account ≠
+FinancialMember: an invite binds an Account to an EXISTING `memberId` the Owner picks explicitly
+(no default); Owner/Member are permissions, Vợ/Chồng are people. DEV backend only; PROD untouched.
+- **Personal → Family (`promoteToFamily`, "Chia sẻ với gia đình"):** Owner of a CLAIMED Wallet with
+  backup on; current P7.1 session + recent sign-in; idempotent. In place: same walletId, same SQLite
+  file, same ids/clientTxIds/memberIds, same BMK/keyring/envelopes/headRev. Locally `wallet_meta.kind =
+  family` (excluded from sync, no outbox) + registry reconciled from the DB (`kind: family`). The Owner
+  membership stays OWNER with its `selfMemberId`.
+- **Invite ("Chia sẻ với vợ/chồng"):** Owner picks the FinancialMember (local label, never sent) +
+  target email + explicit confirm + step-up ⇒ `createFamilyInvite`: current Owner, P7.1 session, recent
+  auth, Family only, member exists and ≠ Owner member, not already bound, ≤ 2 ACTIVE Accounts, not the
+  Owner's own email; 256-bit random token returned ONCE (server stores SHA-256 only), 48 h, one pending
+  per wallet (new supersedes), cancellable. The Owner hands the token to the invitee (email delivery
+  by backend = pending). **Email alone is not authority:** accept needs the token + the invitee's
+  VERIFIED email + P7.1 session + recent sign-in; wrong Account / expired / used / cancelled ⇒ the same
+  `INVITE_INVALID`. Acceptance is one transaction (race ⇒ exactly one membership).
+- **Key sharing (zero-knowledge, `lib/core/crypto/family_key_crypto.dart`):** the accepting
+  installation generates an X25519 device key (32-byte seed wrapped by its own non-exportable Keystore
+  AES-GCM alias `homewallet_family_device_v1`, AAD uid|installation, `FamilyKeyBridge.kt`) and sends
+  only the public key; the server records it with `keyInstallationId` = the accepting P7.1
+  installation. Owner wrap = ECIES/HPKE-style: ephemeral X25519 × member key → HKDF-SHA256 (salt epk‖pkR,
+  info `vinhaminh-family-bmk-kek-v1|ctx`) → AES-256-GCM(BMK, AAD = ctx), ctx = version | walletId |
+  ownerAccountId | recipient uid | recipient memberId | recipient installation | recipient public key.
+  Server stores `{v, epk, n, c}` only. **Recipient binding:** the Owner wraps only after both screens
+  show the same 12-digit fingerprint of ctx (the Member computes it from its OWN key); `putMemberKey`
+  pins SHA-256(public key) + installation (`PUBLIC_KEY_CHANGED` if swapped); `getMemberKey` serves the
+  package only to the ACTIVE Member on that exact installation (`KEY_DEVICE_MISMATCH`). A new Member
+  installation (P7.1 takeover) registers a new key (`registerMemberDeviceKey`, recent auth) and needs a
+  new Owner verification + wrap. **Key confirmation:** "Mã ví" = HKDF commitment of the BMK, shown on
+  both devices; any BMK not from the Owner also fails to open the existing envelopes during restore.
+  Low-order (all-zero) shared secrets are rejected; accept retries reuse the SAME device key (a
+  rejected re-accept can never orphan the registered key — bug found by the emulator E2E, fixed).
+- **Member join:** `getMyFamily` → `getMemberKey` → unwrap locally → `restoreAsFamilyMember` (P8.5 engine:
+  new random-named SQLCipher file + own DB key, full verification, then registry register+activate in
+  one write with `kind: family`, `familyMember: true`); `cloud_binding` = Member Account + the memberId
+  the Owner assigned. BMK stored under the Member's own Keystore slot. No plaintext cloud payload, no
+  direct Firestore access (Rules deny-all).
+- **What Firebase admin can / cannot see (Family additions):** CAN: memberships (uid, role, status,
+  opaque memberId, X25519 public key, installation id, FCM token), invite docs (walletId, memberId,
+  invitee email, status, expiry — never the token), wrapped key package `{v,epk,n,c}`, per-batch writer
+  uid, batch timing. CANNOT: BMK/DEK/IDK, member labels, amounts, notes, categories, entity kinds —
+  no server-side key opens the package or any envelope.
+- **Two writers:** batch receipts are per writer (`BATCH_ID_CONFLICT`) and the client batch id now
+  includes the writer (both writers share the IDK and `seq` is a local counter — the old id could make
+  B's batch look "already stored" = silent loss; fixed + regression test). CAS on headRev forces pull
+  before push. Same entity edited on both ⇒ first commit wins; the other device keeps its attempted
+  value verbatim in `sync_conflicts` (UI: "Xung đột cần xem lại: N"). Delete vs edit: whichever commits
+  first wins, the other is a recorded conflict (a committed delete is never resurrected by a stale edit;
+  a stale delete of an entity edited first is recorded, not applied). Delete vs delete ⇒ idempotent.
+  No automatic semantic merge. Merged offline spends that drive a pool negative are DETECTED after pull
+  (`overdrawnPools`, red warning) — the server cannot check ciphertext; nothing is auto-fixed.
+- **Remote-change signal (FCM, no polling):** after a committed Family batch the server sends a
+  data-only FCM `{t: 'head'}` (collapse key, no walletId/amount/text) to every OTHER active member device
+  that registered a token (`registerSyncSignal`: P7.1 session + ACTIVE membership; token bound to the
+  installation; dead tokens dropped; best effort, never fails the write; skipped in the emulator).
+  Foreground ⇒ `requestPull()`; background/killed ⇒ the isolate only sets a persistent flag, consumed
+  on resume. Token is re-registered only when token/installation/wallet/Account change ⇒ normal app
+  opens and idle = 0 cloud calls.
+- **Account semantics (§27 unchanged, now exercised):** Family Wallet opens only for its bound Account;
+  sign-out / other Account X ⇒ hidden (no DB opened, file + DB key + BMK untouched, no claim/restore
+  possible for X); A back ⇒ same file, same walletId. Same on the Member device (B→Y→B).
+- **Revocation (`revokeFamilyMember`, Owner + step-up):** membership REVOKED, wrapped key + device key
+  + FCM token cleared, account index removed ⇒ B's next cloud call gets `NOT_MEMBER` ⇒ the app marks the
+  registry entry `accessRevoked` ⇒ Wallet hidden; local encrypted DB NOT erased. **Honest limit:** a
+  revoked device that stays offline keeps the data it already had and the BMK in its Keystore (it can
+  still decrypt ciphertext it downloaded before); SQLCipher + FBE + App Lock protect extraction. Forward
+  secrecy after removal (BMK rotation + re-encryption) is NOT implemented — separate design.
+- **Tests:** backend emulator 26/26 (family: invite/accept/guards/expiry/reuse/race/max 2/revoke/
+  device-key binding/batch-id conflict/NOT_MEMBER/signal registration/Rules deny-all); Dart:
+  `family_key_crypto_test` (roundtrip, wrong key, every ctx field, tamper, low-order, fingerprint,
+  wallet code), `family_flow_test` (FakeCloud: promote, invite, fingerprint, share, join, A→B/B→A same
+  ids + balances, batch-id regression, conflict, delete/edit, delete/delete, overdraw, revoke, A→X→A,
+  B→Y→B, stale P7.1), `family_emulator_e2e_test` (REAL emulator backend, A/B/X, Firestore scan: no
+  plaintext/BMK/token), `family_screen_test`, `remote_signal_test`, registry flags.
+- **Pending / not done:** backend-sent invite email; forward secrecy after revoke; conflict review
+  UI beyond the count; Member-side hiding of claim "abandon" (server rejects it anyway).
 
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow

@@ -352,4 +352,151 @@ class SessionLocalizationsEn extends SessionLocalizations {
   @override
   String get rotateRecoveryFailed =>
       'The Recovery Key was not replaced. Your Backup Password still works; try again.';
+
+  @override
+  String get familyEntry => 'Family (DEV)';
+
+  @override
+  String get familyTitle => 'Family';
+
+  @override
+  String get familyPromote => 'Share with family';
+
+  @override
+  String get familyPromoteBody =>
+      'This Wallet becomes a Family Wallet in place: same Wallet, same data, same backup. You stay the Owner. Nothing is copied. Afterwards it is only visible while you are signed in.';
+
+  @override
+  String get familyPromoted => 'This Wallet is now a Family Wallet.';
+
+  @override
+  String get familyInvite => 'Share with your spouse';
+
+  @override
+  String get familyInviteWho =>
+      'Who will the invited account be in this Wallet?';
+
+  @override
+  String get familyInviteEmail => 'Invited account email';
+
+  @override
+  String get familyInviteConfirmTitle => 'Send this invitation?';
+
+  @override
+  String familyInviteConfirmBody(String email, String member) {
+    return '$email will be able to see and edit this whole Wallet as $member after accepting, once you confirm the security code.';
+  }
+
+  @override
+  String familyInviteCode(String time) {
+    return 'Invitation code (single use, expires $time). Send it to the invited person:';
+  }
+
+  @override
+  String get familyInviteCancel => 'Cancel invitation';
+
+  @override
+  String get familyCopy => 'Copy';
+
+  @override
+  String get familyCopied => 'Copied';
+
+  @override
+  String get familyOwner => 'Owner';
+
+  @override
+  String get familyMember => 'Member';
+
+  @override
+  String get familyRevoked => 'Revoked';
+
+  @override
+  String get familyYou => '(you)';
+
+  @override
+  String get familyAwaitingKey =>
+      'Accepted. Compare this security code with the invited person\'s screen:';
+
+  @override
+  String get familyShareKey => 'Codes match — share the Wallet key';
+
+  @override
+  String get familyKeyShared => 'Wallet key shared.';
+
+  @override
+  String get familyRevoke => 'Revoke';
+
+  @override
+  String get familyRevokeBody =>
+      'The member immediately loses cloud access to this Wallet. Data already on their phone cannot be erased remotely.';
+
+  @override
+  String familyWalletCode(String code) {
+    return 'Wallet code: $code';
+  }
+
+  @override
+  String get familyJoinTitle => 'Join a Family Wallet';
+
+  @override
+  String get familyJoinCode => 'Invitation code';
+
+  @override
+  String get familyJoinPreview => 'View invitation';
+
+  @override
+  String familyJoinInvite(String time) {
+    return 'Invitation to a Family Wallet (expires $time).';
+  }
+
+  @override
+  String get familyJoinAccept => 'Accept';
+
+  @override
+  String familyJoinFingerprint(String code) {
+    return 'Read this security code to the person who invited you: $code';
+  }
+
+  @override
+  String get familyJoinCheck => 'Check and download the Wallet';
+
+  @override
+  String get familyJoinWaiting =>
+      'Waiting for the Owner to confirm the security code.';
+
+  @override
+  String get familyJoined => 'Family Wallet downloaded and verified.';
+
+  @override
+  String familyYouAre(String member) {
+    return 'You are a Member of this Family Wallet as $member.';
+  }
+
+  @override
+  String get familyRefresh => 'Refresh';
+
+  @override
+  String get familyFailed =>
+      'Could not complete. Nothing on this phone was changed.';
+
+  @override
+  String get familyNeedsBackup =>
+      'Turn on encrypted backup for this Wallet first.';
+
+  @override
+  String get familyNeedsClaim =>
+      'Register this Wallet with your account first.';
+
+  @override
+  String get familyNewDevice => 'Register this phone\'s key';
+
+  @override
+  String familyConflicts(int count) {
+    return 'Conflicts to review: $count';
+  }
+
+  @override
+  String familyOverdrawn(int count) {
+    return 'After syncing, $count balance(s) went negative. Please review recent transactions.';
+  }
 }

@@ -39,6 +39,31 @@ class EmulatorAccount {
     );
     return EmulatorAccount(r['localId'] as String, r['idToken'] as String);
   }
+
+  /// P10: Account có email ĐÃ XÁC MINH (emulator chấp nhận token không ký nên có thể
+  /// đặt `email_verified`, như functions/test/family.test.js). Không bao giờ live.
+  static Future<({EmulatorAccount account, String email})> createWithEmail() async {
+    final email =
+        'u${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}@example.test';
+    final r = await _post(
+      Uri.parse(
+        'http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signUp?key=fake',
+      ),
+      {'email': email, 'password': 'emulator-only-pw', 'returnSecureToken': true},
+    );
+    final parts = (r['idToken'] as String).split('.');
+    final claims =
+        jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))))
+            as Map<String, dynamic>;
+    claims['email_verified'] = true;
+    final payload = base64Url
+        .encode(utf8.encode(jsonEncode(claims)))
+        .replaceAll('=', '');
+    return (
+      account: EmulatorAccount(r['localId'] as String, '${parts[0]}.$payload.'),
+      email: email,
+    );
+  }
 }
 
 /// Callable wire protocol → Functions emulator. Same error mapping as the app's

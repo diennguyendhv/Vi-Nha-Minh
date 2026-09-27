@@ -20,7 +20,7 @@ class RestoreException implements Exception {
   const RestoreException(this.reason, [this.stage]);
 
   /// `blocked-environment`, `wallet-already-present`, `device-has-other-backup`,
-  /// `not-owner`, `not-claimed`, `no-backup`, `wrong-secret`, `bad-envelope`,
+  /// `not-owner`, `not-member`, `not-claimed`, `no-backup`, `wrong-secret`, `bad-envelope`,
   /// `manifest-missing`, `manifest-mismatch`, `count-mismatch`, `content-mismatch`,
   /// `integrity`, `foreign-key`, `financial-invariant`, `newer-schema`, `injected`.
   final String reason;
@@ -118,7 +118,15 @@ class RestoreEngine {
   }
 
   /// Ví đã claim của Account này trên máy chủ (cần phiên P7.1 hiện hành).
-  Future<({bool ownedByYou, String? selfMemberId, int headRev, String? kind})>
+  Future<
+    ({
+      bool ownedByYou,
+      bool isMember,
+      String? selfMemberId,
+      int headRev,
+      String? kind,
+    })
+  >
   discover(String walletId) async {
     final r = await _call('getWalletClaim', {
       ...await session.credential(),
@@ -127,6 +135,7 @@ class RestoreEngine {
     if (r['claimed'] != true) throw const RestoreException('not-claimed');
     return (
       ownedByYou: r['ownedByYou'] == true,
+      isMember: r['isMember'] == true,
       selfMemberId: r['selfMemberId'] as String?,
       headRev: (r['headRev'] as int?) ?? 0,
       kind: r['kind'] as String?,
@@ -186,6 +195,74 @@ class RestoreEngine {
     } on Object {
       throw const RestoreException('wrong-secret');
     }
+    return _restoreWith(
+      walletId: walletId,
+      uid: uid,
+      bmk: bmk,
+      kind: claim.kind,
+      selfMemberId: claim.selfMemberId!,
+      keyringRev: keyring['rev'] as int?,
+      credential: credential,
+      held: held,
+      allowStaleCheckpoint: allowStaleCheckpoint,
+    );
+  }
+
+  /// P10: Member Family tham gia ví — BMK đã được mở CỤC BỘ từ gói khoá Owner bọc cho
+  /// thiết bị này (không có keyring mật khẩu). Máy chủ phải xác nhận Account này là
+  /// Member ACTIVE của ví Family; `selfMemberId` là FinancialMember Owner đã gán (không
+  /// tạo thành viên mới). Còn lại giống hệt [restore]: ví MỚI, kiểm chứng trọn vẹn rồi
+  /// mới kích hoạt; BMK sai ⇒ mọi envelope mở thất bại ⇒ không tạo gì.
+  Future<RestoreResult> restoreAsFamilyMember({
+    required String walletId,
+    required Uint8List bmk,
+    bool allowStaleCheckpoint = false,
+  }) async {
+    if (env != AppEnvironment.dev) {
+      throw const RestoreException('blocked-environment');
+    }
+    final uid = session.accountId() ?? (throw const SessionFailure(true));
+    if (registry.byWalletId(walletId) != null) {
+      throw const RestoreException('wallet-already-present');
+    }
+    final held = await keyStore.load(uid);
+    if (held != null && held.walletId != walletId) {
+      throw const RestoreException('device-has-other-backup');
+    }
+    final credential = await session.credential();
+    final claim = await discover(walletId);
+    if (claim.ownedByYou ||
+        !claim.isMember ||
+        claim.kind != 'family' ||
+        claim.selfMemberId == null) {
+      throw const RestoreException('not-member');
+    }
+    return _restoreWith(
+      walletId: walletId,
+      uid: uid,
+      bmk: bmk,
+      kind: 'family',
+      selfMemberId: claim.selfMemberId!,
+      keyringRev: null,
+      credential: credential,
+      held: held,
+      allowStaleCheckpoint: allowStaleCheckpoint,
+      familyMember: true,
+    );
+  }
+
+  Future<RestoreResult> _restoreWith({
+    bool familyMember = false,
+    required String walletId,
+    required String uid,
+    required Uint8List bmk,
+    required String? kind,
+    required String selfMemberId,
+    required int? keyringRev,
+    required Map<String, dynamic> credential,
+    required ({String walletId, Uint8List bmk})? held,
+    required bool allowStaleCheckpoint,
+  }) async {
     final cipher = await EnvelopeCipher.create(bmk, walletId);
 
     // 2. Tải + xác thực mọi envelope (chưa ghi gì).
@@ -239,8 +316,7 @@ class RestoreEngine {
           'VALUES (1, ?, ?, ?)',
           [
             walletId,
-            (claim.kind == 'family' ? WalletKind.family : WalletKind.personal)
-                .name,
+            (kind == 'family' ? WalletKind.family : WalletKind.personal).name,
             manifest['walletCreatedAt'] ?? 0,
           ],
         );
@@ -266,12 +342,12 @@ class RestoreEngine {
               CloudBindingCompanion.insert(
                 walletId: walletId,
                 accountId: uid,
-                selfMemberId: claim.selfMemberId!,
+                selfMemberId: selfMemberId,
                 environment: env.name,
                 state: 'ACTIVE',
                 claimRequestId: const Value(null),
                 cryptoVersion: const Value(1),
-                keyringRev: Value(keyring['rev'] as int?),
+                keyringRev: Value(keyringRev),
                 updatedAt: DateTime.now(),
               ),
             );
@@ -308,12 +384,11 @@ class RestoreEngine {
       await registry.register(
         WalletRegistryEntry(
           walletId: walletId,
-          kind: claim.kind == 'family'
-              ? WalletKind.family
-              : WalletKind.personal,
+          kind: kind == 'family' ? WalletKind.family : WalletKind.personal,
           dbFileName: fileName,
           createdAt: DateTime.now(),
           boundAccountId: uid,
+          familyMember: familyMember,
         ),
         // Điểm commit: đăng ký + KÍCH HOẠT trong cùng 1 lần ghi registry — ví khôi
         // phục là ví đang hoạt động của máy (đăng xuất không đổi; ví bootstrap chỉ là

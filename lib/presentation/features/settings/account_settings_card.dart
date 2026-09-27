@@ -11,6 +11,7 @@ import '../../providers/app_lock_provider.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/session_provider.dart';
 import 'backup_controls.dart';
+import 'family_screen.dart';
 import 'restore_flow.dart';
 import 'wallet_backup_controls.dart';
 import '../../providers/sync_provider.dart';
@@ -171,6 +172,8 @@ class AccountSettingsCard extends ConsumerWidget {
               worker: ref.watch(syncWorkerProvider)!,
               backup: ref.watch(backupServiceProvider),
               stepUp: () => _stepUp(context, ref),
+              // P10: Member Family không có keyring/Recovery Key riêng — chỉ Owner.
+              ownerActions: !ref.watch(activeWalletIsFamilyMemberProvider),
               fallback: ref.watch(backupServiceProvider) == null
                   ? null
                   : BackupControls(
@@ -182,6 +185,17 @@ class AccountSettingsCard extends ConsumerWidget {
             if (ref.watch(restoreEngineProvider) != null)
               RestoreWalletButton(stepUp: () => _stepUp(context, ref)),
           ],
+          if (account != null && ref.watch(familyServiceProvider) != null)
+            TextButton(
+              key: const Key('family_entry'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      FamilyScreen(stepUp: () => _stepUp(context, ref)),
+                ),
+              ),
+              child: Text(SessionLocalizations.of(context)!.familyEntry),
+            ),
           if (account == null)
             SizedBox(
               width: double.infinity,

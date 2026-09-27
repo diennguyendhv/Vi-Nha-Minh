@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cryptography/dart.dart';
 import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:vi_nha_minh/core/config/app_environment.dart';
@@ -23,6 +24,12 @@ class FakeCloud {
   final memberships = <String, Map<String, Map<String, Object?>>>{};
   final entities = <String, Map<String, Map<String, Object?>>>{};
   final receipts = <String, Map<String, int>>{};
+  final receiptWriters = <String, String>{}; // '$walletId/$batchId' → uid
+
+  /// P10: email ĐÃ XÁC MINH của từng Account (máy chủ: token `email_verified`).
+  final emails = <String, String>{};
+  final invites = <String, Map<String, Object?>>{}; // token → invite
+  final familyIndex = <String, String>{}; // uid → walletId
   final log = <String>[];
   int pageSize = 200;
   bool offline = false;
@@ -40,6 +47,20 @@ class FakeCloud {
   Future<void> Function(int page)? beforePage;
   int _pages = 0;
   int _n = 0;
+
+  static const familyOps = {
+    'promoteToFamily',
+    'createFamilyInvite',
+    'cancelFamilyInvite',
+    'getFamilyInvite',
+    'acceptFamilyInvite',
+    'getFamilyMembers',
+    'putMemberKey',
+    'getMemberKey',
+    'registerMemberDeviceKey',
+    'getMyFamily',
+    'revokeFamilyMember',
+  };
 
   int get writes => log.where((l) => l.startsWith('putEncryptedBatch')).length;
 
@@ -76,10 +97,212 @@ class FakeCloud {
 
   String _access(String walletId, String uid) {
     final w = wallets[walletId];
-    if (w == null) _fail(true);
+    if (w == null) _fail(true, 'NOT_MEMBER');
     final m = memberships[walletId]?[uid];
-    if (m == null || m['status'] != 'ACTIVE') _fail(true);
+    if (m == null || m['status'] != 'ACTIVE') _fail(true, 'NOT_MEMBER');
     return w['ownerAccountId']! as String;
+  }
+
+  Map<String, Object?> _ownerWallet(String walletId, String uid) {
+    final w = wallets[walletId];
+    if (w == null) _fail(false, 'NOT_CLAIMED');
+    if (w['ownerAccountId'] != uid) _fail(true);
+    return w;
+  }
+
+  List<Map<String, Object?>> _active(String walletId) => [
+    for (final m
+        in memberships[walletId]?.values ?? const <Map<String, Object?>>[])
+      if (m['status'] == 'ACTIVE') m,
+  ];
+
+  static String _hex(List<int> b) =>
+      b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+
+  /// P10: mô phỏng các hàm Family của máy chủ (hợp đồng thật: functions/test/family.test.js).
+  Future<Map<String, dynamic>> _family(String op, Map<String, dynamic> d) async {
+    final uid = d['accountId'] as String;
+    final walletId = d['walletId'] as String?;
+    _authorize(d);
+    switch (op) {
+      case 'promoteToFamily':
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        final w = _ownerWallet(walletId!, uid);
+        final idem = w['kind'] == 'family';
+        w['kind'] = 'family';
+        return {'kind': 'family', 'idempotent': idem};
+      case 'createFamilyInvite':
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        final w = _ownerWallet(walletId!, uid);
+        final email = (d['inviteeEmail'] as String).trim().toLowerCase();
+        if (emails[uid] == email) _fail(false, 'SELF_INVITE');
+        if (w['kind'] != 'family') _fail(false, 'NOT_FAMILY');
+        if (d['memberId'] == w['selfMemberId']) _fail(false, 'OWNER_MEMBER');
+        final active = _active(walletId);
+        if (active.length >= 2) _fail(false, 'FAMILY_FULL');
+        if (active.any((m) => m['memberId'] == d['memberId'])) {
+          _fail(false, 'MEMBER_BOUND');
+        }
+        for (final i in invites.values) {
+          if (i['walletId'] == walletId && i['status'] == 'PENDING') {
+            i['status'] = 'SUPERSEDED';
+          }
+        }
+        final token = base64Url
+            .encode(BackupCrypto.randomBytes(32))
+            .replaceAll('=', '');
+        final expires = DateTime.now().add(const Duration(hours: 48));
+        invites[token] = {
+          'walletId': walletId,
+          'memberId': d['memberId'],
+          'email': email,
+          'status': 'PENDING',
+          'expiresAt': expires.millisecondsSinceEpoch,
+        };
+        return {'token': token, 'expiresAt': expires.millisecondsSinceEpoch};
+      case 'cancelFamilyInvite':
+        _ownerWallet(walletId!, uid);
+        var cancelled = false;
+        for (final i in invites.values) {
+          if (i['walletId'] == walletId && i['status'] == 'PENDING') {
+            i['status'] = 'CANCELLED';
+            cancelled = true;
+          }
+        }
+        return {'cancelled': cancelled};
+      case 'getFamilyInvite':
+      case 'acceptFamilyInvite':
+        final i = invites[d['token']];
+        if (i == null ||
+            i['status'] != 'PENDING' ||
+            (i['expiresAt']! as int) <= DateTime.now().millisecondsSinceEpoch ||
+            i['email'] != emails[uid]) {
+          _fail(false, 'INVITE_INVALID');
+        }
+        if (op == 'getFamilyInvite') {
+          return {
+            'walletId': i['walletId'],
+            'memberId': i['memberId'],
+            'expiresAt': i['expiresAt'],
+          };
+        }
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        final wid = i['walletId']! as String;
+        final w = wallets[wid]!;
+        if (w['ownerAccountId'] == uid) _fail(false, 'SELF_INVITE');
+        final active = _active(wid);
+        if (active.length >= 2) _fail(false, 'FAMILY_FULL');
+        if (active.any((m) => m['memberId'] == i['memberId'])) {
+          _fail(false, 'MEMBER_BOUND');
+        }
+        memberships[wid]![uid] = {
+          'accountId': uid,
+          'role': 'MEMBER',
+          'status': 'ACTIVE',
+          'memberId': i['memberId'],
+          'publicKey': d['publicKey'],
+          'keyInstallationId': d['installationId'],
+          'wrappedKey': null,
+        };
+        i['status'] = 'ACCEPTED';
+        familyIndex[uid] = wid;
+        return {
+          'walletId': wid,
+          'memberId': i['memberId'],
+          'ownerAccountId': w['ownerAccountId'],
+        };
+      case 'getFamilyMembers':
+        _access(walletId!, uid);
+        final w = wallets[walletId]!;
+        return {
+          'kind': w['kind'],
+          'ownerAccountId': w['ownerAccountId'],
+          'members': [
+            for (final MapEntry(key: acc, value: m)
+                in memberships[walletId]!.entries)
+              {
+                'accountId': acc,
+                'role': m['role'],
+                'status': m['status'],
+                'memberId': m['memberId'],
+                'publicKey': m['publicKey'],
+                'keyInstallationId': m['keyInstallationId'],
+                'hasKey': m['wrappedKey'] != null,
+              },
+          ],
+        };
+      case 'putMemberKey':
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        _ownerWallet(walletId!, uid);
+        final m = memberships[walletId]![d['memberAccountId']];
+        if (m == null || m['status'] != 'ACTIVE' || m['role'] != 'MEMBER') {
+          _fail(false, 'NOT_MEMBER');
+        }
+        final hash = _hex(
+          (await const DartSha256().hash(
+            base64.decode(m['publicKey']! as String),
+          )).bytes,
+        );
+        if (hash != d['publicKeyHash'] ||
+            m['keyInstallationId'] != d['keyInstallationId']) {
+          _fail(false, 'PUBLIC_KEY_CHANGED');
+        }
+        m['wrappedKey'] = d['wrapped'];
+        return {'shared': true};
+      case 'getMemberKey':
+        final m = memberships[walletId]?[uid];
+        if (m == null || m['status'] != 'ACTIVE' || m['role'] != 'MEMBER') {
+          _fail(true, 'NOT_MEMBER');
+        }
+        if (m['keyInstallationId'] != d['installationId']) {
+          _fail(false, 'KEY_DEVICE_MISMATCH');
+        }
+        if (m['wrappedKey'] == null) _fail(false, 'KEY_NOT_SHARED');
+        return {
+          'wrapped': m['wrappedKey'],
+          'memberId': m['memberId'],
+          'ownerAccountId': wallets[walletId]!['ownerAccountId'],
+          'keyInstallationId': m['keyInstallationId'],
+          'publicKey': m['publicKey'],
+        };
+      case 'registerMemberDeviceKey':
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        final m = memberships[walletId]?[uid];
+        if (m == null || m['status'] != 'ACTIVE' || m['role'] != 'MEMBER') {
+          _fail(true, 'NOT_MEMBER');
+        }
+        m
+          ..['publicKey'] = d['publicKey']
+          ..['keyInstallationId'] = d['installationId']
+          ..['wrappedKey'] = null;
+        return {'registered': true};
+      case 'getMyFamily':
+        final wid = familyIndex[uid];
+        final m = wid == null ? null : memberships[wid]?[uid];
+        if (m == null || m['status'] != 'ACTIVE') return {'member': false};
+        return {
+          'member': true,
+          'walletId': wid,
+          'memberId': m['memberId'],
+          'ownerAccountId': wallets[wid]!['ownerAccountId'],
+          'hasKey': m['wrappedKey'] != null,
+          'keyInstallationId': m['keyInstallationId'],
+        };
+      case 'revokeFamilyMember':
+        if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+        _ownerWallet(walletId!, uid);
+        final target = d['memberAccountId'] as String;
+        final m = memberships[walletId]![target];
+        if (m == null || m['role'] != 'MEMBER') _fail(false, 'NOT_MEMBER');
+        m
+          ..['status'] = 'REVOKED'
+          ..['wrappedKey'] = null
+          ..['publicKey'] = null
+          ..['keyInstallationId'] = null;
+        if (familyIndex[target] == walletId) familyIndex.remove(target);
+        return {'revoked': true};
+    }
+    throw StateError(op);
   }
 
   Future<Map<String, dynamic>> call(String op, Map<String, dynamic> raw) async {
@@ -88,6 +311,7 @@ class FakeCloud {
     if (offline) _fail(false);
     final uid = d['accountId'] as String;
     final walletId = d['walletId'] as String?;
+    if (familyOps.contains(op)) return _family(op, d);
     switch (op) {
       case 'putBackupKeyring':
         _authorize(d);
@@ -147,8 +371,21 @@ class FakeCloud {
         _authorize(d);
         final w = wallets[walletId];
         if (w == null) return {'claimed': false};
-        if (w['ownerAccountId'] != uid && memberships[walletId]?[uid] == null) {
+        final m = memberships[walletId]?[uid];
+        if (w['ownerAccountId'] != uid &&
+            (m == null || m['status'] != 'ACTIVE')) {
           return {'claimed': true, 'ownedByYou': false};
+        }
+        if (w['ownerAccountId'] != uid) {
+          return {
+            'claimed': true,
+            'ownedByYou': false,
+            'isMember': true,
+            'walletId': walletId,
+            'selfMemberId': m!['memberId'],
+            'kind': w['kind'],
+            'headRev': w['headRev'],
+          };
         }
         return {
           ...w,
@@ -170,6 +407,10 @@ class FakeCloud {
         final r = receipts.putIfAbsent(walletId, () => {});
         final batchId = d['batchId'] as String;
         if (r[batchId] != null) {
+          // Biên nhận chỉ cho ĐÚNG người ghi (máy chủ: BATCH_ID_CONFLICT).
+          if (receiptWriters['$walletId/$batchId'] != uid) {
+            _fail(false, 'BATCH_ID_CONFLICT');
+          }
           return {'headRev': r[batchId], 'duplicate': true};
         }
         final head = w['headRev']! as int;
@@ -193,6 +434,7 @@ class FakeCloud {
           store[e['id'] as String] = {...e, 'serverRev': headRev};
         }
         r[batchId] = headRev;
+        receiptWriters['$walletId/$batchId'] = uid;
         if (dropNextResponseAfterCommit) {
           dropNextResponseAfterCommit = false;
           _fail(false);
@@ -340,6 +582,9 @@ class FakeDevice {
       'secret': cloud.activate(uid),
     };
   }
+
+  /// Đăng xuất Firebase trên máy này (phiên P7.1 của Account vẫn nằm trên máy chủ).
+  void signOut() => account = null;
 
   /// Claim P8.2 (cục bộ + máy chủ) cho Account hiện tại.
   Future<void> claim({String? selfMemberId}) async {

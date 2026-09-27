@@ -7,6 +7,8 @@ import 'data/backup/backup_service.dart';
 import 'data/auth/firebase_bootstrap.dart';
 import 'data/auth/firebase_auth_repository.dart';
 import 'presentation/features/settings/sync_lifecycle_host.dart';
+import 'data/sync/remote_signal.dart';
+import 'presentation/providers/sync_provider.dart';
 import 'presentation/providers/session_provider.dart';
 import 'l10n/session_localizations.dart';
 import 'data/local/db_encryption/db_preflight.dart';
@@ -101,6 +103,13 @@ Future<void> main() async {
                   transport: authRepository.cloudSession!.transport,
                   keyStore: KeystoreBackupKeyStore(),
                 )
+              : null,
+        ),
+        // P10: tín hiệu FCM cho ví Family (chỉ khi Firebase + phiên cloud DEV có).
+        remoteChangeSignalProvider.overrideWithValue(
+          authRepository is FirebaseAuthRepository &&
+                  authRepository.cloudSession != null
+              ? FcmRemoteChangeSignal()
               : null,
         ),
         appLockPlatformProvider.overrideWithValue(lockPlatform),

@@ -202,4 +202,35 @@ void main() {
       expect(WalletDescriptor.legacyLocal.dbFileName, 'vi_nha_minh.sqlite');
     });
   });
+
+  test('P10: cờ Member/thu hồi bền qua JSON; thu hồi ⇒ ẩn với chính Account đó; mời lại ⇒ hiện', () async {
+    final file = File('${tmp.path}/wallet_registry.json');
+    final r1 = await WalletRegistry.load(FileWalletRegistryStorage(file));
+    await r1.ensureLegacyLocal(() async => 'legacy-id');
+    await r1.register(
+      WalletRegistryEntry(
+        walletId: 'fam',
+        kind: WalletKind.family,
+        dbFileName: 'wallet_fam.sqlite',
+        createdAt: DateTime.utc(2026, 9, 27),
+        boundAccountId: 'B',
+        familyMember: true,
+      ),
+      activate: true,
+    );
+    const b = WalletAccessScope.account('B');
+    expect(r1.resolveActive(b)!.walletId, 'fam');
+    await r1.setFamilyFlags('fam', accessRevoked: true);
+    final r2 = await WalletRegistry.load(FileWalletRegistryStorage(file));
+    final e = r2.byWalletId('fam')!;
+    expect((e.familyMember, e.accessRevoked, e.dbFileName), (true, true, 'wallet_fam.sqlite'));
+    expect(e.canOpen(b), isFalse);
+    expect(r2.resolveActive(b)!.walletId, 'legacy-id');
+    expect(r2.deniesAll(b), isFalse);
+    await r2.setFamilyFlags('fam', accessRevoked: false);
+    expect(r2.resolveActive(b)!.walletId, 'fam');
+    // Ví Family không mở khi đăng xuất / Account khác (khác Personal).
+    expect(e.canOpen(const WalletAccessScope.local()), isFalse);
+    expect(r2.byWalletId('fam')!.canOpen(const WalletAccessScope.account('Y')), isFalse);
+  });
 }

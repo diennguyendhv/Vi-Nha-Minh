@@ -58,6 +58,7 @@ dependencies:
   # SQLCipher build via hooks (see `hooks:` below). Pinned: the hook verifies
   # binaries against sha256 values shipped in this exact package version.
   sqlite3: 3.5.2
+  firebase_messaging: ^15.2.10
 
 dev_dependencies:
   flutter_test:

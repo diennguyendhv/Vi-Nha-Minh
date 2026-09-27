@@ -16,6 +16,11 @@ final walletRegistryProvider = Provider<WalletRegistry>(
   (ref) => WalletRegistry.inMemory(),
 );
 
+/// Tăng khi registry đổi TẠI CHỖ (P10: thành viên Family bị thu hồi / tham gia lại)
+/// để ví đang hoạt động + cổng truy cập được tính lại. Registry là object thường
+/// (không tự phát thông báo).
+final walletRegistryRevisionProvider = StateProvider<int>((ref) => 0);
+
 /// Phạm vi truy cập của phiên: chưa đăng nhập = cục bộ, đã đăng nhập = Account.
 /// CHỈ phụ thuộc uid — đổi tên/ảnh không làm đóng/mở lại DB. Đăng nhập KHÔNG tự
 /// claim/gắn ví: nó chỉ đổi tập ví ĐƯỢC PHÉP mở.
@@ -35,6 +40,7 @@ final selectedWalletIdProvider = StateProvider<String?>((ref) {
 
 /// Ví đang hoạt động (giải qua registry + phạm vi). Registry rỗng ⇒ ví cục bộ mặc định.
 final activeWalletProvider = Provider<WalletDescriptor>((ref) {
+  ref.watch(walletRegistryRevisionProvider);
   final scope = ref.watch(walletAccessScopeProvider);
   final entry = ref
       .watch(walletRegistryProvider)
@@ -50,6 +56,7 @@ final activeWalletProvider = Provider<WalletDescriptor>((ref) {
 /// mặc định (chính là ví của A) — app dựng màn "ví thuộc tài khoản khác" và không mở
 /// DB nào. Dữ liệu trên máy giữ nguyên (không xoá, không chuyển quyền).
 final walletAccessDeniedProvider = Provider<bool>((ref) {
+  ref.watch(walletRegistryRevisionProvider);
   final scope = ref.watch(walletAccessScopeProvider);
   return ref.watch(walletRegistryProvider).deniesAll(scope);
 });

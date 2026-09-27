@@ -682,6 +682,252 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'The Recovery Key was not replaced. Your Backup Password still works; try again.'**
   String get rotateRecoveryFailed;
+
+  /// No description provided for @familyEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Family (DEV)'**
+  String get familyEntry;
+
+  /// No description provided for @familyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Family'**
+  String get familyTitle;
+
+  /// No description provided for @familyPromote.
+  ///
+  /// In en, this message translates to:
+  /// **'Share with family'**
+  String get familyPromote;
+
+  /// No description provided for @familyPromoteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wallet becomes a Family Wallet in place: same Wallet, same data, same backup. You stay the Owner. Nothing is copied. Afterwards it is only visible while you are signed in.'**
+  String get familyPromoteBody;
+
+  /// No description provided for @familyPromoted.
+  ///
+  /// In en, this message translates to:
+  /// **'This Wallet is now a Family Wallet.'**
+  String get familyPromoted;
+
+  /// No description provided for @familyInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Share with your spouse'**
+  String get familyInvite;
+
+  /// No description provided for @familyInviteWho.
+  ///
+  /// In en, this message translates to:
+  /// **'Who will the invited account be in this Wallet?'**
+  String get familyInviteWho;
+
+  /// No description provided for @familyInviteEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Invited account email'**
+  String get familyInviteEmail;
+
+  /// No description provided for @familyInviteConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send this invitation?'**
+  String get familyInviteConfirmTitle;
+
+  /// No description provided for @familyInviteConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{email} will be able to see and edit this whole Wallet as {member} after accepting, once you confirm the security code.'**
+  String familyInviteConfirmBody(String email, String member);
+
+  /// No description provided for @familyInviteCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation code (single use, expires {time}). Send it to the invited person:'**
+  String familyInviteCode(String time);
+
+  /// No description provided for @familyInviteCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel invitation'**
+  String get familyInviteCancel;
+
+  /// No description provided for @familyCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get familyCopy;
+
+  /// No description provided for @familyCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get familyCopied;
+
+  /// No description provided for @familyOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner'**
+  String get familyOwner;
+
+  /// No description provided for @familyMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Member'**
+  String get familyMember;
+
+  /// No description provided for @familyRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoked'**
+  String get familyRevoked;
+
+  /// No description provided for @familyYou.
+  ///
+  /// In en, this message translates to:
+  /// **'(you)'**
+  String get familyYou;
+
+  /// No description provided for @familyAwaitingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted. Compare this security code with the invited person\'s screen:'**
+  String get familyAwaitingKey;
+
+  /// No description provided for @familyShareKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Codes match — share the Wallet key'**
+  String get familyShareKey;
+
+  /// No description provided for @familyKeyShared.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet key shared.'**
+  String get familyKeyShared;
+
+  /// No description provided for @familyRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get familyRevoke;
+
+  /// No description provided for @familyRevokeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The member immediately loses cloud access to this Wallet. Data already on their phone cannot be erased remotely.'**
+  String get familyRevokeBody;
+
+  /// No description provided for @familyWalletCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet code: {code}'**
+  String familyWalletCode(String code);
+
+  /// No description provided for @familyJoinTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join a Family Wallet'**
+  String get familyJoinTitle;
+
+  /// No description provided for @familyJoinCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation code'**
+  String get familyJoinCode;
+
+  /// No description provided for @familyJoinPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'View invitation'**
+  String get familyJoinPreview;
+
+  /// No description provided for @familyJoinInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation to a Family Wallet (expires {time}).'**
+  String familyJoinInvite(String time);
+
+  /// No description provided for @familyJoinAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get familyJoinAccept;
+
+  /// No description provided for @familyJoinFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Read this security code to the person who invited you: {code}'**
+  String familyJoinFingerprint(String code);
+
+  /// No description provided for @familyJoinCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Check and download the Wallet'**
+  String get familyJoinCheck;
+
+  /// No description provided for @familyJoinWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the Owner to confirm the security code.'**
+  String get familyJoinWaiting;
+
+  /// No description provided for @familyJoined.
+  ///
+  /// In en, this message translates to:
+  /// **'Family Wallet downloaded and verified.'**
+  String get familyJoined;
+
+  /// No description provided for @familyYouAre.
+  ///
+  /// In en, this message translates to:
+  /// **'You are a Member of this Family Wallet as {member}.'**
+  String familyYouAre(String member);
+
+  /// No description provided for @familyRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get familyRefresh;
+
+  /// No description provided for @familyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not complete. Nothing on this phone was changed.'**
+  String get familyFailed;
+
+  /// No description provided for @familyNeedsBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on encrypted backup for this Wallet first.'**
+  String get familyNeedsBackup;
+
+  /// No description provided for @familyNeedsClaim.
+  ///
+  /// In en, this message translates to:
+  /// **'Register this Wallet with your account first.'**
+  String get familyNeedsClaim;
+
+  /// No description provided for @familyNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Register this phone\'s key'**
+  String get familyNewDevice;
+
+  /// No description provided for @familyConflicts.
+  ///
+  /// In en, this message translates to:
+  /// **'Conflicts to review: {count}'**
+  String familyConflicts(int count);
+
+  /// No description provided for @familyOverdrawn.
+  ///
+  /// In en, this message translates to:
+  /// **'After syncing, {count} balance(s) went negative. Please review recent transactions.'**
+  String familyOverdrawn(int count);
 }
 
 class _SessionLocalizationsDelegate

@@ -12,6 +12,8 @@ import '../backup/backup_service.dart';
 import '../local/app_database.dart';
 import '../local/sync/cloud_binding_store.dart';
 import '../local/sync/sync_capture.dart';
+import '../repositories/local_transaction_repository.dart';
+import '../../domain/engine/financial_engine.dart';
 import 'entity_codec.dart';
 
 /// Đồng bộ không chạy (điều kiện chưa đủ) hoặc máy chủ từ chối. Outbox GIỮ NGUYÊN.
@@ -40,11 +42,17 @@ class PullReport {
     required this.conflicts,
     required this.headRev,
     required this.calls,
+    this.overdrawnPools = 0,
   });
   final int applied;
   final int conflicts;
   final int headRev;
   final int calls;
+
+  /// P10: sau khi gộp thay đổi của người ghi khác, số pool bị âm (vd 2 người cùng chi
+  /// từ 1 pool khi offline). Máy chủ không kiểm được (chỉ thấy ciphertext) ⇒ app phát
+  /// hiện và báo; KHÔNG tự sửa/gộp giao dịch.
+  final int overdrawnPools;
 }
 
 /// Thực thể đã giải mã + xác thực từ máy chủ.
@@ -77,6 +85,7 @@ class CloudSyncEngine {
     AppEnvironment? env,
     this.kdf = KdfParams.v1,
     this.batchSize = 99,
+    this.onMembershipLost,
   }) : _send = transport,
        env = env ?? AppEnvironment.current;
 
@@ -90,8 +99,15 @@ class CloudSyncEngine {
   /// Envelope thực thể mỗi batch (+1 manifest ≤ giới hạn 100 của máy chủ).
   final int batchSize;
 
+  /// P10: máy chủ báo Account này không (còn) là thành viên của ví (`NOT_MEMBER` — vd
+  /// Owner đã thu hồi Member). Nhận walletId; app ẩn ví khỏi UI thường. Không xoá gì.
+  final Future<void> Function(String walletId)? onMembershipLost;
+
   /// Số lời gọi mạng (đo đạc/test "không vòng lặp khi rảnh").
   int calls = 0;
+
+  /// P10: số pool âm sau lần kéo gần nhất có áp dụng thay đổi (UI cảnh báo).
+  int lastOverdrawnPools = 0;
 
   static const manifestKind = 'manifest';
   static const manifestId = 'manifest';
@@ -114,6 +130,10 @@ class CloudSyncEngine {
     } on SessionFailure catch (e) {
       if (CloudSession.revokedReasons.contains(e.reason)) {
         await session.handleRevoked();
+      }
+      final walletId = data['walletId'];
+      if (e.reason == 'NOT_MEMBER' && walletId is String) {
+        await onMembershipLost?.call(walletId);
       }
       rethrow;
     }
@@ -377,9 +397,12 @@ class CloudSyncEngine {
           )).toJson(),
       ];
       final seqs = [for (final r in snap.rows) r.seq];
+      // P10: 2 người ghi Family dùng CHUNG IDK và `seq` là bộ đếm CỤC BỘ ⇒ id batch
+      // phải gồm người ghi, nếu không batch của B có thể trùng id batch của A và bị
+      // máy chủ trả "đã lưu" (mất dữ liệu). Máy chủ cũng từ chối biên nhận khác người ghi.
       final batchId = await cipher.opaqueId(
         'batch',
-        '$head:${snap.manifest != null ? 1 : 0}:${seqs.join(',')}',
+        '$head:$writer:${snap.manifest != null ? 1 : 0}:${seqs.join(',')}',
       );
       final Map<String, dynamic> result;
       try {
@@ -488,6 +511,7 @@ class CloudSyncEngine {
     );
     var applied = 0;
     var conflicts = 0;
+    var overdrawn = 0;
     await withoutSyncCapture(db, () async {
       await db.customStatement('PRAGMA defer_foreign_keys = ON');
       for (final e in got.entities) {
@@ -545,6 +569,12 @@ class CloudSyncEngine {
         // gộp: huỷ toàn bộ lần kéo (rollback), cần người dùng xem lại.
         throw const CloudSyncException('dependency-conflict');
       }
+      if (applied > 0) {
+        final balances = computeAllPoolBalances(
+          await LocalTransactionRepository(db).allTransactions(),
+        );
+        overdrawn = balances.values.where((v) => v < 0).length;
+      }
       await _writeState(
         SyncStateCompanion(
           serverHeadRev: Value(got.throughRev),
@@ -552,11 +582,13 @@ class CloudSyncEngine {
         ),
       );
     });
+    if (applied > 0) lastOverdrawnPools = overdrawn;
     return PullReport(
       applied: applied,
       conflicts: conflicts,
       headRev: got.throughRev,
       calls: got.calls,
+      overdrawnPools: overdrawn,
     );
   }
 

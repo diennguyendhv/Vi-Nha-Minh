@@ -17,23 +17,29 @@ class WalletBackupStatus {
     required this.state,
     required this.pending,
     required this.headRev,
+    this.conflicts = 0,
   });
   final String? binding;
   final String? state;
   final int pending;
   final int? headRev;
 
+  /// P10: thay đổi cục bộ bị bản máy chủ thay thế, chờ người dùng xem lại.
+  final int conflicts;
+
   static const query =
       'SELECT (SELECT state FROM cloud_binding) AS b, '
       '(SELECT backup_state FROM sync_state) AS s, '
       '(SELECT server_head_rev FROM sync_state) AS h, '
-      '(SELECT COUNT(*) FROM sync_outbox) AS n';
+      '(SELECT COUNT(*) FROM sync_outbox) AS n, '
+      '(SELECT COUNT(*) FROM sync_conflicts WHERE resolved = 0) AS k';
 
   static WalletBackupStatus fromRow(QueryRow r) => WalletBackupStatus(
     binding: r.readNullable<String>('b'),
     state: r.readNullable<String>('s'),
     pending: r.read<int>('n'),
     headRev: r.readNullable<int>('h'),
+    conflicts: r.read<int>('k'),
   );
 
   static Future<WalletBackupStatus> read(AppDatabase db) async =>
@@ -52,6 +58,7 @@ class WalletBackupControls extends StatefulWidget {
     this.stepUp,
     this.fallback,
     this.status,
+    this.ownerActions = true,
   });
   final CloudSyncEngine engine;
   final SyncWorker worker;
@@ -60,6 +67,10 @@ class WalletBackupControls extends StatefulWidget {
   final BackupService? backup;
   final StepUp? stepUp;
   final Widget? fallback;
+
+  /// P10: `false` trên máy Member Family — ẩn đổi Mật khẩu sao lưu / tạo lại Recovery
+  /// Key (keyring thuộc Owner).
+  final bool ownerActions;
 
   /// Test: nguồn trạng thái thay cho Drift `watch` (stream Drift treo trong
   /// `flutter_test`). Mặc định theo dõi SQLite cục bộ.
@@ -95,7 +106,12 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
     return db
         .customSelect(
           WalletBackupStatus.query,
-          readsFrom: {db.cloudBinding, db.syncState, db.syncOutbox},
+          readsFrom: {
+            db.cloudBinding,
+            db.syncState,
+            db.syncOutbox,
+            db.syncConflicts,
+          },
         )
         .watchSingle()
         .map(WalletBackupStatus.fromRow);
@@ -245,6 +261,17 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
               style: const TextStyle(fontSize: 11.5),
             ),
           ],
+          if (s.conflicts > 0)
+            Text(
+              text.familyConflicts(s.conflicts),
+              key: const Key('wallet_backup_conflicts'),
+            ),
+          if (widget.engine.lastOverdrawnPools > 0)
+            Text(
+              text.familyOverdrawn(widget.engine.lastOverdrawnPools),
+              key: const Key('wallet_backup_overdrawn'),
+              style: const TextStyle(color: Colors.redAccent),
+            ),
           if (_result != null)
             Text(_result!, key: const Key('wallet_backup_result')),
           Wrap(
@@ -267,16 +294,17 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
                         }),
                   child: Text(text.walletBackupSyncNow),
                 ),
-                if (widget.backup != null)
+                if (widget.backup != null && widget.ownerActions)
                   TextButton(
                     onPressed: _busy ? null : () => _run(_changePassword),
                     child: Text(text.backupChangePassword),
                   ),
-                TextButton(
-                  key: const Key('rotate_recovery_key'),
-                  onPressed: _busy ? null : () => _run(_rotateRecovery),
-                  child: Text(text.rotateRecoveryAction),
-                ),
+                if (widget.ownerActions)
+                  TextButton(
+                    key: const Key('rotate_recovery_key'),
+                    onPressed: _busy ? null : () => _run(_rotateRecovery),
+                    child: Text(text.rotateRecoveryAction),
+                  ),
               ],
             ],
           ),

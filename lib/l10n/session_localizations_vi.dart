@@ -350,4 +350,148 @@ class SessionLocalizationsVi extends SessionLocalizations {
   @override
   String get rotateRecoveryFailed =>
       'Chưa thay được Recovery Key. Mật khẩu sao lưu vẫn dùng được; hãy thử lại.';
+
+  @override
+  String get familyEntry => 'Gia đình (DEV)';
+
+  @override
+  String get familyTitle => 'Gia đình';
+
+  @override
+  String get familyPromote => 'Chia sẻ với gia đình';
+
+  @override
+  String get familyPromoteBody =>
+      'Ví này trở thành Ví gia đình ngay tại chỗ: cùng ví, cùng dữ liệu, cùng bản sao lưu. Bạn vẫn là Chủ ví. Không sao chép gì. Sau đó ví chỉ hiện khi bạn đang đăng nhập.';
+
+  @override
+  String get familyPromoted => 'Ví này đã là Ví gia đình.';
+
+  @override
+  String get familyInvite => 'Chia sẻ với vợ/chồng';
+
+  @override
+  String get familyInviteWho => 'Tài khoản được mời là ai trong ví này?';
+
+  @override
+  String get familyInviteEmail => 'Email tài khoản được mời';
+
+  @override
+  String get familyInviteConfirmTitle => 'Gửi lời mời này?';
+
+  @override
+  String familyInviteConfirmBody(String email, String member) {
+    return 'Sau khi chấp nhận và bạn xác nhận mã bảo mật, $email sẽ xem và sửa được toàn bộ ví này với tư cách $member.';
+  }
+
+  @override
+  String familyInviteCode(String time) {
+    return 'Mã mời (dùng 1 lần, hết hạn $time). Gửi mã này cho người được mời:';
+  }
+
+  @override
+  String get familyInviteCancel => 'Huỷ lời mời';
+
+  @override
+  String get familyCopy => 'Sao chép';
+
+  @override
+  String get familyCopied => 'Đã sao chép';
+
+  @override
+  String get familyOwner => 'Chủ ví';
+
+  @override
+  String get familyMember => 'Thành viên';
+
+  @override
+  String get familyRevoked => 'Đã thu hồi';
+
+  @override
+  String get familyYou => '(bạn)';
+
+  @override
+  String get familyAwaitingKey =>
+      'Đã chấp nhận. Đối chiếu mã bảo mật này với màn hình của người được mời:';
+
+  @override
+  String get familyShareKey => 'Mã khớp — chia sẻ khoá ví';
+
+  @override
+  String get familyKeyShared => 'Đã chia sẻ khoá ví.';
+
+  @override
+  String get familyRevoke => 'Thu hồi';
+
+  @override
+  String get familyRevokeBody =>
+      'Thành viên mất quyền truy cập cloud của ví ngay lập tức. Dữ liệu đã có trên máy của họ không thể xoá từ xa.';
+
+  @override
+  String familyWalletCode(String code) {
+    return 'Mã ví: $code';
+  }
+
+  @override
+  String get familyJoinTitle => 'Tham gia Ví gia đình';
+
+  @override
+  String get familyJoinCode => 'Mã mời';
+
+  @override
+  String get familyJoinPreview => 'Xem lời mời';
+
+  @override
+  String familyJoinInvite(String time) {
+    return 'Lời mời tham gia Ví gia đình (hết hạn $time).';
+  }
+
+  @override
+  String get familyJoinAccept => 'Chấp nhận';
+
+  @override
+  String familyJoinFingerprint(String code) {
+    return 'Đọc mã bảo mật này cho người đã mời bạn: $code';
+  }
+
+  @override
+  String get familyJoinCheck => 'Kiểm tra và tải ví';
+
+  @override
+  String get familyJoinWaiting => 'Đang chờ Chủ ví xác nhận mã bảo mật.';
+
+  @override
+  String get familyJoined => 'Đã tải và kiểm chứng Ví gia đình.';
+
+  @override
+  String familyYouAre(String member) {
+    return 'Bạn là Thành viên của Ví gia đình này với tư cách $member.';
+  }
+
+  @override
+  String get familyRefresh => 'Làm mới';
+
+  @override
+  String get familyFailed =>
+      'Chưa thực hiện được. Không có gì trên máy này bị thay đổi.';
+
+  @override
+  String get familyNeedsBackup => 'Hãy bật sao lưu mã hoá cho ví này trước.';
+
+  @override
+  String get familyNeedsClaim =>
+      'Hãy đăng ký ví này với tài khoản của bạn trước.';
+
+  @override
+  String get familyNewDevice => 'Đăng ký khoá của máy này';
+
+  @override
+  String familyConflicts(int count) {
+    return 'Xung đột cần xem lại: $count';
+  }
+
+  @override
+  String familyOverdrawn(int count) {
+    return 'Sau khi đồng bộ, $count số dư bị âm. Hãy xem lại các giao dịch gần đây.';
+  }
 }

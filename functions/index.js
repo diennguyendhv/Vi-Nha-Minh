@@ -3,6 +3,7 @@ const {randomBytes, createHash, timingSafeEqual} = require('node:crypto');
 const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp} = require('firebase-admin/firestore');
 const {onCall, HttpsError} = require('firebase-functions/v2/https');
+const {getMessaging} = require('firebase-admin/messaging');
 initializeApp();
 const db = getFirestore();
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -428,10 +429,11 @@ async function walletAccess(tx, walletRef, uid) {
     if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
     return {wallet, keyringOwner: uid};
   }
-  if (wallet.state !== 'CLAIMED') throw new HttpsError('permission-denied', 'Not a member');
+  if (wallet.state !== 'CLAIMED') throw reject('permission-denied', 'NOT_MEMBER', 'Not a member');
   const membership = (await tx.get(walletRef.collection('memberships').doc(uid))).data();
   if (!membership || membership.status !== 'ACTIVE' || membership.accountId !== uid) {
-    throw new HttpsError('permission-denied', 'Not a member');
+    // Revoked / never a member: uniform reason (the session itself is fine).
+    throw reject('permission-denied', 'NOT_MEMBER', 'Not a member');
   }
   return {wallet, membership, keyringOwner: wallet.ownerAccountId};
 }
@@ -468,7 +470,14 @@ exports.putEncryptedBatch = onCall(options, async request => {
     }
     if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
     if (!wallet && data.fixture !== true) throw reject('failed-precondition', 'FIXTURE_ONLY');
-    if (receipt) return {headRev: receipt.headRev, duplicate: true};
+    if (receipt) {
+      // Receipt only for the SAME writer (legacy receipts: the owner). Another
+      // Family writer with an equal id must never be told its batch is stored.
+      if ((receipt.by ?? wallet?.ownerAccountId ?? uid) !== uid) {
+        throw reject('aborted', 'BATCH_ID_CONFLICT');
+      }
+      return {headRev: receipt.headRev, duplicate: true};
+    }
     const head = wallet?.headRev ?? 0;
     if (head !== data.baseHeadRev) throw reject('aborted', 'HEAD_MOVED');
     envelopes.forEach((e, i) => {
@@ -486,10 +495,40 @@ exports.putEncryptedBatch = onCall(options, async request => {
       : {ownerAccountId: uid, cryptoVersion: 1, fixture: true, headRev, updatedAt: now},
     {merge: true});
     envelopes.forEach((e, i) => tx.set(entityRefs[i], {...e, serverRev: headRev}));
-    tx.set(receiptRef, {headRev, count: envelopes.length, at: now});
-    return {headRev, duplicate: false};
+    tx.set(receiptRef, {headRev, count: envelopes.length, at: now, by: uid});
+    return {headRev, duplicate: false, family: wallet?.kind === 'family'};
+  }).then(async ({family, ...result}) => {
+    if (family && !result.duplicate) await signalOtherMembers(walletRef, uid);
+    return result;
   });
 });
+
+/**
+ * P10 remote-change signal: after a committed Family batch, a data-only FCM
+ * message `{t: 'head'}` to every OTHER active member device that registered a
+ * token. No walletId, entity, amount or text — it only means "the cloud head
+ * may have moved"; the device then pulls with its own session. Best effort:
+ * failures never fail the write; dead tokens are dropped.
+ */
+async function signalOtherMembers(walletRef, writerUid) {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') return; // no FCM in the emulator
+  try {
+    const members = await walletRef.collection('memberships').where('status', '==', 'ACTIVE').get();
+    await Promise.allSettled(members.docs.map(async d => {
+      const m = d.data();
+      if (m.accountId === writerUid || typeof m.signalToken !== 'string') return;
+      try {
+        await getMessaging().send({token: m.signalToken, data: {t: 'head'},
+          android: {priority: 'high', collapseKey: 'hw-head', ttl: 6 * 60 * 60 * 1000}});
+      } catch (error) {
+        if (['messaging/registration-token-not-registered', 'messaging/invalid-argument']
+          .includes(error?.code)) {
+          await d.ref.update({signalToken: null, signalInstallationId: null});
+        }
+      }
+    }));
+  } catch (_) { /* best effort */ }
+}
 const MAX_PAGE = 200;
 /**
  * Envelopes with serverRev > sinceRev. Pages end on a WHOLE batch boundary
@@ -708,6 +747,11 @@ exports.abandonClaim = onCall(options, async request => {
 // Owner wraps the wallet BMK to the Member device's X25519 public key on the
 // client; the server stores only public keys and wrapped blobs (no decryption
 // key ever reaches it). All authorization is P7.1-session gated, one tx each.
+// The device key is bound to ONE installation (`keyInstallationId`, recorded
+// from the accepting P7.1 session): the Owner's wrap binds walletId, recipient
+// uid, memberId, installation and public key into its AEAD context, and the
+// Owner only wraps after comparing a fingerprint of exactly that tuple with the
+// Member's screen — the server cannot silently substitute a recipient.
 // ---------------------------------------------------------------------------
 const FAMILY_INVITE_MS = 48 * 60 * 60 * 1000;
 const MAX_FAMILY_ACCOUNTS = 2;
@@ -848,11 +892,13 @@ exports.acceptFamilyInvite = onCall(options, async request => {
     if (active.some(m => m.memberId === invite.memberId)) throw reject('failed-precondition', 'MEMBER_BOUND');
     const now = Timestamp.now();
     tx.set(membershipRef, {accountId: uid, role: 'MEMBER', status: 'ACTIVE',
-      memberId: invite.memberId, publicKey: data.publicKey, createdAt: now});
+      memberId: invite.memberId, publicKey: data.publicKey,
+      keyInstallationId: data.installationId, wrappedKey: null, createdAt: now});
     tx.update(doc, {status: 'ACCEPTED', acceptedBy: uid, acceptedAt: now});
     tx.update(walletRef, {pendingInviteId: null});
     tx.set(indexRef, {walletId: invite.walletId, createdAt: now});
-    return {walletId: invite.walletId, memberId: invite.memberId};
+    return {walletId: invite.walletId, memberId: invite.memberId,
+      ownerAccountId: wallet.ownerAccountId};
   });
 });
 
@@ -887,7 +933,7 @@ exports.getFamilyMembers = onCall(options, async request => {
     return {kind: wallet.kind ?? null, ownerAccountId: wallet.ownerAccountId,
       members: all.docs.map(d => d.data()).map(m => ({accountId: m.accountId, role: m.role,
         status: m.status, memberId: m.memberId, publicKey: m.publicKey ?? null,
-        hasKey: Boolean(m.wrappedKey)}))};
+        keyInstallationId: m.keyInstallationId ?? null, hasKey: Boolean(m.wrappedKey)}))};
   }, {readOnly: true});
 });
 
@@ -901,10 +947,11 @@ function validWrapped(w) {
  */
 exports.putMemberKey = onCall(options, async request => {
   const {data, uid, ref} = context(request);
-  onlyFields(data, ['walletId', 'memberAccountId', 'publicKeyHash', 'wrapped']);
+  onlyFields(data, ['walletId', 'memberAccountId', 'publicKeyHash', 'keyInstallationId', 'wrapped']);
   if (!validWalletId(data.walletId) || typeof data.memberAccountId !== 'string' ||
       data.memberAccountId.length < 1 || data.memberAccountId.length > 128 ||
       typeof data.publicKeyHash !== 'string' || !/^[0-9a-f]{64}$/.test(data.publicKeyHash) ||
+      typeof data.keyInstallationId !== 'string' || !uuid.test(data.keyInstallationId) ||
       !validWrapped(data.wrapped)) {
     throw new HttpsError('invalid-argument', 'Invalid request');
   }
@@ -915,7 +962,8 @@ exports.putMemberKey = onCall(options, async request => {
     const mRef = walletRef.collection('memberships').doc(data.memberAccountId);
     const m = (await tx.get(mRef)).data();
     if (!m || m.status !== 'ACTIVE' || m.role !== 'MEMBER') throw reject('failed-precondition', 'NOT_MEMBER');
-    if (hash(Buffer.from(m.publicKey, 'base64')) !== data.publicKeyHash) {
+    if (hash(Buffer.from(m.publicKey, 'base64')) !== data.publicKeyHash ||
+        m.keyInstallationId !== data.keyInstallationId) {
       throw reject('failed-precondition', 'PUBLIC_KEY_CHANGED');
     }
     tx.update(mRef, {wrappedKey: data.wrapped, keySharedAt: Timestamp.now()});
@@ -929,10 +977,81 @@ exports.getMemberKey = onCall(options, async request => {
   onlyFields(data, ['walletId']);
   if (!validWalletId(data.walletId)) throw new HttpsError('invalid-argument', 'Invalid request');
   authorize((await ref.get()).data(), data);
-  const m = (await db.doc(`wallets/${data.walletId}/memberships/${uid}`).get()).data();
-  if (!m || m.status !== 'ACTIVE') throw new HttpsError('permission-denied', 'Not a member');
+  const walletRef = db.doc(`wallets/${data.walletId}`);
+  const [w, m] = (await Promise.all([walletRef.get(), walletRef.collection('memberships').doc(uid).get()]))
+    .map(d => d.data());
+  if (!w || !m || m.status !== 'ACTIVE' || m.role !== 'MEMBER') {
+    throw reject('permission-denied', 'NOT_MEMBER', 'Not a member');
+  }
+  // The package is wrapped to ONE installation's key: another device of the
+  // same Account must register its own key first (registerMemberDeviceKey).
+  if (m.keyInstallationId !== data.installationId) throw reject('failed-precondition', 'KEY_DEVICE_MISMATCH');
   if (!m.wrappedKey) throw reject('failed-precondition', 'KEY_NOT_SHARED');
-  return {wrapped: m.wrappedKey, memberId: m.memberId};
+  return {wrapped: m.wrappedKey, memberId: m.memberId, ownerAccountId: w.ownerAccountId,
+    keyInstallationId: m.keyInstallationId, publicKey: m.publicKey};
+});
+
+/**
+ * Active Member on a NEW installation (after P7.1 takeover): registers this
+ * device's public key. The old wrapped package is dropped; the Owner must verify
+ * the new fingerprint and wrap again. Recent sign-in required.
+ */
+exports.registerMemberDeviceKey = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId', 'publicKey']);
+  if (!validWalletId(data.walletId) || !validPublicKey(data.publicKey)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  requireRecentAuth(request);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    const mRef = db.doc(`wallets/${data.walletId}/memberships/${uid}`);
+    const m = (await tx.get(mRef)).data();
+    if (!m || m.status !== 'ACTIVE' || m.role !== 'MEMBER') {
+      throw reject('permission-denied', 'NOT_MEMBER', 'Not a member');
+    }
+    tx.update(mRef, {publicKey: data.publicKey, keyInstallationId: data.installationId,
+      wrappedKey: null, keyRegisteredAt: Timestamp.now()});
+    return {registered: true};
+  });
+});
+
+const fcmToken = /^[A-Za-z0-9_:.-]{20,4096}$/;
+/**
+ * A member device (Owner or Member) registers its FCM token for remote-change
+ * signals of this wallet. Current P7.1 session + ACTIVE membership; the token
+ * is bound to the session installation (another installation replaces it).
+ */
+exports.registerSyncSignal = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, ['walletId', 'token']);
+  if (!validWalletId(data.walletId) || typeof data.token !== 'string' || !fcmToken.test(data.token)) {
+    throw new HttpsError('invalid-argument', 'Invalid request');
+  }
+  const walletRef = db.doc(`wallets/${data.walletId}`);
+  return db.runTransaction(async tx => {
+    authorize((await tx.get(ref)).data(), data);
+    await walletAccess(tx, walletRef, uid);
+    tx.update(walletRef.collection('memberships').doc(uid),
+      {signalToken: data.token, signalInstallationId: data.installationId});
+    return {registered: true};
+  });
+});
+
+/** The caller's own Family membership (Member side), from its account index. */
+exports.getMyFamily = onCall(options, async request => {
+  const {data, uid, ref} = context(request);
+  onlyFields(data, []);
+  authorize((await ref.get()).data(), data);
+  const index = (await db.doc(`accounts/${uid}/walletIndex/family`).get()).data();
+  if (!index) return {member: false};
+  const walletRef = db.doc(`wallets/${index.walletId}`);
+  const [w, m] = (await Promise.all([walletRef.get(), walletRef.collection('memberships').doc(uid).get()]))
+    .map(d => d.data());
+  if (!w || !m || m.status !== 'ACTIVE') return {member: false};
+  return {member: true, walletId: index.walletId, memberId: m.memberId,
+    ownerAccountId: w.ownerAccountId, hasKey: Boolean(m.wrappedKey),
+    keyInstallationId: m.keyInstallationId ?? null};
 });
 
 /** Owner revokes the Member: future cloud access stops immediately. */
@@ -951,7 +1070,9 @@ exports.revokeFamilyMember = onCall(options, async request => {
     if (!m || m.role !== 'MEMBER') throw reject('failed-precondition', 'NOT_MEMBER');
     const indexRef = db.doc(`accounts/${data.memberAccountId}/walletIndex/family`);
     const index = (await tx.get(indexRef)).data();
-    tx.update(mRef, {status: 'REVOKED', wrappedKey: null, revokedAt: Timestamp.now()});
+    tx.update(mRef, {status: 'REVOKED', wrappedKey: null, publicKey: null,
+      keyInstallationId: null, signalToken: null, signalInstallationId: null,
+      revokedAt: Timestamp.now()});
     if (index?.walletId === data.walletId) tx.delete(indexRef);
     return {revoked: true};
   });
