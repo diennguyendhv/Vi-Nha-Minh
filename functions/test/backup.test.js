@@ -23,7 +23,8 @@ async function call(name, user, data) {
   const response = await fetch(`http://127.0.0.1:5001/${project}/us-central1/${name}`, {
     method: 'POST', headers: {'Content-Type': 'application/json',
       ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
-    body: JSON.stringify({data}),
+    body: JSON.stringify({data: data && typeof data === 'object' && !Array.isArray(data)
+      ? {clientEnv: 'dev', ...data} : data}),
   });
   return response.json();
 }
@@ -204,4 +205,35 @@ test('Rules stay deny-all for direct client access', async () => {
     headers: {Authorization: `Bearer ${user.idToken}`, 'Content-Type': 'application/json'},
     body: JSON.stringify({fields: {c: {stringValue: 'x'}}})});
   assert.equal(write.status, 403);
+});
+
+// 2026-09-27: one Firebase project = PRODUCTION. Accident guards.
+test('clientEnv: missing or other-environment client is refused before anything runs', async () => {
+  const user = await account();
+  const raw = async data => (await fetch(`http://127.0.0.1:5001/${project}/us-central1/activateSession`, {
+    method: 'POST', headers: {'Content-Type': 'application/json', Authorization: `Bearer ${user.idToken}`},
+    body: JSON.stringify({data}),
+  })).json();
+  const base = {accountId: user.localId, installationId: randomUUID(), confirm: true};
+  reason(await raw(base), 'CLIENT_ENVIRONMENT');
+  reason(await raw({...base, clientEnv: 'prod'}), 'CLIENT_ENVIRONMENT');
+  assert.equal((await db.doc(`accounts/${user.localId}/session/current`).get()).exists, false);
+  ok(await raw({...base, clientEnv: 'dev'}));
+});
+
+test('wallet claimed by ANOTHER environment is frozen: no ciphertext, not offered for restore', async () => {
+  const {user, cred, walletId, proofs} = await claimed();
+  ok(await call('putBackupKeyring', user, keyring(cred, walletId, proofs)));
+  ok(await call('enableBackup', user, {...cred, walletId}));
+  ok(await call('putEncryptedBatch', user, batch(cred, walletId, 0, [env(1)], {checkpoint: true})));
+  assert.deepEqual(ok(await call('listBackupWallets', user, {...cred})).walletIds, [walletId]);
+  // Same document as if it had been claimed while the project served another environment.
+  await db.doc(`wallets/${walletId}`).update({environment: 'legacy-other'});
+  reason(await call('getEncryptedChanges', user, {...cred, walletId, sinceRev: 0}), 'ENVIRONMENT_MISMATCH');
+  reason(await call('putEncryptedBatch', user, batch(cred, walletId, 1, [env(1)])), 'ENVIRONMENT_MISMATCH');
+  reason(await call('enableBackup', user, {...cred, walletId}), 'ENVIRONMENT_MISMATCH');
+  reason(await call('promoteToFamily', user, {...cred, walletId}), 'ENVIRONMENT_MISMATCH');
+  assert.deepEqual(ok(await call('listBackupWallets', user, {...cred})).walletIds, []);
+  // Frozen, not deleted: the ciphertext is still there.
+  assert.equal((await db.collection(`wallets/${walletId}/entities`).get()).size, 1);
 });

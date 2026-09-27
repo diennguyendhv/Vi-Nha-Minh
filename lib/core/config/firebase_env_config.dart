@@ -12,6 +12,7 @@ class FirebaseEnvConfig {
     required this.messagingSenderId,
     required this.projectId,
     required this.googleServerClientId,
+    this.emulatorHost = '',
   });
 
   final String envName;
@@ -23,6 +24,14 @@ class FirebaseEnvConfig {
   /// OAuth *Web* client ID của dự án Firebase (dùng để lấy idToken cho FirebaseAuth).
   final String googleServerClientId;
 
+  /// Host của Firebase Emulator Suite (vd `10.0.2.2` từ AVD). Rỗng = cloud thật.
+  final String emulatorHost;
+
+  /// Trỏ tới Emulator Suite: có host VÀ project `demo-*` (Firebase quy ước project
+  /// `demo-` không bao giờ chạm tài nguyên thật).
+  bool get isEmulator =>
+      emulatorHost.isNotEmpty && projectId.startsWith('demo-');
+
   /// Đọc từ `--dart-define`. Phải là const-evaluated ở đây (String.fromEnvironment).
   static const FirebaseEnvConfig fromDartDefine = FirebaseEnvConfig(
     envName: String.fromEnvironment('APP_ENV'),
@@ -31,6 +40,7 @@ class FirebaseEnvConfig {
     messagingSenderId: String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID'),
     projectId: String.fromEnvironment('FIREBASE_PROJECT_ID'),
     googleServerClientId: String.fromEnvironment('GOOGLE_SERVER_CLIENT_ID'),
+    emulatorHost: String.fromEnvironment('FIREBASE_EMULATOR_HOST'),
   );
 
   static bool _placeholder(String v) =>
@@ -40,8 +50,13 @@ class FirebaseEnvConfig {
   /// build (DEV không thể vô tình khởi tạo cấu hình PROD, và ngược lại).
   bool isUsableFor(AppEnvironment env) =>
       envName == env.flavor &&
-      ![apiKey, appId, messagingSenderId, projectId, googleServerClientId]
-          .any(_placeholder);
+      ![
+        apiKey,
+        appId,
+        messagingSenderId,
+        projectId,
+        googleServerClientId,
+      ].any(_placeholder);
 
   bool get isUsable => isUsableFor(AppEnvironment.current);
 }

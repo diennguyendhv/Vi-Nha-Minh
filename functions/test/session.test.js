@@ -30,7 +30,8 @@ async function call(name, user, data) {
   const response = await fetch(`http://127.0.0.1:5001/${project}/us-central1/${name}`, {
     method: 'POST', headers: {'Content-Type': 'application/json',
       ...(user ? {Authorization: `Bearer ${user.idToken}`} : {})},
-    body: JSON.stringify({data}),
+    body: JSON.stringify({data: data && typeof data === 'object' && !Array.isArray(data)
+      ? {clientEnv: 'dev', ...data} : data}),
   });
   return response.json();
 }

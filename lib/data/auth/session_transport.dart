@@ -3,15 +3,40 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../core/config/app_environment.dart';
 import '../../domain/auth/cloud_session.dart';
 
 /// Firebase callable wire protocol over HTTPS. Only fixed session/backup
 /// endpoints. Backup endpoints carry wrapped keys and ciphertext envelopes only
 /// (never plaintext financial payloads); no retries, outbox or request logging.
 class SessionTransportClient {
-  SessionTransportClient(this.auth, this.projectId);
+  SessionTransportClient(
+    this.auth,
+    this.projectId, {
+    required this.environment,
+    this.emulatorHost,
+  });
   final FirebaseAuth auth;
   final String projectId;
+
+  /// Gửi kèm mọi lời gọi (`clientEnv`); máy chủ từ chối nếu khác môi trường của nó.
+  final AppEnvironment environment;
+
+  /// Firebase Emulator Suite (chỉ project `demo-*`); null = cloud thật.
+  final String? emulatorHost;
+
+  /// DEV chỉ được gọi emulator — chặn lần 2 ngay tại transport (lần 1: bootstrap).
+  static bool targetAllowed(
+    AppEnvironment environment,
+    String projectId,
+    String? emulatorHost,
+  ) => environment == AppEnvironment.dev
+      ? emulatorHost != null && projectId.startsWith('demo-')
+      : emulatorHost == null;
+
+  Uri endpoint(String operation) => emulatorHost == null
+      ? Uri.https('us-central1-$projectId.cloudfunctions.net', '/$operation')
+      : Uri.http('$emulatorHost:5001', '/$projectId/us-central1/$operation');
   static const operations = {
     'activateSession',
     'protectedPing',
@@ -52,7 +77,8 @@ class SessionTransportClient {
     String operation,
     Map<String, dynamic> data,
   ) async {
-    if (!operations.contains(operation)) {
+    if (!operations.contains(operation) ||
+        !targetAllowed(environment, projectId, emulatorHost)) {
       throw const SessionFailure(true);
     }
     final http = HttpClient()..connectionTimeout = const Duration(seconds: 10);
@@ -65,12 +91,14 @@ class SessionTransportClient {
         const Duration(seconds: 10),
       );
       if (token == null) throw const SessionFailure(true);
-      final request = await http.postUrl(
-        Uri.https('us-central1-$projectId.cloudfunctions.net', '/$operation'),
-      );
+      final request = await http.postUrl(endpoint(operation));
       request.headers.contentType = ContentType.json;
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
-      request.write(jsonEncode({'data': data}));
+      request.write(
+        jsonEncode({
+          'data': {...data, 'clientEnv': environment.flavor},
+        }),
+      );
       final response = await request.close().timeout(
         const Duration(seconds: 15),
       );

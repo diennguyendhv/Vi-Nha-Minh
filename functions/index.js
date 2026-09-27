@@ -4,7 +4,7 @@ const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp} = require('firebase-admin/firestore');
 const {onCall, HttpsError} = require('firebase-functions/v2/https');
 const {getMessaging} = require('firebase-admin/messaging');
-const {serverEnvironment, fixturesAllowed} = require('./env');
+const {serverEnvironment, fixturesAllowed, sameEnvironment} = require('./env');
 initializeApp();
 const db = getFirestore();
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -30,14 +30,19 @@ const sameHash = (value, expectedHex) =>
 
 function context(request) {
   // Only explicitly listed projects are served (env.js); emulator = demo project.
-  if (!serverEnvironment()) {
+  const environment = serverEnvironment();
+  if (!environment) {
     throw new HttpsError('failed-precondition', 'Session service disabled');
   }
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
-  const data = request.data;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+  if (!request.data || typeof request.data !== 'object' || Array.isArray(request.data)) {
     throw new HttpsError('invalid-argument', 'Invalid request');
   }
+  // Accident guard (not authentication): every client declares its build
+  // environment; a DEV build — or any older build that predates this field —
+  // can never mutate the production cloud. Stripped before per-op validation.
+  const {clientEnv, ...data} = request.data;
+  if (clientEnv !== environment) throw reject('failed-precondition', 'CLIENT_ENVIRONMENT');
   if (data.accountId !== request.auth.uid) {
     throw new HttpsError('permission-denied', 'Account mismatch');
   }
@@ -412,7 +417,14 @@ exports.listBackupWallets = onCall(options, async request => {
   if (data.secret !== undefined) authorize((await ref.get()).data(), data);
   else requireRecentAuth(request);
   const snapshot = await db.collection(`accounts/${uid}/backupKeyrings`).select().limit(20).get();
-  return {walletIds: snapshot.docs.map(d => d.id)};
+  // Only wallets this environment serves: a keyring of a frozen other-environment
+  // wallet or (outside DEV) of a pre-claim fixture is never offered for restore.
+  const environment = serverEnvironment();
+  const wallets = await Promise.all(snapshot.docs.map(d => db.doc(`wallets/${d.id}`).get()));
+  return {walletIds: snapshot.docs.map(d => d.id).filter((id, i) => {
+    const w = wallets[i].data();
+    return w?.state === 'CLAIMED' ? w.environment === environment : fixturesAllowed(environment);
+  })};
 });
 function validEnvelope(e) {
   // Generic encrypted object: entity kind, amounts, names and local ids are
@@ -429,6 +441,9 @@ function validEnvelope(e) {
  */
 async function walletAccess(tx, walletRef, uid) {
   const wallet = (await tx.get(walletRef)).data();
+  if (!sameEnvironment(wallet, serverEnvironment())) {
+    throw reject('failed-precondition', 'ENVIRONMENT_MISMATCH');
+  }
   if (!wallet || wallet.state === undefined) {
     // Pre-claim fixture ciphertext: DEV only. PROD serves CLAIMED wallets only.
     if (!fixturesAllowed(serverEnvironment())) {
@@ -585,6 +600,9 @@ exports.enableBackup = onCall(options, async request => {
     authorize((await tx.get(ref)).data(), data);
     const wallet = (await tx.get(walletRef)).data();
     if (!wallet || wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'NOT_CLAIMED');
+    if (!sameEnvironment(wallet, serverEnvironment())) {
+      throw reject('failed-precondition', 'ENVIRONMENT_MISMATCH');
+    }
     if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
     const keyring = (await tx.get(keyringRefs(uid, data.walletId))).data();
     if (!keyring || keyring.cryptoVersion !== 1) throw reject('failed-precondition', 'NO_KEYRING');
@@ -784,6 +802,9 @@ async function ownerWallet(tx, walletId, uid) {
   const walletRef = db.doc(`wallets/${walletId}`);
   const wallet = (await tx.get(walletRef)).data();
   if (!wallet || wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'NOT_CLAIMED');
+  if (!sameEnvironment(wallet, serverEnvironment())) {
+    throw reject('failed-precondition', 'ENVIRONMENT_MISMATCH');
+  }
   if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
   return {walletRef, wallet};
 }
@@ -884,7 +905,8 @@ exports.acceptFamilyInvite = onCall(options, async request => {
     liveInvite(invite, email);
     const walletRef = db.doc(`wallets/${invite.walletId}`);
     const wallet = (await tx.get(walletRef)).data();
-    if (!wallet || wallet.state !== 'CLAIMED' || wallet.kind !== 'family') {
+    if (!wallet || wallet.state !== 'CLAIMED' || wallet.kind !== 'family' ||
+        !sameEnvironment(wallet, serverEnvironment())) {
       throw reject('failed-precondition', 'NOT_FAMILY');
     }
     if (wallet.ownerAccountId === uid) throw reject('failed-precondition', 'SELF_INVITE');
@@ -987,7 +1009,8 @@ exports.getMemberKey = onCall(options, async request => {
   const walletRef = db.doc(`wallets/${data.walletId}`);
   const [w, m] = (await Promise.all([walletRef.get(), walletRef.collection('memberships').doc(uid).get()]))
     .map(d => d.data());
-  if (!w || !m || m.status !== 'ACTIVE' || m.role !== 'MEMBER') {
+  if (!w || !m || m.status !== 'ACTIVE' || m.role !== 'MEMBER' ||
+      !sameEnvironment(w, serverEnvironment())) {
     throw reject('permission-denied', 'NOT_MEMBER', 'Not a member');
   }
   // The package is wrapped to ONE installation's key: another device of the
@@ -1055,7 +1078,9 @@ exports.getMyFamily = onCall(options, async request => {
   const walletRef = db.doc(`wallets/${index.walletId}`);
   const [w, m] = (await Promise.all([walletRef.get(), walletRef.collection('memberships').doc(uid).get()]))
     .map(d => d.data());
-  if (!w || !m || m.status !== 'ACTIVE') return {member: false};
+  if (!w || !m || m.status !== 'ACTIVE' || !sameEnvironment(w, serverEnvironment())) {
+    return {member: false};
+  }
   return {member: true, walletId: index.walletId, memberId: m.memberId,
     ownerAccountId: w.ownerAccountId, hasKey: Boolean(m.wrappedKey),
     keyInstallationId: m.keyInstallationId ?? null};

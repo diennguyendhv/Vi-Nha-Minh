@@ -585,3 +585,13 @@ approval.
 - **Signing path:** no APK key rotation. Temporary current-source PROD build signed with the SAME
   debug key updates in place → migrate + verify → encrypted backup COMPLETE on Firebase PROD →
   Recovery Key saved → uninstall old → install release-signed build → restore the same Wallet.
+
+## 8i. One Firebase project = production (owner decision 2026-09-27)
+
+`vi-nha-minh-55c60` is the only real cloud and is PRODUCTION (`functions/env.js`). DEV work uses
+the Emulator Suite (`demo-homewallet-p7`). Accident guards: DEV builds initialize Firebase only
+against the emulator (`CloudPolicy.firebaseTargetAllowed`), the transport re-checks, and every
+callable carries `clientEnv`, which the server must match (`CLIENT_ENVIRONMENT`) — previously
+installed DEV builds are refused too. These are accident guards, not authentication (App Check is
+backlog). Historical test state claimed while the project was DEV (`environment: "dev"`) is frozen
+(`ENVIRONMENT_MISMATCH`, hidden from `listBackupWallets`), never auto-deleted.

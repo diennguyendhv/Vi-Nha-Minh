@@ -2,10 +2,11 @@
 // Pure: which project is served, as which environment (no emulator needed).
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {serverEnvironment, fixturesAllowed} = require('../env');
+const {serverEnvironment, fixturesAllowed, sameEnvironment} = require('../env');
 
 test('only explicitly listed projects are served', () => {
-  assert.equal(serverEnvironment({GCLOUD_PROJECT: 'vi-nha-minh-55c60'}), 'dev');
+  // One Firebase project, and it is PRODUCTION (owner decision 2026-09-27).
+  assert.equal(serverEnvironment({GCLOUD_PROJECT: 'vi-nha-minh-55c60'}), 'prod');
   assert.equal(serverEnvironment({GCLOUD_PROJECT: 'demo-homewallet-p7', FUNCTIONS_EMULATOR: 'true'}), 'dev');
   // Demo project outside the emulator, unknown projects, prototype keys: refused.
   assert.equal(serverEnvironment({GCLOUD_PROJECT: 'demo-homewallet-p7'}), null);
@@ -18,4 +19,12 @@ test('pre-claim fixture wallets exist only in DEV', () => {
   assert.equal(fixturesAllowed('dev'), true);
   assert.equal(fixturesAllowed('prod'), false);
   assert.equal(fixturesAllowed(null), false);
+});
+
+test('claimed wallets are served only by the environment that claimed them', () => {
+  assert.equal(sameEnvironment({state: 'CLAIMED', environment: 'prod'}, 'prod'), true);
+  assert.equal(sameEnvironment({state: 'CLAIMED', environment: 'dev'}, 'prod'), false);
+  assert.equal(sameEnvironment({state: 'CLAIMED'}, 'prod'), false);
+  assert.equal(sameEnvironment(undefined, 'prod'), true);
+  assert.equal(sameEnvironment({fixture: true}, 'prod'), true);
 });

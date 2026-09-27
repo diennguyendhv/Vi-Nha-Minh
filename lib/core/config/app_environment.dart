@@ -28,8 +28,7 @@ enum AppEnvironment {
   }
 
   static AppEnvironment? _override;
-  static AppEnvironment get current =>
-      _override ?? fromFlavor(appFlavor);
+  static AppEnvironment get current => _override ?? fromFlavor(appFlavor);
 
   /// Chỉ dùng trong test.
   static void debugOverride(AppEnvironment? env) => _override = env;

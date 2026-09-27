@@ -30,6 +30,16 @@ Future<AuthRepository> bootstrapAuth({
     }
     return const UnavailableAuthRepository();
   }
+  // Bản DEV không bao giờ khởi tạo Firebase trỏ vào cloud production (chỉ emulator);
+  // PROD chỉ trỏ vào đúng dự án production.
+  if (!CloudPolicy.firebaseTargetAllowed(environment, config: config)) {
+    if (kDebugMode) {
+      debugPrint(
+        '[auth] ${environment.flavor}: đích Firebase không được phép, Auth tắt',
+      );
+    }
+    return const UnavailableAuthRepository();
+  }
   try {
     await Firebase.initializeApp(
       options: FirebaseOptions(
@@ -42,11 +52,19 @@ Future<AuthRepository> bootstrapAuth({
     final repository = FirebaseAuthRepository(
       googleServerClientId: config.googleServerClientId,
     );
-    if (CloudPolicy.enabledIn(environment)) {
+    if (config.isEmulator) {
+      await FirebaseAuth.instance.useAuthEmulator(config.emulatorHost, 9099);
+    }
+    if (CloudPolicy.enabledIn(environment, config: config)) {
       final auth = FirebaseAuth.instance;
       repository.cloudSession = CloudSession(
         KeystoreSessionStorage(),
-        SessionTransportClient(auth, config.projectId).call,
+        SessionTransportClient(
+          auth,
+          config.projectId,
+          environment: environment,
+          emulatorHost: config.isEmulator ? config.emulatorHost : null,
+        ).call,
         () => auth.currentUser?.uid,
       );
     }

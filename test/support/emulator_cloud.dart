@@ -81,7 +81,7 @@ class EmulatorTransport {
     calls++;
     final body = await _post(
       Uri.parse('http://127.0.0.1:5001/$emulatorProject/us-central1/$op'),
-      {'data': data},
+      {'data': {'clientEnv': 'dev', ...data}},
       bearer: account.idToken,
     );
     final error = body['error'] as Map?;
