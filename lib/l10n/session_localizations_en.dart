@@ -335,4 +335,21 @@ class SessionLocalizationsEn extends SessionLocalizations {
   @override
   String get restoreFailed =>
       'Restore failed. The current Wallet was not changed.';
+
+  @override
+  String get rotateRecoveryAction => 'Create new Recovery Key';
+
+  @override
+  String get rotateRecoveryConfirmTitle => 'Create a new Recovery Key?';
+
+  @override
+  String get rotateRecoveryConfirmBody =>
+      'Your current Recovery Key will stop working immediately. The Backup Password and your backup data stay the same. The new key is shown only once.';
+
+  @override
+  String get rotateRecoveryConfirm => 'Create new key';
+
+  @override
+  String get rotateRecoveryFailed =>
+      'The Recovery Key was not replaced. Your Backup Password still works; try again.';
 }

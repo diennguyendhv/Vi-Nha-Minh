@@ -27,6 +27,9 @@ class FakeCloud {
   int pageSize = 200;
   bool offline = false;
 
+  /// Phiên Firebase có đăng nhập gần đây (máy chủ: `auth_time` ≤ 30 phút).
+  bool recentAuth = true;
+
   /// Commit xong rồi mất câu trả lời (timeout sau khi máy chủ ghi).
   bool dropNextResponseAfterCommit = false;
 
@@ -41,7 +44,9 @@ class FakeCloud {
   int get writes => log.where((l) => l.startsWith('putEncryptedBatch')).length;
 
   String activate(String uid) {
-    final s = base64Url.encode(BackupCrypto.randomBytes(32)).replaceAll('=', '');
+    final s = base64Url
+        .encode(BackupCrypto.randomBytes(32))
+        .replaceAll('=', '');
     secrets[uid] = s;
     return s;
   }
@@ -60,7 +65,8 @@ class FakeCloud {
     };
   }
 
-  Never _fail(bool auth, [String? reason]) => throw SessionFailure(auth, reason);
+  Never _fail(bool auth, [String? reason]) =>
+      throw SessionFailure(auth, reason);
 
   void _authorize(Map<String, dynamic> d) {
     final uid = d['accountId'] as String;
@@ -86,20 +92,49 @@ class FakeCloud {
       case 'putBackupKeyring':
         _authorize(d);
         final key = '$uid/$walletId';
+        if (d['mode'] == 'rotateRecovery') {
+          final k = keyrings[key];
+          if (k == null) _fail(false, 'NO_KEYRING');
+          if (!recentAuth) _fail(false, 'RECENT_LOGIN_REQUIRED');
+          if (k['recoveryRotationId'] == d['rotationId']) {
+            if (k['recoveryProof'] == d['recoveryProof']) {
+              return {'rev': k['rev']};
+            }
+            _fail(false, 'KEYRING_CHANGED');
+          }
+          if (k['rev'] != d['expectedRev']) _fail(false, 'KEYRING_CHANGED');
+          k
+            ..['rev'] = (k['rev']! as int) + 1
+            ..['recovery'] = d['recovery']
+            ..['recoveryProof'] = d['recoveryProof']
+            ..['recoveryRotationId'] = d['rotationId'];
+          if (dropNextResponseAfterCommit) {
+            dropNextResponseAfterCommit = false;
+            _fail(false);
+          }
+          return {'rev': k['rev']};
+        }
         if (keyrings.containsKey(key)) _fail(false, 'KEYRING_EXISTS');
         keyrings[key] = {
           'cryptoVersion': 1,
           'rev': 1,
           'password': d['password'],
           'recovery': d['recovery'],
+          'passwordProof': d['passwordProof'],
+          'recoveryProof': d['recoveryProof'],
         };
         return {'rev': 1};
       case 'getBackupKeyring':
         if (d['secret'] != null) _authorize(d);
-        final k = keyrings['$uid/$walletId'] ??
+        final k =
+            keyrings['$uid/$walletId'] ??
             keyrings['${wallets[walletId]?['ownerAccountId']}/$walletId'];
         if (k == null) _fail(false, 'NO_KEYRING');
-        return Map<String, dynamic>.from(k);
+        // Như máy chủ: chỉ slot đã bọc, không bao giờ proof/id xoay.
+        return {
+          for (final f in ['cryptoVersion', 'rev', 'password', 'recovery'])
+            f: k[f],
+        };
       case 'enableBackup':
         _authorize(d);
         final w = wallets[walletId];
@@ -115,7 +150,11 @@ class FakeCloud {
         if (w['ownerAccountId'] != uid && memberships[walletId]?[uid] == null) {
           return {'claimed': true, 'ownedByYou': false};
         }
-        return {...w, 'claimed': true, 'ownedByYou': w['ownerAccountId'] == uid};
+        return {
+          ...w,
+          'claimed': true,
+          'ownedByYou': w['ownerAccountId'] == uid,
+        };
       case 'putEncryptedBatch':
         _authorize(d);
         final owner = _access(walletId!, uid);
@@ -123,12 +162,16 @@ class FakeCloud {
         if (!['SEEDING', 'COMPLETE'].contains(w['backupState'])) {
           _fail(false, 'BACKUP_NOT_ENABLED');
         }
-        if (!keyrings.containsKey('$owner/$walletId')) _fail(false, 'NO_KEYRING');
+        if (!keyrings.containsKey('$owner/$walletId')) {
+          _fail(false, 'NO_KEYRING');
+        }
         final envs = (d['envelopes'] as List).cast<Map<String, dynamic>>();
         if (envs.isEmpty || envs.length > 100) _fail(false);
         final r = receipts.putIfAbsent(walletId, () => {});
         final batchId = d['batchId'] as String;
-        if (r[batchId] != null) return {'headRev': r[batchId], 'duplicate': true};
+        if (r[batchId] != null) {
+          return {'headRev': r[batchId], 'duplicate': true};
+        }
         final head = w['headRev']! as int;
         if (head != d['baseHeadRev']) _fail(false, 'HEAD_MOVED');
         final store = entities.putIfAbsent(walletId, () => {});
@@ -166,20 +209,28 @@ class FakeCloud {
         }
         final w = wallets[walletId]!;
         final since = d['sinceRev'] as int;
-        final all = (entities[walletId]?.values.toList() ?? [])
-            .where((e) => (e['serverRev']! as int) > since)
-            .toList()
-          ..sort((a, b) => (a['serverRev']! as int).compareTo(b['serverRev']! as int));
+        final all =
+            (entities[walletId]?.values.toList() ?? [])
+                .where((e) => (e['serverRev']! as int) > since)
+                .toList()
+              ..sort(
+                (a, b) =>
+                    (a['serverRev']! as int).compareTo(b['serverRev']! as int),
+              );
         var page = all.take(pageSize + 1).toList();
         var more = false;
         if (page.length > pageSize) {
           more = true;
           final cut = page[pageSize]['serverRev'];
-          final kept = page.where((e) => (e['serverRev']! as int) < (cut! as int)).toList();
+          final kept = page
+              .where((e) => (e['serverRev']! as int) < (cut! as int))
+              .toList();
           // 1 batch lớn hơn trang (máy chủ thật: batch ≤ 101 < trang 200) ⇒ trả trọn batch.
           page = kept.isNotEmpty
               ? kept
-              : all.where((e) => e['serverRev'] == all.first['serverRev']).toList();
+              : all
+                    .where((e) => e['serverRev'] == all.first['serverRev'])
+                    .toList();
         }
         return {
           'headRev': w['headRev'],
@@ -206,7 +257,8 @@ class FakeCloud {
 class MemoryBackupKeyStore implements BackupKeyStore {
   final map = <String, ({String walletId, Uint8List bmk})>{};
   @override
-  Future<({String walletId, Uint8List bmk})?> load(String uid) async => map[uid];
+  Future<({String walletId, Uint8List bmk})?> load(String uid) async =>
+      map[uid];
   @override
   Future<void> store(String uid, String walletId, Uint8List bmk) async =>
       map[uid] = (walletId: walletId, bmk: Uint8List.fromList(bmk));
@@ -223,7 +275,8 @@ class MemorySessionStorage implements SessionStorage {
   @override
   Future<Map<String, dynamic>?> read(String uid) async => values[uid];
   @override
-  Future<void> write(String uid, Map<String, dynamic> c) async => values[uid] = c;
+  Future<void> write(String uid, Map<String, dynamic> c) async =>
+      values[uid] = c;
   @override
   Future<void> clear() async => values.clear();
 }
@@ -231,7 +284,12 @@ class MemorySessionStorage implements SessionStorage {
 /// 1 thiết bị: DB cục bộ + phiên P7.1 + Keystore BMK + engine.
 class FakeDevice {
   FakeDevice(this.cloud, {AppDatabase? db, String? installation})
-    : db = db ?? AppDatabase.forTesting(NativeDatabase.memory(), seed: SeedProfile.fresh),
+    : db =
+          db ??
+          AppDatabase.forTesting(
+            NativeDatabase.memory(),
+            seed: SeedProfile.fresh,
+          ),
       storage = MemorySessionStorage(
         installation ?? '11111111-1111-4111-8111-111111111111',
       ) {
@@ -246,7 +304,11 @@ class FakeDevice {
       kdf: testKdf,
     );
   }
-  static const testKdf = KdfParams(memoryKib: 19456, iterations: 2, parallelism: 1);
+  static const testKdf = KdfParams(
+    memoryKib: 19456,
+    iterations: 2,
+    parallelism: 1,
+  );
   final FakeCloud cloud;
   AppDatabase db;
   final MemorySessionStorage storage;

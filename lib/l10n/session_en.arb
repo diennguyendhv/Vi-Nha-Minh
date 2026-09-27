@@ -156,5 +156,10 @@
         "type": "String"
       }
     }
-  }
+  },
+  "rotateRecoveryAction": "Create new Recovery Key",
+  "rotateRecoveryConfirmTitle": "Create a new Recovery Key?",
+  "rotateRecoveryConfirmBody": "Your current Recovery Key will stop working immediately. The Backup Password and your backup data stay the same. The new key is shown only once.",
+  "rotateRecoveryConfirm": "Create new key",
+  "rotateRecoveryFailed": "The Recovery Key was not replaced. Your Backup Password still works; try again."
 }

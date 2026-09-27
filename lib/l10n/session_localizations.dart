@@ -652,6 +652,36 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'Restore failed. The current Wallet was not changed.'**
   String get restoreFailed;
+
+  /// No description provided for @rotateRecoveryAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create new Recovery Key'**
+  String get rotateRecoveryAction;
+
+  /// No description provided for @rotateRecoveryConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new Recovery Key?'**
+  String get rotateRecoveryConfirmTitle;
+
+  /// No description provided for @rotateRecoveryConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your current Recovery Key will stop working immediately. The Backup Password and your backup data stay the same. The new key is shown only once.'**
+  String get rotateRecoveryConfirmBody;
+
+  /// No description provided for @rotateRecoveryConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Create new key'**
+  String get rotateRecoveryConfirm;
+
+  /// No description provided for @rotateRecoveryFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The Recovery Key was not replaced. Your Backup Password still works; try again.'**
+  String get rotateRecoveryFailed;
 }
 
 class _SessionLocalizationsDelegate

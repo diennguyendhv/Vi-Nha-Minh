@@ -13,7 +13,6 @@ import '../../providers/session_provider.dart';
 import 'backup_controls.dart';
 import 'restore_flow.dart';
 import 'wallet_backup_controls.dart';
-import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
 import 'session_controls.dart';
 import 'wallet_claim_controls.dart';
@@ -166,9 +165,8 @@ class AccountSettingsCard extends ConsumerWidget {
             // Ví đang mở đã claim ⇒ sao lưu THẬT của ví này; chưa claim ⇒ công cụ
             // fixture DEV cũ (P8).
             WalletBackupControls(
-              key: ValueKey(
-                'wallet-backup-${account.uid}-${ref.watch(activeWalletProvider).dbFileName}',
-              ),
+              // Engine mới cho mỗi ví/Account ⇒ state widget không mang sang ví khác.
+              key: ObjectKey(ref.watch(cloudSyncEngineProvider)),
               engine: ref.watch(cloudSyncEngineProvider)!,
               worker: ref.watch(syncWorkerProvider)!,
               backup: ref.watch(backupServiceProvider),

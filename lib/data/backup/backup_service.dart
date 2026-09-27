@@ -25,28 +25,29 @@ class BackupBlocked implements Exception {
 }
 
 /// Synthetic DEV-only data used to prove the envelope path. Not user data.
-const devBackupFixture = <({String kind, String localId, Map<String, Object?> body})>[
-  (
-    kind: 'category',
-    localId: 'fixture-cat-1',
-    body: {'name': 'FIXTURE Ăn uống', 'group': 'spending'},
-  ),
-  (
-    kind: 'fund',
-    localId: 'fixture-fund-1',
-    body: {'name': 'FIXTURE Quỹ du lịch', 'balance': 9876543},
-  ),
-  (
-    kind: 'transaction',
-    localId: 'fixture-tx-1',
-    body: {
-      'amount': 1234567,
-      'note': 'FIXTURE Tiền chợ',
-      'categoryId': 'fixture-cat-1',
-      'memberId': 'fixture-member-a',
-    },
-  ),
-];
+const devBackupFixture =
+    <({String kind, String localId, Map<String, Object?> body})>[
+      (
+        kind: 'category',
+        localId: 'fixture-cat-1',
+        body: {'name': 'FIXTURE Ăn uống', 'group': 'spending'},
+      ),
+      (
+        kind: 'fund',
+        localId: 'fixture-fund-1',
+        body: {'name': 'FIXTURE Quỹ du lịch', 'balance': 9876543},
+      ),
+      (
+        kind: 'transaction',
+        localId: 'fixture-tx-1',
+        body: {
+          'amount': 1234567,
+          'note': 'FIXTURE Tiền chợ',
+          'categoryId': 'fixture-cat-1',
+          'memberId': 'fixture-member-a',
+        },
+      ),
+    ];
 
 /// Zero-knowledge backup client: generates the BMK, wraps it under the Backup
 /// Password (Argon2id) and a Recovery Key (HKDF), keeps it locally under
@@ -80,6 +81,7 @@ class BackupService {
       rethrow;
     }
   }
+
   final KdfParams kdf;
   final AppEnvironment env;
   static const minPasswordLength = 10;
@@ -135,14 +137,16 @@ class BackupService {
     return (walletId: walletId, recoveryKey: await recoveryKey.display());
   }
 
-  Future<Map<String, Object?>> _keyring(String walletId, {bool session = true}) async =>
-      Map<String, Object?>.from(
-        await transport('getBackupKeyring', {
-          if (session) ...await this.session.credential(),
-          'accountId': _uid(),
-          'walletId': walletId,
-        }),
-      );
+  Future<Map<String, Object?>> _keyring(
+    String walletId, {
+    bool session = true,
+  }) async => Map<String, Object?>.from(
+    await transport('getBackupKeyring', {
+      if (session) ...await this.session.credential(),
+      'accountId': _uid(),
+      'walletId': walletId,
+    }),
+  );
 
   static Future<({Uint8List bmk, String proof})> unwrapPassword(
     Map<String, Object?> keyring,
@@ -204,9 +208,7 @@ class BackupService {
   }) async {
     final pwSalt = BackupCrypto.randomBytes(16);
     final pw = await BackupCrypto.fromPassword(password, pwSalt, kdf);
-    final recoveryKey = RecoveryKey.generate();
-    final rcSalt = BackupCrypto.randomBytes(32);
-    final rc = await BackupCrypto.fromRecoveryKey(recoveryKey, rcSalt);
+    final rc = await newRecoverySlot(bmk: bmk, walletId: walletId);
     return (
       payload: <String, Object?>{
         'walletId': walletId,
@@ -220,17 +222,32 @@ class BackupService {
           walletId: walletId,
           slot: 'password',
         )).toJson(),
-        'recovery': (await BackupCrypto.wrap(
-          bmk: bmk,
-          secrets: rc,
-          salt: rcSalt,
-          kdf: {'alg': 'hkdf-sha256'},
-          walletId: walletId,
-          slot: 'recovery',
-        )).toJson(),
+        'recovery': rc.slot,
         'passwordProof': pw.proof,
         'recoveryProof': rc.proof,
       },
+      recoveryKey: rc.recoveryKey,
+    );
+  }
+
+  /// Recovery slot MỚI cho CÙNG [bmk]: Recovery Key ngẫu nhiên 256-bit mới, salt mới
+  /// ⇒ Recovery KEK độc lập. Dùng khi tạo keyring và khi xoay Recovery Key (không bao
+  /// giờ đổi BMK, không đụng envelope). [recoveryKey] = chuỗi hiển thị — chỉ 1 lần.
+  static Future<({Map<String, Object?> slot, String proof, String recoveryKey})>
+  newRecoverySlot({required Uint8List bmk, required String walletId}) async {
+    final recoveryKey = RecoveryKey.generate();
+    final salt = BackupCrypto.randomBytes(32);
+    final secrets = await BackupCrypto.fromRecoveryKey(recoveryKey, salt);
+    return (
+      slot: (await BackupCrypto.wrap(
+        bmk: bmk,
+        secrets: secrets,
+        salt: salt,
+        kdf: {'alg': 'hkdf-sha256'},
+        walletId: walletId,
+        slot: 'recovery',
+      )).toJson(),
+      proof: secrets.proof,
       recoveryKey: await recoveryKey.display(),
     );
   }

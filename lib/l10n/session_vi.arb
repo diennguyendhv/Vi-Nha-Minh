@@ -91,5 +91,10 @@
   "restoreAction": "Khôi phục ví từ bản sao lưu",
   "restorePick": "Chọn bản sao lưu",
   "restoreDone": "Đã khôi phục và kiểm chứng ví.",
-  "restoreFailed": "Không khôi phục được. Ví hiện tại không bị thay đổi."
+  "restoreFailed": "Không khôi phục được. Ví hiện tại không bị thay đổi.",
+  "rotateRecoveryAction": "Tạo lại Recovery Key",
+  "rotateRecoveryConfirmTitle": "Tạo Recovery Key mới?",
+  "rotateRecoveryConfirmBody": "Recovery Key hiện tại sẽ hết hiệu lực ngay. Mật khẩu sao lưu và dữ liệu sao lưu giữ nguyên. Key mới chỉ hiện 1 lần.",
+  "rotateRecoveryConfirm": "Tạo key mới",
+  "rotateRecoveryFailed": "Chưa thay được Recovery Key. Mật khẩu sao lưu vẫn dùng được; hãy thử lại."
 }

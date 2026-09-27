@@ -149,6 +149,52 @@ test('non-member, stale and revoked devices cannot read or write', async () => {
   assert.ok(recovered.secret);
 });
 
+test('rotateRecovery: same BMK slot swap, old proof dead, password + ciphertext untouched, idempotent', async () => {
+  const {user, cred, walletId, proofs} = await claimed();
+  ok(await call('putBackupKeyring', user, keyring(cred, walletId, proofs)));
+  ok(await call('enableBackup', user, {...cred, walletId}));
+  ok(await call('putEncryptedBatch', user, batch(cred, walletId, 0, [env(1)], {checkpoint: true})));
+  const entityDocs = async () => (await db.collection(`wallets/${walletId}/entities`).get())
+    .docs.map(d => JSON.stringify({id: d.id, ...d.data()})).sort();
+  const entitiesBefore = await entityDocs();
+  const kr = () => db.doc(`accounts/${user.localId}/backupKeyrings/${walletId}`).get().then(d => d.data());
+  const before = await kr();
+  const slot = {salt: b(32), kdf: {alg: 'hkdf-sha256'}, nonce: b(12), wrapped: b(48)};
+  const rotate = (extra = {}) => ({...cred, walletId, mode: 'rotateRecovery', expectedRev: 1,
+    recovery: slot, recoveryProof: token(), rotationId: token(), ...extra});
+  const req = rotate();
+  invalid(await call('putBackupKeyring', user, {...req, password: before.password}));
+  invalid(await call('putBackupKeyring', user, {...req, rotationId: 'short'}));
+  // Other account / stale credential: denied, nothing changes.
+  const x = await account();
+  const xCred = await activate(x);
+  reason(await call('putBackupKeyring', x, {...req, ...xCred}), 'NO_KEYRING');
+  denied(await call('putBackupKeyring', user, {...req, secret: token()}));
+  assert.equal((await kr()).rev, 1);
+
+  assert.deepEqual(ok(await call('putBackupKeyring', user, req)), {rev: 2});
+  // Lost response → same request again = receipt, no second swap.
+  assert.deepEqual(ok(await call('putBackupKeyring', user, req)), {rev: 2});
+  reason(await call('putBackupKeyring', user, {...req, recoveryProof: token()}), 'KEYRING_CHANGED');
+  reason(await call('putBackupKeyring', user, rotate()), 'KEYRING_CHANGED'); // stale expectedRev
+  const after = await kr();
+  assert.equal(after.rev, 2);
+  assert.deepEqual(after.password, before.password);
+  assert.equal(after.passwordProofHash, before.passwordProofHash);
+  assert.deepEqual(after.recovery, slot);
+  assert.notEqual(after.recoveryProofHash, before.recoveryProofHash);
+  const served = ok(await call('getBackupKeyring', user, {...cred, walletId}));
+  assert.deepEqual(Object.keys(served).sort(), ['cryptoVersion', 'password', 'recovery', 'rev']);
+  assert.deepEqual(await entityDocs(), entitiesBefore, 'no envelope rewritten');
+  assert.equal((await db.doc(`wallets/${walletId}`).get()).data().headRev, 1);
+  // Old Recovery Key proof is dead immediately; new one and the password still work.
+  const recover = (kind, proof) => call('recoverSession', user, {accountId: user.localId,
+    installationId: randomUUID(), walletId, proofKind: kind, proof});
+  denied(await recover('recovery', proofs.recovery));
+  ok(await recover('recovery', req.recoveryProof));
+  ok(await recover('password', proofs.password));
+});
+
 test('Rules stay deny-all for direct client access', async () => {
   const {user, walletId} = await claimed();
   const url = `http://127.0.0.1:8080/v1/projects/${project}/databases/(default)/documents/wallets/${walletId}`;

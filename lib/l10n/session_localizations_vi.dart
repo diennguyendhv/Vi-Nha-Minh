@@ -333,4 +333,21 @@ class SessionLocalizationsVi extends SessionLocalizations {
   @override
   String get restoreFailed =>
       'Không khôi phục được. Ví hiện tại không bị thay đổi.';
+
+  @override
+  String get rotateRecoveryAction => 'Tạo lại Recovery Key';
+
+  @override
+  String get rotateRecoveryConfirmTitle => 'Tạo Recovery Key mới?';
+
+  @override
+  String get rotateRecoveryConfirmBody =>
+      'Recovery Key hiện tại sẽ hết hiệu lực ngay. Mật khẩu sao lưu và dữ liệu sao lưu giữ nguyên. Key mới chỉ hiện 1 lần.';
+
+  @override
+  String get rotateRecoveryConfirm => 'Tạo key mới';
+
+  @override
+  String get rotateRecoveryFailed =>
+      'Chưa thay được Recovery Key. Mật khẩu sao lưu vẫn dùng được; hãy thử lại.';
 }

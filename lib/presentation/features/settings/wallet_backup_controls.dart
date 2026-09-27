@@ -175,6 +175,42 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
     return 'OK';
   }
 
+  /// Tạo lại Recovery Key: xác nhận → step-up (xác minh chủ máy + đăng nhập lại) →
+  /// xoay (cùng BMK) → hiện key mới ĐÚNG 1 lần. Key chỉ nằm trong bộ nhớ tới khi đóng.
+  Future<String?> _rotateRecovery() async {
+    final text = _text;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(text.rotateRecoveryConfirmTitle),
+        content: Text(text.rotateRecoveryConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(text.cancelSession),
+          ),
+          FilledButton(
+            key: const Key('rotate_recovery_confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(text.rotateRecoveryConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return null;
+    if (!await (widget.stepUp?.call() ?? Future.value(true))) {
+      return text.stepUpFailed;
+    }
+    final String recoveryKey;
+    try {
+      recoveryKey = await widget.engine.rotateRecoveryKey();
+    } on Object {
+      return text.rotateRecoveryFailed;
+    }
+    if (mounted) await showRecoveryKeyOnce(context, text, recoveryKey);
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) => StreamBuilder(
     stream: _status,
@@ -236,6 +272,11 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
                     onPressed: _busy ? null : () => _run(_changePassword),
                     child: Text(text.backupChangePassword),
                   ),
+                TextButton(
+                  key: const Key('rotate_recovery_key'),
+                  onPressed: _busy ? null : () => _run(_rotateRecovery),
+                  child: Text(text.rotateRecoveryAction),
+                ),
               ],
             ],
           ),

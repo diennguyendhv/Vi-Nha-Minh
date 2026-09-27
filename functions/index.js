@@ -330,13 +330,40 @@ function keyringRefs(uid, walletId) {
 exports.putBackupKeyring = onCall(options, async request => {
   const {data, uid, ref} = context(request);
   const keyringRef = keyringRefs(uid, data.walletId);
-  if (!validSlot(data.password, 'password') || typeof data.passwordProof !== 'string' ||
+  const rotating = data.mode === 'rotateRecovery';
+  if (rotating
+    ? !validSlot(data.recovery, 'recovery') || typeof data.recoveryProof !== 'string' ||
+      !token43.test(data.recoveryProof) || typeof data.rotationId !== 'string' ||
+      !token43.test(data.rotationId) || !Number.isSafeInteger(data.expectedRev) ||
+      data.password !== undefined
+    : !validSlot(data.password, 'password') || typeof data.passwordProof !== 'string' ||
       !token43.test(data.passwordProof)) {
     throw new HttpsError('invalid-argument', 'Invalid keyring');
   }
   return db.runTransaction(async tx => {
     authorize((await tx.get(ref)).data(), data);
     const existing = (await tx.get(keyringRef)).data();
+    if (rotating) {
+      // Recovery Key regeneration on a trusted device holding the BMK: current
+      // session (above) + recent sign-in; the SAME BMK re-wrapped under a new
+      // random Recovery Key. The old recovery slot + proof are replaced in this
+      // transaction, so the old Recovery Key stops working immediately. The
+      // password slot and every ciphertext stay untouched.
+      if (!existing) throw reject('failed-precondition', 'NO_KEYRING');
+      requireRecentAuth(request);
+      if (existing.recoveryRotationId === data.rotationId) {
+        // Same rotation retried after a lost response: receipt, never a 2nd swap.
+        if (sameHash(data.recoveryProof, existing.recoveryProofHash)) {
+          return {rev: existing.rev};
+        }
+        throw reject('aborted', 'KEYRING_CHANGED');
+      }
+      if (existing.rev !== data.expectedRev) throw reject('aborted', 'KEYRING_CHANGED');
+      tx.update(keyringRef, {rev: existing.rev + 1, recovery: data.recovery,
+        recoveryProofHash: hash(data.recoveryProof), recoveryRotationId: data.rotationId,
+        updatedAt: Timestamp.now()});
+      return {rev: existing.rev + 1};
+    }
     if (data.mode === 'create') {
       if (existing) throw reject('already-exists', 'KEYRING_EXISTS');
       if (data.cryptoVersion !== 1 || !validSlot(data.recovery, 'recovery') ||

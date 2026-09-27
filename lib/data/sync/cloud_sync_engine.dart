@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_environment.dart';
@@ -195,9 +197,16 @@ class CloudSyncEngine {
       if (e.reason != 'KEYRING_EXISTS') rethrow;
       // Lần trước đã tạo keyring rồi chết: chỉ đúng mật khẩu mới lấy lại được BMK.
       final server = Map<String, Object?>.from(
-        await _call('getBackupKeyring', {...credential, 'walletId': b.walletId}),
+        await _call('getBackupKeyring', {
+          ...credential,
+          'walletId': b.walletId,
+        }),
       );
-      bmk = (await BackupService.unwrapPassword(server, b.walletId, password)).bmk;
+      bmk = (await BackupService.unwrapPassword(
+        server,
+        b.walletId,
+        password,
+      )).bmk;
       rev = server['rev']! as int;
       await keyStore.store(b.accountId, b.walletId, bmk);
     }
@@ -209,7 +218,9 @@ class CloudSyncEngine {
           keyringRev: Value(rev),
         ),
       );
-      await _writeState(const SyncStateCompanion(backupState: Value('SEEDING')));
+      await _writeState(
+        const SyncStateCompanion(backupState: Value('SEEDING')),
+      );
       await SyncOutboxStore(db).enqueueFullSnapshot();
     });
     return recoveryKey;
@@ -218,6 +229,81 @@ class CloudSyncEngine {
   // ---------------------------------------------------------------------------
   // Đẩy.
   // ---------------------------------------------------------------------------
+
+  /// Tạo lại Recovery Key (xoay slot recovery) cho ví ĐÃ bật sao lưu, trên thiết bị tin
+  /// cậy ĐANG giữ BMK. Người gọi phải step-up trước (xác minh chủ máy + đăng nhập gần
+  /// đây — máy chủ cũng đòi đăng nhập gần đây).
+  ///
+  /// CÙNG BMK → Recovery Key ngẫu nhiên 256-bit MỚI → Recovery KEK độc lập → bọc lại →
+  /// máy chủ thay slot recovery + proof nguyên tử (CAS `rev`, rev+1). Không đổi BMK,
+  /// không mã hoá lại envelope nào, slot mật khẩu giữ nguyên, Recovery Key cũ vô hiệu
+  /// ngay khi thành công. Lời gọi mất phản hồi ⇒ gửi lại ĐÚNG payload (cùng
+  /// `rotationId` + proof) ⇒ máy chủ trả biên nhận, không xoay lần 2. Trả về Recovery
+  /// Key MỚI để hiển thị đúng 1 lần — không lưu, không log.
+  Future<String> rotateRecoveryKey({int maxAttempts = 3}) => _tail0(() async {
+    _requireAllowed();
+    final b = await _binding();
+    if ((await _state())?.backupState == null) {
+      throw const CloudSyncException('backup-not-enabled');
+    }
+    final cipher = await _cipher(b);
+    final bmk = (await keyStore.load(b.accountId))!.bmk;
+    final credential = await session.credential();
+    final keyring = await _call('getBackupKeyring', {
+      ...credential,
+      'walletId': b.walletId,
+    });
+    // BMK trên máy phải đúng là BMK của ví này: mở được ciphertext thật trên máy chủ.
+    await _verifyHeldBmk(cipher, credential, b.walletId);
+    final next = await BackupService.newRecoverySlot(
+      bmk: bmk,
+      walletId: b.walletId,
+    );
+    final payload = {
+      ...credential,
+      'walletId': b.walletId,
+      'mode': 'rotateRecovery',
+      'expectedRev': keyring['rev'],
+      'recovery': next.slot,
+      'recoveryProof': next.proof,
+      'rotationId': base64Url
+          .encode(BackupCrypto.randomBytes(32))
+          .replaceAll('=', ''),
+    };
+    for (var attempt = 1; ; attempt++) {
+      try {
+        await _call('putBackupKeyring', payload);
+        return next.recoveryKey;
+      } on SessionFailure catch (e) {
+        // Từ chối dứt khoát (phiên cũ/thu hồi, cần đăng nhập lại, keyring đã đổi):
+        // slot cũ vẫn là slot hợp lệ duy nhất. Chỉ lỗi mạng mới gửi lại.
+        if (e.denied || e.reason != null || attempt >= maxAttempts) rethrow;
+      }
+    }
+  });
+
+  Future<void> _verifyHeldBmk(
+    EnvelopeCipher cipher,
+    Map<String, dynamic> credential,
+    String walletId,
+  ) async {
+    final head = (await _state())?.serverHeadRev ?? 0;
+    final page = await _call('getEncryptedChanges', {
+      ...credential,
+      'walletId': walletId,
+      'sinceRev': head > 0 ? head - 1 : 0,
+    });
+    final envelopes = page['envelopes'] as List;
+    if (envelopes.isEmpty) throw const CloudSyncException('bad-envelope');
+    for (final raw in envelopes) {
+      final map = Map<String, Object?>.from(raw as Map)..remove('serverRev');
+      try {
+        await cipher.open(Envelope.fromJson(map));
+      } on BackupKeyException {
+        throw const CloudSyncException('key-wallet-mismatch');
+      }
+    }
+  }
 
   Future<Map<String, Object?>> _manifest() async {
     final meta = await db
@@ -230,10 +316,11 @@ class CloudSyncEngine {
       'counts': {
         for (final MapEntry(key: table, value: spec)
             in syncCapturedTables.entries)
-          spec.kind: (await db
-                  .customSelect('SELECT COUNT(*) AS n FROM $table')
-                  .getSingle())
-              .read<int>('n'),
+          spec.kind:
+              (await db
+                      .customSelect('SELECT COUNT(*) AS n FROM $table')
+                      .getSingle())
+                  .read<int>('n'),
       },
     };
   }
@@ -354,7 +441,9 @@ class CloudSyncEngine {
         final map = Map<String, Object?>.from(raw as Map);
         final serverRev = map.remove('serverRev');
         final env = Envelope.fromJson(map);
-        if (serverRev != env.rev) throw const CloudSyncException('bad-envelope');
+        if (serverRev != env.rev) {
+          throw const CloudSyncException('bad-envelope');
+        }
         final OpenedEntity opened;
         try {
           opened = await cipher.open(env);
@@ -405,11 +494,13 @@ class CloudSyncEngine {
         if (e.kind == manifestKind) continue;
         final body = Map<String, Object?>.from(e.body);
         final writer = body.remove('w');
-        final pending = await (db.select(db.syncOutbox)
-              ..where(
-                (o) => o.entityKind.equals(e.kind) & o.entityId.equals(e.localId),
-              ))
-            .getSingleOrNull();
+        final pending =
+            await (db.select(db.syncOutbox)..where(
+                  (o) =>
+                      o.entityKind.equals(e.kind) &
+                      o.entityId.equals(e.localId),
+                ))
+                .getSingleOrNull();
         final local = await EntityCodec.read(db, e.kind, e.localId);
         final same = _sameContent(local, body);
         if (pending != null) {
@@ -422,18 +513,20 @@ class CloudSyncEngine {
             // Bản cũ của CHÍNH mình: cục bộ mới hơn, giữ nguyên + vẫn chờ đẩy.
             continue;
           }
-          await db.into(db.syncConflicts).insert(
-            SyncConflictsCompanion.insert(
-              entityKind: e.kind,
-              entityId: e.localId,
-              localBody: Value(
-                local == null ? null : EntityCodec.canonicalJson(local),
-              ),
-              serverOp: EntityCodec.isTombstone(body) ? 'delete' : 'upsert',
-              serverRev: e.rev,
-              detectedAt: DateTime.now(),
-            ),
-          );
+          await db
+              .into(db.syncConflicts)
+              .insert(
+                SyncConflictsCompanion.insert(
+                  entityKind: e.kind,
+                  entityId: e.localId,
+                  localBody: Value(
+                    local == null ? null : EntityCodec.canonicalJson(local),
+                  ),
+                  serverOp: EntityCodec.isTombstone(body) ? 'delete' : 'upsert',
+                  serverRev: e.rev,
+                  detectedAt: DateTime.now(),
+                ),
+              );
           await SyncOutboxStore(db).acknowledge([pending.seq]);
           conflicts++;
         } else if (same) {
