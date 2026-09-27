@@ -494,4 +494,24 @@ class SessionLocalizationsVi extends SessionLocalizations {
   String familyOverdrawn(int count) {
     return 'Sau khi đồng bộ, $count số dư bị âm. Hãy xem lại các giao dịch gần đây.';
   }
+
+  @override
+  String get familyWalletTitle => 'Ví gia đình';
+
+  @override
+  String familyOwnerStatus(String member) {
+    return 'Bạn là Chủ ví của Ví gia đình này (bạn là $member). Bạn quản lý thành viên và khoá sao lưu.';
+  }
+
+  @override
+  String familyMemberStatus(String member) {
+    return 'Bạn là Thành viên của Ví gia đình này (bạn là $member). Chủ ví quản lý thành viên và khoá sao lưu; bạn dùng và đồng bộ ví chung.';
+  }
+
+  @override
+  String get familySyncTitle => 'Đồng bộ mã hoá Ví gia đình (DEV)';
+
+  @override
+  String get familySyncComplete =>
+      'Đã đồng bộ. Máy này giữ khoá ví do Chủ ví chia sẻ; thay đổi được mã hoá ngay trên máy.';
 }

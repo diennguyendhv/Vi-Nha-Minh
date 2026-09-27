@@ -109,4 +109,45 @@ void main() {
       });
     },
   );
+
+  testWidgets('P10 Member: tiêu đề/trạng thái là đồng bộ Ví gia đình, không có '
+      'thao tác khoá của Chủ ví', (tester) async {
+    final cloud = FakeCloud();
+    a = FakeDevice(cloud);
+    final worker = SyncWorker(engine: a.engine, db: a.db);
+    final s = StreamController<WalletBackupStatus>.broadcast();
+    await tester.pumpWidget(
+      host(
+        WalletBackupControls(
+          engine: a.engine,
+          worker: worker,
+          ownerActions: false,
+          status: s.stream,
+        ),
+      ),
+    );
+    s.add(
+      const WalletBackupStatus(
+        binding: 'ACTIVE',
+        state: 'COMPLETE',
+        pending: 0,
+        headRev: 7,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Đồng bộ mã hoá Ví gia đình (DEV)'), findsOneWidget);
+    expect(find.textContaining('khoá ví do Chủ ví chia sẻ'), findsOneWidget);
+    expect(find.textContaining('Sao lưu mã hoá ví này'), findsNothing);
+    expect(find.byKey(const Key('rotate_recovery_key')), findsNothing);
+    expect(find.text('Đổi Mật khẩu sao lưu'), findsNothing);
+    expect(find.byKey(const Key('wallet_backup_sync_now')), findsOneWidget);
+
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(() async {
+      await s.close();
+      await worker.dispose();
+      await a.db.close();
+    });
+  });
 }

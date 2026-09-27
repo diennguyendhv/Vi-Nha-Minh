@@ -6,6 +6,10 @@ import '../../../domain/auth/cloud_session.dart';
 import '../../../domain/entities/cloud_binding.dart';
 import '../../../l10n/session_localizations.dart';
 
+/// Vai trò của Account đang đăng nhập trong ví Family đang mở (null = ví không phải
+/// Family). Owner/Member là QUYỀN, không phải người (Vợ/Chồng).
+enum FamilyWalletRole { owner, member }
+
 /// P8.2 "Sao lưu ví này": claim TƯỜNG MINH (đăng nhập không bao giờ tự claim).
 /// Luồng: phiên P7.1 hợp lệ → "Bạn là ai trong ví này?" (không mặc định) → màn xác
 /// nhận nói rõ hệ quả → step-up → claim. Bước này chỉ gửi metadata sở hữu.
@@ -15,8 +19,14 @@ class WalletClaimControls extends StatefulWidget {
     required this.service,
     required this.accountLabel,
     this.stepUp,
+    this.familyRole,
   });
   final WalletClaimService service;
+
+  /// P10: ví đang mở là Ví gia đình ⇒ hiện đúng vai trò (Chủ ví / Thành viên) thay vì
+  /// "đăng ký/huỷ đăng ký" của ví Personal. Member KHÔNG sở hữu ví: không có thao tác
+  /// đăng ký/huỷ (máy chủ cũng từ chối). Chỉ đổi cách hiển thị — không đổi quyền.
+  final FamilyWalletRole? familyRole;
 
   /// Email/tên hiển thị của Account đang đăng nhập (chỉ để hiện ở màn xác nhận).
   final String accountLabel;
@@ -47,6 +57,21 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
         }
       }, silentFailure: true),
     );
+  }
+
+  @override
+  void didUpdateWidget(WalletClaimControls old) {
+    super.didUpdateWidget(old);
+    // Đổi ví đang mở (vd Member vừa tham gia ⇒ ví MỚI) ⇒ service mới trên DB khác:
+    // đọc lại, không giữ trạng thái của ví cũ (từng hiện nhầm "chưa gắn tài khoản").
+    if (!identical(old.service, widget.service)) {
+      _loaded = false;
+      _binding = null;
+      _message = null;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _guard(_reload, silentFailure: true),
+      );
+    }
   }
 
   Future<void> _reload() async {
@@ -209,10 +234,18 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
     final binding = _binding;
     final uid = widget.service.session.accountId();
     final mine = binding != null && binding.accountId == uid;
+    final role = widget.familyRole;
     final String status;
     final actions = <Widget>[];
     if (!_loaded) {
       status = '';
+    } else if (role != null &&
+        mine &&
+        binding.state == CloudBindingState.active) {
+      final member = _labels[binding.selfMemberId] ?? binding.selfMemberId;
+      status = role == FamilyWalletRole.owner
+          ? text.familyOwnerStatus(member)
+          : text.familyMemberStatus(member);
     } else if (binding == null) {
       status = text.claimNone;
       actions.add(
@@ -260,7 +293,8 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          text.claimTitle,
+          role != null && mine ? text.familyWalletTitle : text.claimTitle,
+          key: const Key('claim_title'),
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),

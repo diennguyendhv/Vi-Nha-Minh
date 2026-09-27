@@ -488,7 +488,43 @@ FinancialMember: an invite binds an Account to an EXISTING `memberId` the Owner 
   was then deleted from B (used as the live delete test). After sign-out/in the P7.1 session must be
   re-activated (signal-triggered pull was blocked with 0 calls until then — by design).
 - **Pending / not done:** backend-sent invite email; forward secrecy after revoke; conflict review
-  UI beyond the count; Member-side hiding of claim "abandon" (server rejects it anyway).
+  UI beyond the count. (Member-side claim "abandon" is now hidden — closure below.)
+- **Family DEV final closure (2026-09-27):**
+  - *Member wording fix:* the Settings card on a Member device could keep showing the install-time
+    local Wallet's state ("chưa gắn với tài khoản nào") after the Member joined, because
+    `WalletClaimControls` only loaded in `initState` (the joined Wallet is a new DB/service). It now
+    reloads when the service changes, and for a Family Wallet shows the ROLE instead of the Personal
+    claim text: title "Ví gia đình"; Member ⇒ "Bạn là Thành viên … Chủ ví quản lý thành viên và khoá
+    sao lưu; bạn dùng và đồng bộ ví chung" (no register/check/abandon actions); Owner ⇒ "Bạn là Chủ
+    ví …". The backup card on a Member reads "Đồng bộ mã hoá Ví gia đình" / "Máy này giữ khoá ví do
+    Chủ ví chia sẻ". Display only (`activeWalletFamilyRoleProvider` from the registry); permissions are
+    still enforced by the server.
+  - *Key-sharing crypto audit:* primitives from package `cryptography` 2.9.0 (pure-Dart
+    `DartX25519`, `DartHkdf(DartHmac.sha256)`, `DartAesGcm.with256bits`), composed as ECIES/HPKE-base
+    style; no custom primitive. The context string (version `vinhaminh-family-bmk-share-v1` | walletId |
+    ownerAccountId | recipient uid | recipient memberId | recipient installationId | recipient public
+    key) is BOTH in the HKDF info and the AES-GCM AAD, so changing any field fails authentication. The
+    12-digit code is SHA-256(label|context) truncated to 48 bits: computed only from public values, it is
+    a human SAS against public-key substitution — never key material and never the sole authorization
+    (putMemberKey also requires the current Owner, P7.1 session, ACTIVE membership, pinned
+    SHA-256(public key) + installation; getMemberKey requires the ACTIVE Member on that installation).
+    Server/admin holds only public keys, `{v,epk,n,c}`, invite metadata/token hash, the code-derivable
+    public context: none of it yields the BMK (needs the Member device's X25519 private seed — in its
+    Keystore-wrapped slot — or the Owner's discarded ephemeral key). "Mã ví" is a one-way HKDF
+    commitment. *Hardening note (non-blocking):* a 48-bit SAS means an ACTIVE malicious server would
+    need ~2^48 key-generation attempts inside the invite window to forge a matching code; acceptable for
+    v1, a longer code or commit-then-reveal is future hardening.
+- **Known Family v1 limitations (accepted, non-blocking; NOT to be "solved" with server plaintext):**
+  1. Invitation delivery is manual (Owner copies the one-time code); no server email yet.
+  2. Conflict review UI is minimal (count "Xung đột cần xem lại: N"); the losing value is kept in
+     `sync_conflicts`, but there is no detailed compare/restore screen yet.
+  3. A revoked device that stays offline keeps the encrypted local data and the BMK it already had
+     until normal security boundaries apply (SQLCipher + FBE + App Lock; no remote wipe).
+  4. No BMK rotation / forward secrecy after revocation (future hardening).
+  5. Two devices offline can each spend from the same pool; after merge the aggregate can go negative
+     — the app detects and warns after convergence (`overdrawnPools`), nothing is auto-fixed.
+  6. The server cannot enforce financial balance semantics because payloads are zero-knowledge
+     ciphertext; the client engine is authoritative.
 
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow

@@ -242,10 +242,12 @@ class _WalletBackupControlsState extends State<WalletBackupControls> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            text.walletBackupTitle,
+            widget.ownerActions ? text.walletBackupTitle : text.familySyncTitle,
+            key: const Key('wallet_backup_title'),
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           Text(switch (s.state) {
+            'COMPLETE' when !widget.ownerActions => text.familySyncComplete,
             'COMPLETE' => text.walletBackupComplete,
             'SEEDING' => text.walletBackupSeeding,
             _ => text.walletBackupOff,

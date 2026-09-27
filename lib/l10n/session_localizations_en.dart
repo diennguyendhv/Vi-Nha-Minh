@@ -499,4 +499,24 @@ class SessionLocalizationsEn extends SessionLocalizations {
   String familyOverdrawn(int count) {
     return 'After syncing, $count balance(s) went negative. Please review recent transactions.';
   }
+
+  @override
+  String get familyWalletTitle => 'Family Wallet';
+
+  @override
+  String familyOwnerStatus(String member) {
+    return 'You are the Owner of this Family Wallet (you are $member). You manage members and the backup keys.';
+  }
+
+  @override
+  String familyMemberStatus(String member) {
+    return 'You are a Member of this Family Wallet (you are $member). The Owner manages members and the backup keys; you use and sync the shared Wallet.';
+  }
+
+  @override
+  String get familySyncTitle => 'Encrypted Family sync (DEV)';
+
+  @override
+  String get familySyncComplete =>
+      'Synced. This device holds the Wallet key shared by the Owner; changes are encrypted on this device.';
 }

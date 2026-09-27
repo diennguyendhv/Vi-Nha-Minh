@@ -157,6 +157,7 @@ class AccountSettingsCard extends ConsumerWidget {
               service: ref.watch(walletClaimServiceProvider)!,
               accountLabel: account.email ?? account.label,
               stepUp: () => _stepUp(context, ref),
+              familyRole: ref.watch(activeWalletFamilyRoleProvider),
             ),
           ],
           if (account != null &&

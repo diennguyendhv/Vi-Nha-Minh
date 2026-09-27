@@ -928,6 +928,36 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'After syncing, {count} balance(s) went negative. Please review recent transactions.'**
   String familyOverdrawn(int count);
+
+  /// No description provided for @familyWalletTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Family Wallet'**
+  String get familyWalletTitle;
+
+  /// No description provided for @familyOwnerStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'You are the Owner of this Family Wallet (you are {member}). You manage members and the backup keys.'**
+  String familyOwnerStatus(String member);
+
+  /// No description provided for @familyMemberStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'You are a Member of this Family Wallet (you are {member}). The Owner manages members and the backup keys; you use and sync the shared Wallet.'**
+  String familyMemberStatus(String member);
+
+  /// No description provided for @familySyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted Family sync (DEV)'**
+  String get familySyncTitle;
+
+  /// No description provided for @familySyncComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced. This device holds the Wallet key shared by the Owner; changes are encrypted on this device.'**
+  String get familySyncComplete;
 }
 
 class _SessionLocalizationsDelegate

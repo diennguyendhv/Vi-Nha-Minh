@@ -11,6 +11,7 @@ import '../../data/sync/remote_signal.dart';
 import '../../data/sync/restore_engine.dart';
 import '../../data/sync/restore_storage.dart';
 import '../../data/sync/sync_worker.dart';
+import '../features/settings/wallet_claim_controls.dart' show FamilyWalletRole;
 import 'database_provider.dart';
 import 'session_provider.dart';
 
@@ -83,6 +84,17 @@ final activeWalletIsFamilyMemberProvider = Provider<bool>((ref) {
   if (walletId == null) return false;
   return ref.watch(walletRegistryProvider).byWalletId(walletId)?.familyMember ??
       false;
+});
+
+/// P10: vai trò hiển thị của Account trong ví đang mở — null khi ví không phải Family.
+/// Chỉ để HIỂN THỊ (quyền thật do máy chủ cưỡng chế).
+final activeWalletFamilyRoleProvider = Provider<FamilyWalletRole?>((ref) {
+  ref.watch(walletRegistryRevisionProvider);
+  final walletId = ref.watch(activeWalletProvider).walletId;
+  if (walletId == null) return null;
+  final entry = ref.watch(walletRegistryProvider).byWalletId(walletId);
+  if (entry?.kind != WalletKind.family) return null;
+  return entry!.familyMember ? FamilyWalletRole.member : FamilyWalletRole.owner;
 });
 
 /// P10 khoá thiết bị Family (Keystore). Test override bằng bản bộ nhớ.

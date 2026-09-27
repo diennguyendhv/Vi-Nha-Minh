@@ -261,5 +261,24 @@
         "type": "int"
       }
     }
-  }
+  },
+  "familyWalletTitle": "Family Wallet",
+  "familyOwnerStatus": "You are the Owner of this Family Wallet (you are {member}). You manage members and the backup keys.",
+  "@familyOwnerStatus": {
+    "placeholders": {
+      "member": {
+        "type": "String"
+      }
+    }
+  },
+  "familyMemberStatus": "You are a Member of this Family Wallet (you are {member}). The Owner manages members and the backup keys; you use and sync the shared Wallet.",
+  "@familyMemberStatus": {
+    "placeholders": {
+      "member": {
+        "type": "String"
+      }
+    }
+  },
+  "familySyncTitle": "Encrypted Family sync (DEV)",
+  "familySyncComplete": "Synced. This device holds the Wallet key shared by the Owner; changes are encrypted on this device."
 }
