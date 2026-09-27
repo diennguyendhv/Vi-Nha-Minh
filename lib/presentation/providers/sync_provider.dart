@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../data/backup/backup_key_store.dart';
 import '../../data/cloud/family_device_key_store.dart';
 import '../../data/cloud/family_service.dart';
@@ -20,10 +21,10 @@ final backupKeyStoreProvider = Provider<BackupKeyStore>(
   (ref) => KeystoreBackupKeyStore(),
 );
 
-/// P8.3/P8.4 engine của ví ĐANG MỞ (chỉ DEV + có phiên cloud). Dựng lại khi đổi ví.
+/// P8.3/P8.4 engine của ví ĐANG MỞ ([CloudPolicy] + có phiên cloud). Dựng lại khi đổi ví.
 final cloudSyncEngineProvider = Provider<CloudSyncEngine?>((ref) {
   final session = ref.watch(cloudSessionProvider);
-  if (session == null || AppEnvironment.current != AppEnvironment.dev) {
+  if (session == null || !CloudPolicy.enabledIn(AppEnvironment.current)) {
     return null;
   }
   if (ref.watch(walletAccessDeniedProvider)) return null;
@@ -124,10 +125,10 @@ final familyServiceProvider = Provider<FamilyService?>((ref) {
   );
 });
 
-/// P8.5 khôi phục vào 1 ví MỚI (chỉ DEV + có phiên cloud).
+/// P8.5 khôi phục vào 1 ví MỚI ([CloudPolicy] + có phiên cloud).
 final restoreEngineProvider = Provider<RestoreEngine?>((ref) {
   final session = ref.watch(cloudSessionProvider);
-  if (session == null || AppEnvironment.current != AppEnvironment.dev) {
+  if (session == null || !CloudPolicy.enabledIn(AppEnvironment.current)) {
     return null;
   }
   return RestoreEngine(

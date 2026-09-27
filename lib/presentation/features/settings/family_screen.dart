@@ -118,6 +118,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     try {
       await action();
       if (done != null) _message = done;
+    } on FamilyException catch (e) {
+      if (kDebugMode) debugPrint('[family] failed $e');
+      _message = e.reason == 'member-mismatch'
+          ? _t.familyMemberMismatch
+          : _t.familyFailed;
     } on Object catch (e) {
       if (kDebugMode) debugPrint('[family] failed ${e.runtimeType} $e');
       _message = _t.familyFailed;

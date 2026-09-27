@@ -28,7 +28,11 @@ class LocalTransactionRepository implements TransactionRepository {
 
   final AppDatabase _db;
 
-  domain.Transaction _toDomain(TransactionRow row) {
+  domain.Transaction _toDomain(TransactionRow row) => rowToDomain(row);
+
+  /// Ánh xạ thuần dòng → entity (không cần DB mở) — dùng lại cho kiểm chứng offline
+  /// (vd diễn tập di trú đọc dòng thô của DB chưa di trú).
+  static domain.Transaction rowToDomain(TransactionRow row) {
     return domain.Transaction(
       id: row.id,
       type: TransactionType.values.byName(row.type),

@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../core/config/firebase_env_config.dart';
 import '../../domain/auth/auth_repository.dart';
 import 'firebase_auth_repository.dart';
@@ -41,7 +42,7 @@ Future<AuthRepository> bootstrapAuth({
     final repository = FirebaseAuthRepository(
       googleServerClientId: config.googleServerClientId,
     );
-    if (environment == AppEnvironment.dev) {
+    if (CloudPolicy.enabledIn(environment)) {
       final auth = FirebaseAuth.instance;
       repository.cloudSession = CloudSession(
         KeystoreSessionStorage(),

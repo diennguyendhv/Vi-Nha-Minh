@@ -15,3 +15,8 @@ Thiếu file/giá trị mẫu ⇒ Auth hiển thị "chưa cấu hình", app loc
 `applicationId`: dev=`com.vinhamimh.vi_nha_minh.dev`, pilot=`...pilot`,
 prod=`com.vinhamimh.vi_nha_minh` (không đổi). Đăng ký SHA-1 của keystore dùng để
 ký từng flavor trong Firebase Console cho đúng applicationId đó.
+
+**Cloud (phiên, claim, sao lưu/đồng bộ mã hoá, Gia đình) — `CloudPolicy`:** DEV luôn bật;
+PILOT tắt; PROD chỉ bật khi `prod.json` có `"CLOUD_ENABLED": "true"` VÀ project id khác
+dự án DEV. Backend phục vụ đúng các project liệt kê trong `functions/env.js` (PROD được
+thêm bằng project id chính xác khi dự án PROD tồn tại).

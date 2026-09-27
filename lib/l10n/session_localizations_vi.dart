@@ -293,7 +293,7 @@ class SessionLocalizationsVi extends SessionLocalizations {
       'Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau.';
 
   @override
-  String get walletBackupTitle => 'Sao lưu mã hoá ví này (DEV)';
+  String get walletBackupTitle => 'Sao lưu mã hoá ví này';
 
   @override
   String get walletBackupOff => 'Chưa bật. Ví này chỉ nằm trên máy này.';
@@ -352,7 +352,7 @@ class SessionLocalizationsVi extends SessionLocalizations {
       'Chưa thay được Recovery Key. Mật khẩu sao lưu vẫn dùng được; hãy thử lại.';
 
   @override
-  String get familyEntry => 'Gia đình (DEV)';
+  String get familyEntry => 'Gia đình';
 
   @override
   String get familyTitle => 'Gia đình';
@@ -472,6 +472,10 @@ class SessionLocalizationsVi extends SessionLocalizations {
   String get familyRefresh => 'Làm mới';
 
   @override
+  String get familyMemberMismatch =>
+      'Kiểm tra an toàn thất bại: máy chủ báo một người khác với người bạn đã chọn lúc mời. Khoá ví CHƯA được chia sẻ. Hãy huỷ lời mời này và mời lại.';
+
+  @override
   String get familyFailed =>
       'Chưa thực hiện được. Không có gì trên máy này bị thay đổi.';
 
@@ -509,7 +513,7 @@ class SessionLocalizationsVi extends SessionLocalizations {
   }
 
   @override
-  String get familySyncTitle => 'Đồng bộ mã hoá Ví gia đình (DEV)';
+  String get familySyncTitle => 'Đồng bộ mã hoá Ví gia đình';
 
   @override
   String get familySyncComplete =>

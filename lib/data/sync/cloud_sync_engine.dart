@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../core/crypto/backup_crypto.dart';
 import '../../core/crypto/envelope_cipher.dart';
 import '../../domain/auth/cloud_session.dart';
@@ -139,9 +140,9 @@ class CloudSyncEngine {
     }
   }
 
-  /// Chỉ DEV (cổng dữ liệu thật: CLAUDE.md §19/§22 — backend cũng chỉ phục vụ DEV).
+  /// DEV, hoặc PROD đã bật cloud tường minh ([CloudPolicy]).
   void _requireAllowed() {
-    if (env != AppEnvironment.dev) {
+    if (!CloudPolicy.enabledIn(env)) {
       throw const CloudSyncException('blocked-environment');
     }
   }

@@ -504,16 +504,28 @@ FinancialMember: an invite binds an Account to an EXISTING `memberId` the Owner 
     style; no custom primitive. The context string (version `vinhaminh-family-bmk-share-v1` | walletId |
     ownerAccountId | recipient uid | recipient memberId | recipient installationId | recipient public
     key) is BOTH in the HKDF info and the AES-GCM AAD, so changing any field fails authentication. The
-    12-digit code is SHA-256(label|context) truncated to 48 bits: computed only from public values, it is
+    12-digit code is the first 48 bits of SHA-256(label|context) reduced mod 10^12, i.e. at most
+    log2(10^12) ≈ 39.9 bits (~40 bits, NOT 48) of entropy: computed only from public values, it is
     a human SAS against public-key substitution — never key material and never the sole authorization
     (putMemberKey also requires the current Owner, P7.1 session, ACTIVE membership, pinned
     SHA-256(public key) + installation; getMemberKey requires the ACTIVE Member on that installation).
     Server/admin holds only public keys, `{v,epk,n,c}`, invite metadata/token hash, the code-derivable
     public context: none of it yields the BMK (needs the Member device's X25519 private seed — in its
     Keystore-wrapped slot — or the Owner's discarded ephemeral key). "Mã ví" is a one-way HKDF
-    commitment. *Hardening note (non-blocking):* a 48-bit SAS means an ACTIVE malicious server would
-    need ~2^48 key-generation attempts inside the invite window to forge a matching code; acceptable for
-    v1, a longer code or commit-then-reveal is future hardening.
+    commitment. *Hardening note (non-blocking):* a ~40-bit SAS (12 decimal digits) means an ACTIVE malicious
+    server would need ~10^12 ≈ 2^40 key-generation attempts inside the invite window to forge a matching
+    code (the Member's key is fixed before the server learns it, so it must grind its own keys offline);
+    accepted for the pilot, a longer code or commit-then-reveal is future hardening.
+  - *Owner member-selection pin (2026-09-27, pre-pilot hardening):* the SAS is computed on BOTH phones
+    from the memberId the server hands out, so a server that consistently re-binds the invitee to a
+    different FinancialMember would not change the matching codes. The Owner therefore stores the
+    memberId it explicitly chose at invite time in `wallet_settings` (`family_invited_member_id`,
+    wallet data ⇒ BMK-encrypted in sync, not server-editable); `FamilyService.shareKey` compares it with
+    the memberId the server returns and throws `member-mismatch` (security error, nothing sent) on any
+    mismatch or when the pin is missing (fail closed ⇒ cancel + re-invite).
+  - *Pilot procedure (mandatory):* the wrap has no sender authentication (ECIES/HPKE base mode), so after
+    the Member joins, both people compare "Mã ví" (BMK commitment) on both phones; a mismatch means the
+    Member received a key not from the Owner ⇒ stop, do not enter data.
   - *LIVE same-entity conflict (Pixel A Owner + AVD B Member, B re-invited after the earlier revoke,
     same fingerprint `2301 7547 8546`, same Mã ví):* both at server head 9; B app-only offline
     (`set-package-networking-enabled false`). A edited TA 123.000 → 150.000 (rev 10) and deleted TB
@@ -551,3 +563,25 @@ real entity kinds → restore into a fresh Wallet (no seed) + reconciliation →
 tombstone/idempotency review → Recovery Key regeneration + disable backup +
 trusted-device removal endpoints (each with step-up) → PILOT only after owner
 approval.
+
+
+## 8h. Pre-pilot PROD readiness (2026-09-27, PROD untouched)
+
+- **Environment gating.** Client: `CloudPolicy.enabledIn(env)` is the single switch for P7.1
+  session, claim, encrypted backup/sync, restore and Family. DEV = on, PILOT = off, PROD = on only
+  with `CLOUD_ENABLED=true` in `env/prod.json`, a usable PROD Firebase config, and a project id
+  different from the DEV project. Backend: `functions/env.js` maps explicit project ids to an
+  environment (`dev`/`prod`); an unlisted project serves nothing; the claim `environment` must
+  equal the mapped one. Pre-claim fixture ciphertext and keyrings for unclaimed wallets are DEV
+  only (`fixturesAllowed`); in PROD `putEncryptedBatch`/`getEncryptedChanges` on an unclaimed
+  wallet and keyring `create` for a wallet not CLAIMED by this Owner fail with `NOT_CLAIMED`.
+- **Owner member-selection pin + corrected SAS entropy:** see the Family crypto audit above.
+- **Migration rehearsal (option a):** `rehearseWalletMigration` on a temporary SQLCipher copy
+  (ephemeral in-memory key) of the real encrypted Wallet, opened read-only; the copy is migrated
+  by the real `AppDatabase`, compared (walletId, per-table count+digest with only declared additive
+  changes, id→clientTxId, member ids, all pool balances both via raw rows and via the app
+  repository, integrity, FK), then deleted; the live file's SHA-256 must be unchanged. Runs from a
+  diagnostic debug build (`DB_REHEARSAL=true`) that never opens the Wallet with `AppDatabase`.
+- **Signing path:** no APK key rotation. Temporary current-source PROD build signed with the SAME
+  debug key updates in place → migrate + verify → encrypted backup COMPLETE on Firebase PROD →
+  Recovery Key saved → uninstall old → install release-signed build → restore the same Wallet.

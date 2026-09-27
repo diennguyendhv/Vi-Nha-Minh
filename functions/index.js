@@ -4,6 +4,7 @@ const {initializeApp} = require('firebase-admin/app');
 const {getFirestore, Timestamp} = require('firebase-admin/firestore');
 const {onCall, HttpsError} = require('firebase-functions/v2/https');
 const {getMessaging} = require('firebase-admin/messaging');
+const {serverEnvironment, fixturesAllowed} = require('./env');
 initializeApp();
 const db = getFirestore();
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -28,11 +29,9 @@ const sameHash = (value, expectedHex) =>
   timingSafeEqual(Buffer.from(hash(value), 'hex'), Buffer.from(expectedHex, 'hex'));
 
 function context(request) {
-  // Deployment remains opt-in DEV; emulator uses a non-live demo project.
-  const project = process.env.GCLOUD_PROJECT;
-  if (!(project === 'demo-homewallet-p7' && process.env.FUNCTIONS_EMULATOR === 'true') &&
-      project !== 'vi-nha-minh-55c60') {
-    throw new HttpsError('failed-precondition', 'DEV session service disabled');
+  // Only explicitly listed projects are served (env.js); emulator = demo project.
+  if (!serverEnvironment()) {
+    throw new HttpsError('failed-precondition', 'Session service disabled');
   }
   if (!request.auth) throw new HttpsError('unauthenticated', 'Authentication required');
   const data = request.data;
@@ -367,6 +366,12 @@ exports.putBackupKeyring = onCall(options, async request => {
     }
     if (data.mode === 'create') {
       if (existing) throw reject('already-exists', 'KEYRING_EXISTS');
+      if (!fixturesAllowed(serverEnvironment())) {
+        // PROD: a keyring only for a wallet this Account has CLAIMED as Owner.
+        const wallet = (await tx.get(db.doc(`wallets/${data.walletId}`))).data();
+        if (!wallet || wallet.state !== 'CLAIMED') throw reject('failed-precondition', 'NOT_CLAIMED');
+        if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
+      }
       if (data.cryptoVersion !== 1 || !validSlot(data.recovery, 'recovery') ||
           typeof data.recoveryProof !== 'string' || !token43.test(data.recoveryProof)) {
         throw new HttpsError('invalid-argument', 'Invalid keyring');
@@ -424,8 +429,12 @@ function validEnvelope(e) {
  */
 async function walletAccess(tx, walletRef, uid) {
   const wallet = (await tx.get(walletRef)).data();
-  if (!wallet) return {wallet: null, keyringOwner: uid};
-  if (wallet.state === undefined) {
+  if (!wallet || wallet.state === undefined) {
+    // Pre-claim fixture ciphertext: DEV only. PROD serves CLAIMED wallets only.
+    if (!fixturesAllowed(serverEnvironment())) {
+      throw reject('failed-precondition', 'NOT_CLAIMED');
+    }
+    if (!wallet) return {wallet: null, keyringOwner: uid};
     if (wallet.ownerAccountId !== uid) throw new HttpsError('permission-denied', 'Not owner');
     return {wallet, keyringOwner: uid};
   }
@@ -591,8 +600,6 @@ exports.enableBackup = onCall(options, async request => {
 // accepted here (unknown request fields are rejected, not ignored).
 // ---------------------------------------------------------------------------
 const memberIdPattern = /^[A-Za-z0-9_-]{1,64}$/;
-// This backend only ever serves DEV (see context()); PILOT/PROD stay disabled.
-const SERVER_ENVIRONMENT = 'dev';
 const MAX_MEMBERS = 2;
 const onlyKeys = (data, keys) =>
   Object.keys(data).every(k => CREDENTIAL_KEYS.includes(k) || keys.includes(k));
@@ -622,7 +629,7 @@ function claimInput(data) {
       typeof data.environment !== 'string') {
     throw new HttpsError('invalid-argument', 'Invalid claim');
   }
-  if (data.environment !== SERVER_ENVIRONMENT) {
+  if (data.environment !== serverEnvironment()) {
     throw reject('failed-precondition', 'ENVIRONMENT_MISMATCH');
   }
 }

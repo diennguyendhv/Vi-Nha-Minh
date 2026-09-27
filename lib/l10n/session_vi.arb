@@ -80,7 +80,7 @@
   "claimSelfMismatch": "Máy chủ đã ghi bạn là thành viên khác trong ví này. Hãy chọn lại.",
   "claimBackupStarted": "Đã bắt đầu sao lưu nên không huỷ đăng ký được.",
   "claimFailed": "Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau.",
-  "walletBackupTitle": "Sao lưu mã hoá ví này (DEV)",
+  "walletBackupTitle": "Sao lưu mã hoá ví này",
   "walletBackupOff": "Chưa bật. Ví này chỉ nằm trên máy này.",
   "walletBackupSeeding": "Đang tải bản sao lưu mã hoá đầu tiên…",
   "walletBackupComplete": "Đã sao lưu. Thay đổi mới được tự tải lên, mã hoá ngay trên máy.",
@@ -97,7 +97,7 @@
   "rotateRecoveryConfirmBody": "Recovery Key hiện tại sẽ hết hiệu lực ngay. Mật khẩu sao lưu và dữ liệu sao lưu giữ nguyên. Key mới chỉ hiện 1 lần.",
   "rotateRecoveryConfirm": "Tạo key mới",
   "rotateRecoveryFailed": "Chưa thay được Recovery Key. Mật khẩu sao lưu vẫn dùng được; hãy thử lại.",
-  "familyEntry": "Gia đình (DEV)",
+  "familyEntry": "Gia đình",
   "familyTitle": "Gia đình",
   "familyPromote": "Chia sẻ với gia đình",
   "familyPromoteBody": "Ví này trở thành Ví gia đình ngay tại chỗ: cùng ví, cùng dữ liệu, cùng bản sao lưu. Bạn vẫn là Chủ ví. Không sao chép gì. Sau đó ví chỉ hiện khi bạn đang đăng nhập.",
@@ -132,6 +132,7 @@
   "familyJoined": "Đã tải và kiểm chứng Ví gia đình.",
   "familyYouAre": "Bạn là Thành viên của Ví gia đình này với tư cách {member}.",
   "familyRefresh": "Làm mới",
+  "familyMemberMismatch": "Kiểm tra an toàn thất bại: máy chủ báo một người khác với người bạn đã chọn lúc mời. Khoá ví CHƯA được chia sẻ. Hãy huỷ lời mời này và mời lại.",
   "familyFailed": "Chưa thực hiện được. Không có gì trên máy này bị thay đổi.",
   "familyNeedsBackup": "Hãy bật sao lưu mã hoá cho ví này trước.",
   "familyNeedsClaim": "Hãy đăng ký ví này với tài khoản của bạn trước.",
@@ -141,6 +142,6 @@
   "familyWalletTitle": "Ví gia đình",
   "familyOwnerStatus": "Bạn là Chủ ví của Ví gia đình này (bạn là {member}). Bạn quản lý thành viên và khoá sao lưu.",
   "familyMemberStatus": "Bạn là Thành viên của Ví gia đình này (bạn là {member}). Chủ ví quản lý thành viên và khoá sao lưu; bạn dùng và đồng bộ ví chung.",
-  "familySyncTitle": "Đồng bộ mã hoá Ví gia đình (DEV)",
+  "familySyncTitle": "Đồng bộ mã hoá Ví gia đình",
   "familySyncComplete": "Đã đồng bộ. Máy này giữ khoá ví do Chủ ví chia sẻ; thay đổi được mã hoá ngay trên máy."
 }

@@ -6,6 +6,7 @@ import 'data/backup/backup_key_store.dart';
 import 'data/backup/backup_service.dart';
 import 'data/auth/firebase_bootstrap.dart';
 import 'data/auth/firebase_auth_repository.dart';
+import 'presentation/features/settings/migration_rehearsal_app.dart';
 import 'presentation/features/settings/sync_lifecycle_host.dart';
 import 'data/sync/remote_signal.dart';
 import 'presentation/providers/sync_provider.dart';
@@ -42,6 +43,13 @@ Future<void> main() async {
   // lỗi này khi chạy thật trên điện thoại lúc không có mạng). Font sẽ dùng
   // font hệ thống thay Manrope cho tới khi bundle file font tĩnh vào app.
   GoogleFonts.config.allowRuntimeFetching = false;
+
+  // Bản CHẨN ĐOÁN diễn tập di trú: dừng TRƯỚC mọi thứ chạm ví (preflight, Auth,
+  // registry, AppDatabase) để ví thật không bị di trú ở bản này.
+  if (MigrationRehearsalApp.enabled) {
+    runApp(const MigrationRehearsalApp());
+    return;
+  }
 
   // Quỹ chính của Trang chủ lưu bền vững (thiết lập hiển thị, không phải sổ cái).
   final prefs = await SharedPreferences.getInstance();

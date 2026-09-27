@@ -4,6 +4,7 @@ import 'package:cryptography/dart.dart';
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../core/crypto/backup_crypto.dart' show BackupKeyException;
 import '../../core/crypto/family_key_crypto.dart';
 import '../../domain/auth/cloud_session.dart';
@@ -21,7 +22,8 @@ class FamilyException implements Exception {
   const FamilyException(this.reason);
 
   /// App: `blocked-environment`, `no-wallet-key`, `not-family`, `no-device-key`,
-  /// `device-key-mismatch`, `key-not-shared`, `wrong-key`, `not-member`.
+  /// `device-key-mismatch`, `key-not-shared`, `wrong-key`, `not-member`,
+  /// `member-mismatch` (máy chủ trả về FinancialMember khác cái Owner đã chọn lúc mời).
   final String reason;
   @override
   String toString() => 'FamilyException($reason)';
@@ -119,8 +121,13 @@ class FamilyService {
   final AppEnvironment env;
   int calls = 0;
 
-  /// Chỉ DEV (backend Family chỉ phục vụ DEV).
-  static bool allowedIn(AppEnvironment env) => env == AppEnvironment.dev;
+  /// `wallet_settings`: memberId Owner đã chọn TƯỜNG MINH lúc tạo lời mời. Nằm trong
+  /// dữ liệu ví (mã hoá bằng BMK khi đồng bộ) ⇒ máy chủ không sửa được. [shareKey] so
+  /// khớp với memberId máy chủ trả về; lệch/thiếu ⇒ dừng, không bọc BMK.
+  static const invitedMemberKey = 'family_invited_member_id';
+
+  /// DEV, hoặc PROD đã bật cloud tường minh ([CloudPolicy]).
+  static bool allowedIn(AppEnvironment env) => CloudPolicy.enabledIn(env);
 
   void _requireAllowed() {
     if (!allowedIn(env)) throw const FamilyException('blocked-environment');
@@ -236,6 +243,11 @@ class FamilyService {
       'memberId': memberId,
       'inviteeEmail': email.trim(),
     });
+    await db!
+        .into(db!.walletSettings)
+        .insertOnConflictUpdate(
+          WalletSettingsCompanion.insert(key: invitedMemberKey, value: memberId),
+        );
     return (
       token: r['token'] as String,
       expiresAt: DateTime.fromMillisecondsSinceEpoch(r['expiresAt'] as int),
@@ -262,6 +274,14 @@ class FamilyService {
         member.publicKey == null ||
         member.keyInstallationId == null) {
       throw const FamilyException('not-member');
+    }
+    // Không tin máy chủ lặng lẽ đổi FinancialMember: vân tay 12 số được tính từ CÙNG
+    // memberId máy chủ đưa cho cả 2 máy nên không tự phát hiện được việc này.
+    final chosen = await (db!.select(
+      db!.walletSettings,
+    )..where((s) => s.key.equals(invitedMemberKey))).getSingleOrNull();
+    if (chosen == null || chosen.value != member.memberId) {
+      throw const FamilyException('member-mismatch');
     }
     final pub = base64.decode(member.publicKey!);
     final wrapped = await FamilyKeyCrypto.wrapBmk(

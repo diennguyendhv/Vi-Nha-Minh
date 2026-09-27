@@ -7,11 +7,12 @@ import '../../core/crypto/envelope_cipher.dart';
 import '../../domain/auth/cloud_session.dart';
 import 'backup_key_store.dart';
 
-/// Release gate (CLAUDE.md §19, docs/p8-cloud-backup-architecture.md):
-/// local SQLCipher has NOT passed, so only synthetic DEV fixture wallets may be
-/// backed up. There is intentionally no API that uploads the real local Wallet.
+/// Release gate (CLAUDE.md §19/§23, docs/p8-cloud-backup-architecture.md):
+/// local SQLCipher PASSED (2026-09-26). The real Wallet is backed up only by the
+/// claimed-wallet engine (`CloudSyncEngine`, gated by `CloudPolicy`). The
+/// synthetic fixture tools below stay DEV-only forever.
 abstract final class BackupGate {
-  static const localDbEncryptionPassed = false;
+  static const localDbEncryptionPassed = true;
 
   static void requireFixtureAllowed(AppEnvironment env) {
     if (env != AppEnvironment.dev) throw const BackupBlocked();

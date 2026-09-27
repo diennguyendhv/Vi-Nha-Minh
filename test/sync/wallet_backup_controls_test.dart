@@ -136,7 +136,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(find.text('Đồng bộ mã hoá Ví gia đình (DEV)'), findsOneWidget);
+    expect(find.text('Đồng bộ mã hoá Ví gia đình'), findsOneWidget);
     expect(find.textContaining('khoá ví do Chủ ví chia sẻ'), findsOneWidget);
     expect(find.textContaining('Sao lưu mã hoá ví này'), findsNothing);
     expect(find.byKey(const Key('rotate_recovery_key')), findsNothing);

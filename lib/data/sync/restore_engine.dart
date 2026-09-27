@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../core/crypto/envelope_cipher.dart';
 import '../../core/utils/opaque_id.dart';
 import '../../domain/auth/cloud_session.dart';
@@ -149,8 +150,9 @@ class RestoreEngine {
     String? recoveryKey,
     bool allowStaleCheckpoint = false,
   }) async {
-    if (env != AppEnvironment.dev)
+    if (!CloudPolicy.enabledIn(env)) {
       throw const RestoreException('blocked-environment');
+    }
     if ((password == null) == (recoveryKey == null)) {
       throw ArgumentError('exactly one secret');
     }
@@ -218,7 +220,7 @@ class RestoreEngine {
     required Uint8List bmk,
     bool allowStaleCheckpoint = false,
   }) async {
-    if (env != AppEnvironment.dev) {
+    if (!CloudPolicy.enabledIn(env)) {
       throw const RestoreException('blocked-environment');
     }
     final uid = session.accountId() ?? (throw const SessionFailure(true));

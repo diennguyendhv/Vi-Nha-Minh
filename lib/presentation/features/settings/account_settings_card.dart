@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/config/app_environment.dart';
+import '../../../core/config/cloud_policy.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/auth/firebase_auth_repository.dart';
 import '../../../domain/auth/auth_repository.dart';
@@ -162,10 +163,10 @@ class AccountSettingsCard extends ConsumerWidget {
           ],
           if (account != null &&
               ref.watch(syncWorkerProvider) != null &&
-              AppEnvironment.current == AppEnvironment.dev) ...[
+              CloudPolicy.enabledIn(AppEnvironment.current)) ...[
             const SizedBox(height: 10),
             // Ví đang mở đã claim ⇒ sao lưu THẬT của ví này; chưa claim ⇒ công cụ
-            // fixture DEV cũ (P8).
+            // fixture cũ (P8) — CHỈ DEV, không bao giờ ở PROD.
             WalletBackupControls(
               // Engine mới cho mỗi ví/Account ⇒ state widget không mang sang ví khác.
               key: ObjectKey(ref.watch(cloudSyncEngineProvider)),
@@ -175,7 +176,9 @@ class AccountSettingsCard extends ConsumerWidget {
               stepUp: () => _stepUp(context, ref),
               // P10: Member Family không có keyring/Recovery Key riêng — chỉ Owner.
               ownerActions: !ref.watch(activeWalletIsFamilyMemberProvider),
-              fallback: ref.watch(backupServiceProvider) == null
+              fallback:
+                  AppEnvironment.current != AppEnvironment.dev ||
+                      ref.watch(backupServiceProvider) == null
                   ? null
                   : BackupControls(
                       key: ValueKey('backup-${account.uid}'),

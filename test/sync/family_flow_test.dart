@@ -199,6 +199,8 @@ void main() {
   joinB() async {
     await ownerService.promote();
     final invite = await ownerService.invite(memberId: wife, email: ' VO@test.dev ');
+    // Lựa chọn thành viên ghi nhớ là dữ liệu ví (wallet_settings) ⇒ đồng bộ như mọi thay đổi.
+    await a.engine.push();
     final b = await memberDevice('uid-b');
     final accepted = await b.service.accept(invite.token);
     // Chấp nhận lại (bị máy chủ từ chối) không được làm hỏng khoá thiết bị đã đăng ký.
@@ -324,6 +326,34 @@ void main() {
     // Vân tay tính lại từ khoá bị tráo KHÔNG còn khớp màn hình B.
     final swapped = (await ownerService.status()).activeMember!;
     expect(swapped.fingerprint, isNot(accepted.fingerprint));
+  });
+
+  test('máy chủ đổi memberId đã chọn lúc mời ⇒ Owner KHÔNG bọc BMK (member-mismatch)', () async {
+    await ownerService.promote();
+    final invite = await ownerService.invite(memberId: wife, email: 'vo@test.dev');
+    final b = await memberDevice('uid-b');
+    await b.service.accept(invite.token);
+    // Máy chủ độc hại gắn B vào FinancialMember khác (chồng) cho CẢ 2 phía ⇒ vân tay
+    // 2 máy vẫn trùng; chỉ lựa chọn Owner ghi nhớ cục bộ mới phát hiện được.
+    cloud.memberships[walletId]!['uid-b']!['memberId'] = husband;
+    final view = (await ownerService.status()).activeMember!;
+    expect(view.memberId, husband);
+    final callsBefore = ownerService.calls;
+    await expectLater(
+      ownerService.shareKey(view),
+      throwsA(isA<FamilyException>().having((e) => e.reason, 'reason', 'member-mismatch')),
+    );
+    expect(ownerService.calls, callsBefore, reason: 'không gửi gói khoá nào');
+    expect(cloud.memberships[walletId]!['uid-b']!['wrappedKey'], isNull);
+    // Thiếu lựa chọn đã ghi nhớ (vd ví cũ) ⇒ cũng dừng (fail closed).
+    cloud.memberships[walletId]!['uid-b']!['memberId'] = wife;
+    await (a.db.delete(a.db.walletSettings)
+          ..where((s) => s.key.equals(FamilyService.invitedMemberKey)))
+        .go();
+    await expectLater(
+      ownerService.shareKey((await ownerService.status()).activeMember!),
+      throwsA(isA<FamilyException>().having((e) => e.reason, 'reason', 'member-mismatch')),
+    );
   });
 
   test('B tham gia: cùng walletId, cùng id/clientTxId/memberId, cùng số dư; binding = vợ', () async {

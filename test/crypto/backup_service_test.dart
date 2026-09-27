@@ -203,14 +203,14 @@ void main() {
     expect(await (a.service.session.storage as MemoryStorage).read('uid-1'), isNull);
   });
 
-  test('SQLCipher gate: non-DEV environments are hard-blocked', () async {
+  test('fixture tools: non-DEV environments are hard-blocked', () async {
     for (final env in [AppEnvironment.pilot, AppEnvironment.prod]) {
       final a = await device(FakeServer(), env: env);
       await expectLater(a.service.enableFixture('long-enough-pw'), throwsA(isA<BackupBlocked>()));
       await expectLater(a.service.uploadFixture(), throwsA(isA<BackupBlocked>()));
       expect(a.server.calls, ['activateSession']);
     }
-    expect(BackupGate.localDbEncryptionPassed, isFalse);
+    expect(BackupGate.localDbEncryptionPassed, isTrue);
   });
 
   test('Keystore bridge: BMK wrapped natively, never logged; channel delegation', () async {

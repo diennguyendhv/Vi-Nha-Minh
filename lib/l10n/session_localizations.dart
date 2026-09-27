@@ -584,7 +584,7 @@ abstract class SessionLocalizations {
   /// No description provided for @walletBackupTitle.
   ///
   /// In en, this message translates to:
-  /// **'Encrypted backup of this Wallet (DEV)'**
+  /// **'Encrypted backup of this Wallet'**
   String get walletBackupTitle;
 
   /// No description provided for @walletBackupOff.
@@ -686,7 +686,7 @@ abstract class SessionLocalizations {
   /// No description provided for @familyEntry.
   ///
   /// In en, this message translates to:
-  /// **'Family (DEV)'**
+  /// **'Family'**
   String get familyEntry;
 
   /// No description provided for @familyTitle.
@@ -893,6 +893,12 @@ abstract class SessionLocalizations {
   /// **'Refresh'**
   String get familyRefresh;
 
+  /// No description provided for @familyMemberMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Security check failed: the server reports a different person than the one you chose when inviting. The wallet key was NOT shared. Cancel this invitation and invite again.'**
+  String get familyMemberMismatch;
+
   /// No description provided for @familyFailed.
   ///
   /// In en, this message translates to:
@@ -950,7 +956,7 @@ abstract class SessionLocalizations {
   /// No description provided for @familySyncTitle.
   ///
   /// In en, this message translates to:
-  /// **'Encrypted Family sync (DEV)'**
+  /// **'Encrypted Family sync'**
   String get familySyncTitle;
 
   /// No description provided for @familySyncComplete.

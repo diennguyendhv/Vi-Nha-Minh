@@ -179,7 +179,8 @@ abstract final class FamilyKeyCrypto {
 
   static Future<String> _digits(List<int> input) async {
     final d = (await const DartSha256().hash(input)).bytes;
-    // 48 bit ⇒ 12 chữ số thập phân (xác suất trùng ngẫu nhiên ≈ 1e-12).
+    // Lấy 48 bit đầu rồi mod 10^12 ⇒ 12 chữ số thập phân: entropy tối đa
+    // log2(10^12) ≈ 39,9 bit (~40 bit, KHÔNG phải 48); trùng ngẫu nhiên ≈ 1e-12.
     var v = BigInt.zero;
     for (final b in d.take(6)) {
       v = (v << 8) | BigInt.from(b);

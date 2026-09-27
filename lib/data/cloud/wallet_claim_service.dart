@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../core/config/app_environment.dart';
+import '../../core/config/cloud_policy.dart';
 import '../../core/crypto/backup_crypto.dart';
 import '../../core/utils/opaque_id.dart';
 import '../../domain/auth/cloud_session.dart';
@@ -106,8 +107,8 @@ class WalletClaimService {
     return next;
   }
 
-  /// Chỉ DEV cho tới khi chủ dự án duyệt PILOT/PROD (backend cũng chỉ phục vụ DEV).
-  static bool allowedIn(AppEnvironment env) => env == AppEnvironment.dev;
+  /// DEV, hoặc PROD đã bật cloud tường minh ([CloudPolicy]).
+  static bool allowedIn(AppEnvironment env) => CloudPolicy.enabledIn(env);
 
   void _requireAllowed() {
     if (!allowedIn(env)) {

@@ -294,7 +294,7 @@ class SessionLocalizationsEn extends SessionLocalizations {
       'Registration did not complete. Data on this device is unchanged; please try again later.';
 
   @override
-  String get walletBackupTitle => 'Encrypted backup of this Wallet (DEV)';
+  String get walletBackupTitle => 'Encrypted backup of this Wallet';
 
   @override
   String get walletBackupOff =>
@@ -354,7 +354,7 @@ class SessionLocalizationsEn extends SessionLocalizations {
       'The Recovery Key was not replaced. Your Backup Password still works; try again.';
 
   @override
-  String get familyEntry => 'Family (DEV)';
+  String get familyEntry => 'Family';
 
   @override
   String get familyTitle => 'Family';
@@ -476,6 +476,10 @@ class SessionLocalizationsEn extends SessionLocalizations {
   String get familyRefresh => 'Refresh';
 
   @override
+  String get familyMemberMismatch =>
+      'Security check failed: the server reports a different person than the one you chose when inviting. The wallet key was NOT shared. Cancel this invitation and invite again.';
+
+  @override
   String get familyFailed =>
       'Could not complete. Nothing on this phone was changed.';
 
@@ -514,7 +518,7 @@ class SessionLocalizationsEn extends SessionLocalizations {
   }
 
   @override
-  String get familySyncTitle => 'Encrypted Family sync (DEV)';
+  String get familySyncTitle => 'Encrypted Family sync';
 
   @override
   String get familySyncComplete =>

@@ -128,7 +128,7 @@
       }
     }
   },
-  "walletBackupTitle": "Encrypted backup of this Wallet (DEV)",
+  "walletBackupTitle": "Encrypted backup of this Wallet",
   "walletBackupOff": "Not enabled. This Wallet is only on this device.",
   "walletBackupSeeding": "Uploading the first encrypted backup…",
   "walletBackupComplete": "Backed up. New changes are uploaded automatically, encrypted on this device.",
@@ -162,7 +162,7 @@
   "rotateRecoveryConfirmBody": "Your current Recovery Key will stop working immediately. The Backup Password and your backup data stay the same. The new key is shown only once.",
   "rotateRecoveryConfirm": "Create new key",
   "rotateRecoveryFailed": "The Recovery Key was not replaced. Your Backup Password still works; try again.",
-  "familyEntry": "Family (DEV)",
+  "familyEntry": "Family",
   "familyTitle": "Family",
   "familyPromote": "Share with family",
   "familyPromoteBody": "This Wallet becomes a Family Wallet in place: same Wallet, same data, same backup. You stay the Owner. Nothing is copied. Afterwards it is only visible while you are signed in.",
@@ -242,6 +242,7 @@
     }
   },
   "familyRefresh": "Refresh",
+  "familyMemberMismatch": "Security check failed: the server reports a different person than the one you chose when inviting. The wallet key was NOT shared. Cancel this invitation and invite again.",
   "familyFailed": "Could not complete. Nothing on this phone was changed.",
   "familyNeedsBackup": "Turn on encrypted backup for this Wallet first.",
   "familyNeedsClaim": "Register this Wallet with your account first.",
@@ -279,6 +280,6 @@
       }
     }
   },
-  "familySyncTitle": "Encrypted Family sync (DEV)",
+  "familySyncTitle": "Encrypted Family sync",
   "familySyncComplete": "Synced. This device holds the Wallet key shared by the Owner; changes are encrypted on this device."
 }
