@@ -118,9 +118,11 @@ void main() {
     final delta = await engine.push();
     expect(a.transport.calls - c1, 1);
     expect(delta.envelopes, 2);
-    // Rảnh: syncNow = đúng 1 lời gọi kéo.
+    // Rảnh: 0 lời gọi; kéo tường minh = đúng 1 lời gọi đọc.
     final c2 = a.transport.calls;
     await engine.syncNow();
+    expect(a.transport.calls - c2, 0);
+    await engine.syncNow(pullFirst: true);
     expect(a.transport.calls - c2, 1);
 
     // Firestore thật (admin, emulator): không bản rõ nào.
@@ -159,7 +161,7 @@ void main() {
 
     // ignore: avoid_print
     print('[e2e] initialBackup envelopes=${initial.envelopes} batches=${initial.batches} '
-        'calls=$initialCalls | delta calls=1 envelopes=${delta.envelopes} | idle calls=1 | '
+        'calls=$initialCalls | delta calls=1 envelopes=${delta.envelopes} | idle calls=0 | '
         'restore calls=${a.transport.calls}');
     await restored.close();
     await db.close();

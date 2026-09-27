@@ -14,7 +14,8 @@ enum SyncRunOutcome { synced, idle, blocked, retrying }
 /// P8.4 — worker đẩy/kéo nền, KHÔNG thăm dò khi rảnh.
 ///
 /// Kích hoạt bởi: [start] (mở app/quay lại foreground) và thay đổi trên các bảng dữ
-/// liệu Wallet (Drift `tableUpdates`) → gom trong [debounce] → `syncNow`. Lỗi mạng /
+/// liệu Wallet (Drift `tableUpdates`) → gom trong [debounce] → `syncNow`. Outbox rỗng
+/// và không có tín hiệu kéo ⇒ không gọi mạng. Lỗi mạng /
 /// HEAD_MOVED dai dẳng ⇒ thử lại lùi luỹ thừa (tối đa [maxBackoff]). Điều kiện chưa đủ
 /// (đăng xuất, sai Account, chưa claim/bật sao lưu, thiếu BMK, phiên cũ/bị thu hồi) ⇒
 /// dừng im, outbox GIỮ NGUYÊN, chờ trigger kế tiếp (đăng nhập lại/kích hoạt thiết bị).
@@ -55,7 +56,10 @@ class SyncWorker {
     'backup-not-enabled',
   };
 
-  /// Mở app / foreground: đẩy phần outbox còn lại + kéo 1 lần.
+  bool _pullRequested = false;
+
+  /// Mở app / foreground: đẩy phần outbox còn lại (nếu có). KHÔNG kéo: ví Personal
+  /// chỉ có 1 người ghi; kéo chỉ khi có tín hiệu ([requestPull] hoặc HEAD_MOVED).
   void start() {
     _sub ??= db
         .tableUpdates(TableUpdateQuery.any())
@@ -63,6 +67,12 @@ class SyncWorker {
           if (_running) return;
           if (updates.any((u) => _captured.contains(u.table))) _schedule(debounce);
         });
+    _schedule(Duration.zero);
+  }
+
+  /// Tín hiệu có thay đổi từ xa (hoặc người dùng bấm "Đồng bộ ngay") ⇒ lượt tới kéo.
+  void requestPull() {
+    _pullRequested = true;
     _schedule(Duration.zero);
   }
 
@@ -91,11 +101,18 @@ class SyncWorker {
   /// 1 lượt đồng bộ (tuần tự; gọi chồng ⇒ lượt sau bị bỏ, lượt đang chạy tự lên lịch lại).
   Future<SyncRunOutcome> runOnce() async {
     if (_running) return SyncRunOutcome.idle;
+    // Rảnh thật sự (outbox rỗng, không tín hiệu kéo) ⇒ 0 lời gọi mạng, không cả kiểm
+    // tra phiên/khoá.
+    if (!_pullRequested && await SyncOutboxStore(db).count() == 0) {
+      lastOutcome = SyncRunOutcome.idle;
+      return SyncRunOutcome.idle;
+    }
     _running = true;
     runs++;
     SyncRunOutcome outcome;
     try {
-      await engine.syncNow();
+      await engine.syncNow(pullFirst: _pullRequested);
+      _pullRequested = false;
       _failures = 0;
       lastError = null;
       outcome = SyncRunOutcome.synced;

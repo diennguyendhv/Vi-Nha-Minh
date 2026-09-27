@@ -477,18 +477,22 @@ class CloudSyncEngine {
         EntityCodec.canonicalJson(incoming['c']);
   }
 
-  /// Kéo rồi đẩy; HEAD_MOVED (người khác vừa ghi) ⇒ kéo lại rồi đẩy lại (tối đa
-  /// [maxRounds]). Không có gì thay đổi ⇒ đúng 1 lời gọi kéo, 0 lời gọi ghi.
-  Future<({PullReport pull, PushReport push})> syncNow({
+  /// Đẩy outbox; chỉ KÉO khi có tín hiệu: [pullFirst] (yêu cầu tường minh — vd
+  /// người dùng bấm "Đồng bộ ngay" hoặc tín hiệu thay đổi từ xa) hoặc máy chủ báo
+  /// HEAD_MOVED (người khác vừa ghi) ⇒ kéo rồi đẩy lại (tối đa [maxRounds]).
+  /// Outbox rỗng + không yêu cầu kéo ⇒ 0 lời gọi mạng (không thăm dò khi rảnh).
+  Future<({PullReport? pull, PushReport push})> syncNow({
+    bool pullFirst = false,
     int maxRounds = 4,
   }) async {
+    PullReport? pulled = pullFirst ? await pull() : null;
     for (var round = 1; ; round++) {
-      final pulled = await pull();
       try {
         final pushed = await push();
         return (pull: pulled, push: pushed);
       } on CloudSyncException catch (e) {
         if (e.reason != 'head-moved' || round >= maxRounds) rethrow;
+        pulled = await pull();
       }
     }
   }

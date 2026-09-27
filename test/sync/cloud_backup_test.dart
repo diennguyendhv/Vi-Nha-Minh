@@ -254,14 +254,17 @@ void main() {
       expect(_live(await _serverState(a)), await _localState(a.db));
     });
 
-    test('rảnh: syncNow = 1 lần kéo, 0 lần ghi; không toàn bộ ví', () async {
+    test('rảnh: syncNow = 0 lời gọi mạng; kéo tường minh = đúng 1 lời gọi đọc', () async {
       final writes = cloud.writes;
       final calls = a.engine.calls;
       final r = await a.engine.syncNow();
       expect(r.push.batches, 0);
-      expect(r.pull.applied, 0);
-      expect(cloud.writes, writes);
+      expect(r.pull, isNull);
+      expect(a.engine.calls - calls, 0, reason: 'không thăm dò khi rảnh');
+      final p = await a.engine.syncNow(pullFirst: true);
+      expect(p.pull!.applied, 0);
       expect(a.engine.calls - calls, 1);
+      expect(cloud.writes, writes);
     });
 
     test('offline / phiên cũ / thiết bị bị thu hồi / sai Account ⇒ outbox giữ nguyên', () async {

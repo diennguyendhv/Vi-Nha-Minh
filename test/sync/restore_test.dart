@@ -136,8 +136,8 @@ void main() {
     // Máy mới tiếp tục sao lưu từ đúng head: không có gì để kéo/đẩy lại.
     c.db = restored;
     c.rebuildEngine();
-    final r = await c.engine.syncNow();
-    expect(r.pull.applied, 0);
+    final r = await c.engine.syncNow(pullFirst: true);
+    expect(r.pull!.applied, 0);
     expect(r.push.batches, 0);
     await restored.into(restored.transactionRows).insert(_tx('tx-c', 5));
     expect((await c.engine.push()).envelopes, 2);

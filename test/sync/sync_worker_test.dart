@@ -96,4 +96,65 @@ void main() {
     expect(await worker.runOnce(), SyncRunOutcome.synced);
     expect(await SyncOutboxStore(a.db).count(), 0);
   });
+
+  test('rảnh thật: start/resume với outbox rỗng ⇒ 0 lời gọi mạng; requestPull ⇒ đúng 1', () async {
+    await a.engine.push();
+    final log = cloud.log.length;
+    worker.start();
+    await settle();
+    worker.start(); // resume lần 2
+    await settle();
+    expect(cloud.log.length, log, reason: 'mở app/rảnh không gọi backend');
+    expect(worker.runs, 0);
+    worker.requestPull();
+    await settle();
+    expect(cloud.log.length - log, 1);
+    expect(cloud.log.last, startsWith('getEncryptedChanges'));
+    await settle();
+    expect(cloud.log.length - log, 1, reason: 'không vòng lặp');
+  });
+
+  test('sửa trong lúc batch đang bay ⇒ batch sau đẩy bản mới; không batch trùng', () async {
+    await a.engine.push();
+    await a.db.into(a.db.transactionRows).insert(_tx('fly'));
+    cloud.beforeCommit = () async {
+      await (a.db.update(a.db.transactionRows)..where((t) => t.id.equals('fly')))
+          .write(const TransactionRowsCompanion(amountMinor: Value(2222)));
+    };
+    final writes = cloud.writes;
+    worker.start();
+    await settle(600);
+    expect(await SyncOutboxStore(a.db).count(), 0);
+    expect(cloud.writes - writes, 2);
+    final wid = await a.walletId();
+    expect(cloud.receipts[wid]!.length, cloud.writes, reason: 'mỗi lần ghi 1 biên nhận, không trùng');
+  });
+
+  test('xoá rồi tạo lại cùng id trong 1 cửa sổ debounce ⇒ 1 batch upsert', () async {
+    await a.engine.push();
+    worker.start();
+    await settle();
+    final writes = cloud.writes;
+    await a.db.into(a.db.transactionRows).insert(_tx('re'));
+    await (a.db.delete(a.db.transactionRows)..where((t) => t.id.equals('re'))).go();
+    await a.db.into(a.db.transactionRows).insert(_tx('re'));
+    await settle();
+    expect(cloud.writes - writes, 1);
+    expect(await SyncOutboxStore(a.db).count(), 0);
+  });
+
+  test('khởi động lại (worker + engine mới trên cùng DB) ⇒ tiếp tục outbox còn lại', () async {
+    cloud.offline = true;
+    worker.start();
+    await settle(150);
+    await worker.dispose();
+    expect(await SyncOutboxStore(a.db).count(), greaterThan(0));
+    cloud.offline = false;
+    a.rebuildEngine();
+    worker = SyncWorker(engine: a.engine, db: a.db, debounce: const Duration(milliseconds: 40));
+    worker.start();
+    await settle();
+    expect(await SyncOutboxStore(a.db).count(), 0);
+    expect(await a.engine.backupState(), 'COMPLETE');
+  });
 }
