@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vi_nha_minh/core/config/app_environment.dart';
 import 'package:vi_nha_minh/data/local/app_database.dart';
+import 'package:vi_nha_minh/data/local/db_encryption/db_key_store.dart';
 import 'package:vi_nha_minh/data/local/db_encryption/sqlcipher_wallet.dart';
 import 'package:vi_nha_minh/data/local/seed_defaults.dart';
 import 'package:vi_nha_minh/data/local/wallet_descriptor.dart';
@@ -17,6 +18,9 @@ import '../support/memory_db_key_store.dart';
 /// P8.5 — storage SQLCipher THẬT của khôi phục: file tên CUỐI CÙNG + khoá riêng ngay từ
 /// đầu (không rename ⇒ không gãy ràng buộc khoá↔tên file), không bao giờ có bản rõ,
 /// lỗi ⇒ dọn sạch, crash ⇒ dọn lúc khởi động, không bao giờ đụng ví đang dùng.
+/// Closure chỉ giữ [d] (gửi được sang isolate nền của Drift).
+Future<Directory> Function() dirOf(Directory d) => () async => d;
+
 void main() {
   late Directory dir;
   setUp(() => dir = Directory.systemTemp.createTempSync('vnm_restore_sqlcipher_'));
@@ -95,5 +99,85 @@ void main() {
     expect(names, contains(live));
     expect(names.any((n) => n.endsWith('.restoring')), isFalse);
     expect(File('${dir.path}/vi_nha_minh.sqlite').readAsBytesSync(), legacyBytes);
+  });
+
+  group('SQLCipher thật: ví hiện tại không bao giờ bị đụng', () {
+    late FakeCloud cloud;
+    late FakeDevice a;
+    late String walletId;
+    late String recovery;
+    late MemoryDbKeyStore keys;
+    late List<int> legacyBytes;
+    late DbKeyEntry legacyKey;
+    const pw = 'Mật khẩu sao lưu SQLCipher';
+
+    setUp(() async {
+      cloud = FakeCloud();
+      a = FakeDevice(cloud);
+      await a.signIn('uid-s');
+      await a.claim();
+      recovery = (await a.engine.enableBackup(pw))!;
+      await a.engine.push();
+      walletId = await a.walletId();
+      keys = MemoryDbKeyStore();
+      // Ví hiện tại trên máy mới (SQLCipher, tên di sản) — phải nguyên byte.
+      final legacy = AppDatabase(
+        seedProfile: SeedProfile.fresh,
+        wallet: WalletDescriptor.legacyLocal,
+        keyStore: keys,
+        directory: dirOf(dir),
+      );
+      await legacy.select(legacy.walletMeta).get();
+      await legacy.close();
+      legacyBytes = File('${dir.path}/vi_nha_minh.sqlite').readAsBytesSync();
+      legacyKey = keys.entries['vi_nha_minh.sqlite']!;
+    });
+    tearDown(() => a.db.close());
+
+    Future<RestoreEngine> engine(WalletRegistry r, {bool Function(String)? failAt}) async {
+      final c = FakeDevice(cloud, installation: '55555555-5555-4555-8555-555555555555');
+      await c.signIn('uid-s');
+      return RestoreEngine(
+        session: c.session, transport: cloud.call, keyStore: c.keys, registry: r,
+        storage: SqlcipherRestoreStorage(keyStore: keys, directory: dirOf(dir)),
+        env: AppEnvironment.dev, failAt: failAt,
+      );
+    }
+
+    void expectUntouched() {
+      expect(File('${dir.path}/vi_nha_minh.sqlite').readAsBytesSync(), legacyBytes);
+      expect(identical(keys.entries['vi_nha_minh.sqlite'], legacyKey), isTrue);
+      final names = dir.listSync().map((f) => f.uri.pathSegments.last).toSet();
+      expect(names.where((n) => n.startsWith('wallet_')), isEmpty, reason: '$names');
+    }
+
+    for (final stage in ['download', 'create', 'apply', 'verify', 'activate']) {
+      test('lỗi tại $stage ⇒ không file khôi phục nào còn lại; ví hiện tại + khoá nguyên vẹn', () async {
+        final r = WalletRegistry.inMemory();
+        await expectLater((await engine(r, failAt: (s) => s == stage))
+            .restore(walletId: walletId, password: pw), throwsA(isA<RestoreException>()));
+        expectUntouched();
+        expect(r.entries, isEmpty);
+      });
+    }
+
+    test('sai Mật khẩu sao lưu ⇒ không tạo file, không tạo khoá; Recovery Key ⇒ thành công, khoá DB riêng', () async {
+      final r = WalletRegistry.inMemory();
+      await expectLater((await engine(r)).restore(walletId: walletId, password: 'sai mật khẩu 123'),
+          throwsA(isA<RestoreException>().having((e) => e.reason, 'r', 'wrong-secret')));
+      expectUntouched();
+      expect(keys.entries.keys, ['vi_nha_minh.sqlite']);
+      final ok = await (await engine(r)).restore(walletId: walletId, recoveryKey: recovery);
+      expect(File('${dir.path}/vi_nha_minh.sqlite').readAsBytesSync(), legacyBytes);
+      final restoredKey = keys.entries[ok.dbFileName]!;
+      expect(restoredKey.key, isNot(legacyKey.key), reason: 'DEK-DB độc lập');
+      expect(probeDbFile(File('${dir.path}/${ok.dbFileName}')), DbFileState.encrypted);
+      // Mở lại qua đúng registry/descriptor: khoá gắn tên file cuối cùng hoạt động.
+      final db = AppDatabase(wallet: r.byWalletId(walletId)!.toDescriptor(), keyStore: keys,
+          directory: dirOf(dir));
+      expect((await db.select(db.walletMeta).getSingle()).walletId, walletId);
+      expect((await db.customSelect('PRAGMA integrity_check').getSingle()).data.values.first, 'ok');
+      await db.close();
+    });
   });
 }

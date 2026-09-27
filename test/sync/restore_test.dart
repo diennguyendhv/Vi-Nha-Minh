@@ -9,7 +9,9 @@ import 'package:vi_nha_minh/data/local/app_database.dart';
 import 'package:vi_nha_minh/data/local/seed_defaults.dart';
 import 'package:vi_nha_minh/data/local/sync/sync_capture.dart';
 import 'package:vi_nha_minh/data/local/wallet_registry.dart';
+import 'package:vi_nha_minh/data/repositories/local_transaction_repository.dart';
 import 'package:vi_nha_minh/data/sync/cloud_sync_engine.dart';
+import 'package:vi_nha_minh/domain/engine/financial_engine.dart';
 import 'package:vi_nha_minh/data/sync/entity_codec.dart';
 import 'package:vi_nha_minh/domain/auth/cloud_session.dart';
 import 'package:vi_nha_minh/data/sync/restore_engine.dart';
@@ -124,6 +126,11 @@ void main() {
     expect(await _state(restored), await _state(a.db));
     expect((await restored.select(restored.walletMeta).getSingle()).walletId, walletId);
     expect((await _state(restored)).keys, isNot(contains('transaction/tx-7')), reason: 'không hồi sinh');
+    // Số dư mọi pool tính lại từ giao dịch khôi phục == nguồn.
+    final before = computeAllPoolBalances(await LocalTransactionRepository(a.db).allTransactions());
+    final after = computeAllPoolBalances(await LocalTransactionRepository(restored).allTransactions());
+    expect(after, before);
+    expect(after.values.any((v) => v != 0), isTrue);
     final binding = await restored.select(restored.cloudBinding).getSingle();
     expect(binding.state, 'ACTIVE');
     expect(binding.selfMemberId, (await a.db.select(a.db.cloudBinding).getSingle()).selfMemberId);
@@ -241,5 +248,33 @@ void main() {
     expect(dir.listSync(), isEmpty);
     final r = await engine.restore(walletId: walletId, password: _password, allowStaleCheckpoint: true);
     expect(r.checkpointVerified, isFalse);
+  });
+
+  test('máy chủ nhận batch mới GIỮA lúc tải (nhiều trang) ⇒ khôi phục nhất quán tới head mới', () async {
+    cloud.pageSize = 10;
+    final members = await a.db.select(a.db.financialMemberRows).get();
+    cloud.beforePage = (page) async {
+      if (page != 1) return;
+      await a.db.into(a.db.transactionRows).insert(_tx('tx-giua-chung', 4242, member: members[0].memberId));
+      await (a.db.update(a.db.transactionRows)..where((t) => t.id.equals('tx-1')))
+          .write(const TransactionRowsCompanion(note: Value('sửa giữa chừng')));
+      await a.engine.push();
+    };
+    // Máy khôi phục dùng chung credential giả lập (fake chỉ kiểm secret) để A vẫn
+    // đẩy được giữa chừng.
+    final registry = WalletRegistry.inMemory();
+    final fresh = FakeDevice(cloud, installation: '44444444-4444-4444-8444-444444444444');
+    fresh.storage.values['uid-a'] = Map.of(a.storage.values['uid-a']!);
+    fresh.account = 'uid-a';
+    final result = await RestoreEngine(
+      session: fresh.session, transport: cloud.call, keyStore: fresh.keys,
+      registry: registry, storage: TempRestoreStorage(dir), env: AppEnvironment.dev,
+    ).restore(walletId: walletId, password: _password);
+    cloud.beforePage = null;
+    expect(result.checkpointVerified, isTrue);
+    final restored = AppDatabase.forTesting(NativeDatabase(File('${dir.path}/${result.dbFileName}')));
+    expect(await _state(restored), await _state(a.db));
+    expect((await _state(restored))['transaction/tx-1'], contains('sửa giữa chừng'));
+    await restored.close();
   });
 }

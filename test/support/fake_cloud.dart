@@ -32,6 +32,10 @@ class FakeCloud {
 
   /// Chạy NGAY TRƯỚC khi batch được commit (mô phỏng người dùng sửa trong lúc gửi).
   Future<void> Function()? beforeCommit;
+
+  /// Chạy TRƯỚC mỗi trang `getEncryptedChanges` (mô phỏng người khác ghi giữa chừng).
+  Future<void> Function(int page)? beforePage;
+  int _pages = 0;
   int _n = 0;
 
   int get writes => log.where((l) => l.startsWith('putEncryptedBatch')).length;
@@ -154,6 +158,12 @@ class FakeCloud {
       case 'getEncryptedChanges':
         _authorize(d);
         _access(walletId!, uid);
+        final hook = beforePage;
+        if (hook != null) {
+          beforePage = null;
+          await hook(_pages++);
+          beforePage = hook;
+        }
         final w = wallets[walletId]!;
         final since = d['sinceRev'] as int;
         final all = (entities[walletId]?.values.toList() ?? [])
@@ -165,7 +175,11 @@ class FakeCloud {
         if (page.length > pageSize) {
           more = true;
           final cut = page[pageSize]['serverRev'];
-          page = page.where((e) => (e['serverRev']! as int) < (cut! as int)).toList();
+          final kept = page.where((e) => (e['serverRev']! as int) < (cut! as int)).toList();
+          // 1 batch lớn hơn trang (máy chủ thật: batch ≤ 101 < trang 200) ⇒ trả trọn batch.
+          page = kept.isNotEmpty
+              ? kept
+              : all.where((e) => e['serverRev'] == all.first['serverRev']).toList();
         }
         return {
           'headRev': w['headRev'],
