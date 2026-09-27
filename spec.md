@@ -1,4 +1,7 @@
 # Đặc tả sản phẩm & Lộ trình phát triển
+
+> **⚠️ CẦN CẬP NHẬT Ở P13 (2026-09-27):** lộ trình 76 phase (Giai đoạn A–H) và giả định "Firestore realtime là nguồn dữ liệu chính, bản rõ" trong file này đã LỖI THỜI. Kiến trúc thật: SQLite/SQLCipher cục bộ + đồng bộ delta mã hoá + cloud zero-knowledge + phân quyền Account Family. Trạng thái hiện hành và lộ trình P11–P18: `docs/current-project-state.md`. Domain tài chính: `docs/financial-core-v2.md`.
+
 ## Ứng dụng Quản lý Chi tiêu Cá nhân/Gia đình — phát hành trên CH Play (Google Play)
 
 Tài liệu này được viết với hai vai trò: **chuyên gia tài chính cá nhân** (thiết kế mô hình dữ liệu và chỉ số sao cho app thực sự giúp kiểm soát dòng tiền, không chỉ ghi chép) và **chuyên gia lập trình Android/Flutter** (thiết kế kiến trúc, kế hoạch kỹ thuật và phát hành sao cho khả thi, bảo trì được lâu dài).

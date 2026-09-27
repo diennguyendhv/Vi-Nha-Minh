@@ -1,5 +1,7 @@
 # AGENTS.md — Hướng dẫn cho Codex khi làm việc trên dự án này
 
+> **⚠️ Đọc trước (2026-09-27):** file này là bản sao cũ cho Codex. Nguồn hiện hành: `CLAUDE.md` (quy tắc bền vững, mục 0 = cách bắt đầu phiên) + `docs/current-project-state.md` (phase hiện tại P11, điểm dừng, lộ trình). Khi mâu thuẫn, hai file đó thắng. Dữ liệu thật đang được dùng — xem `CLAUDE.md` mục 30. Cập nhật đầy đủ file này ở P13.
+
 Đây là file định hướng cho Codex (hoặc bất kỳ ai/AI nào) khi bắt tay vào code dự án **app Quản lý Chi tiêu Gia đình**. Đọc `spec.md` để có đặc tả sản phẩm và lộ trình đầy đủ theo từng phase; file này chỉ nêu quy ước kỹ thuật và cách làm việc trong repo.
 
 ## 1. Tổng quan dự án

@@ -1,15 +1,22 @@
 # CLAUDE.md — Hướng dẫn cho Claude khi làm việc trên dự án này
 
-Đây là file định hướng cho Claude (hoặc bất kỳ ai/AI nào) khi bắt tay vào code dự án **app Quản lý Chi tiêu Gia đình**. Đọc `spec.md` để có đặc tả sản phẩm và lộ trình đầy đủ theo từng phase; file này chỉ nêu quy ước kỹ thuật và cách làm việc trong repo.
+Đây là file định hướng cho Claude (hoặc bất kỳ ai/AI nào) khi bắt tay vào code dự án **app Quản lý Chi tiêu Gia đình**. File này chỉ nêu quy ước kỹ thuật + quy tắc kiến trúc/sản phẩm BỀN VỮNG; trạng thái hiện hành và lộ trình nằm ở `docs/current-project-state.md`.
+
+## 0. Bắt đầu phiên mới (bắt buộc)
+- Đọc ĐÚNG: (1) `CLAUDE.md`, (2) `docs/current-project-state.md` (phase hiện tại, điểm dừng, phase kế tiếp, lộ trình P11–P18), (3) chỉ tài liệu kiến trúc liên quan trực tiếp tới phase đang làm. Sau đó chỉ đọc code liên quan.
+- KHÔNG đọc lại hội thoại cũ, KHÔNG audit lại các phase đã PASS, KHÔNG làm lại/thiết kế lại khi không có bằng chứng lỗi. Repo + docs là bộ nhớ dài hạn.
+- Người dùng nói "Đọc current-project-state và cho tôi biết đang làm đến đâu" ⇒ trả lời từ file đó: đã PASS gì, đang chạy gì, điểm dừng, phase kế tiếp, điều cấm.
+- **Dữ liệu thật đang được dùng hằng ngày (pilot production).** Quy tắc an toàn vĩnh viễn ở mục 30 — áp dụng cho MỌI phase.
 
 ## 1. Tổng quan dự án
 
-Ứng dụng Android (Flutter, phát hành qua CH Play/Google Play) giúp quản lý chi tiêu cá nhân hoặc chung giữa vợ chồng/gia đình, đồng bộ thời gian thực qua Firebase. Chuyển thể từ file Google Sheets "Quản lý tài chính 2026" hiện tại của chủ dự án sang app di động, giữ nguyên logic hạng mục (Sinh hoạt, Dâng hiến, Cho đi, Tự thưởng...) và quy trình trạng thái (Đã chuẩn bị/Đã gửi).
+Ứng dụng Android (Flutter, phát hành qua CH Play/Google Play) giúp quản lý chi tiêu cá nhân hoặc chung giữa vợ chồng/gia đình. **Local-first:** dữ liệu tài chính nằm trong SQLite mã hoá SQLCipher trên máy; cloud (Firebase) chỉ là kênh vận chuyển/sao lưu/đồng bộ Family và chỉ nhận ciphertext (zero-knowledge). Chuyển thể từ file Google Sheets "Quản lý tài chính 2026" hiện tại của chủ dự án sang app di động, giữ nguyên logic hạng mục (Sinh hoạt, Dâng hiến, Cho đi, Tự thưởng...) và quy trình trạng thái (Đã chuẩn bị/Đã gửi).
 
 ## 2. Ngăn xếp công nghệ (tech stack)
 
 - **Frontend:** Flutter (Dart), state management bằng Riverpod, điều hướng bằng `go_router`.
-- **Backend:** Firebase — Authentication, Cloud Firestore (nguồn dữ liệu chính, realtime + offline cache), Cloud Functions, Cloud Messaging, Firebase Storage.
+- **Lưu trữ:** Drift/SQLite + SQLCipher (nguồn dữ liệu DUY NHẤT của UI); khoá DB trong Android Keystore.
+- **Backend:** Firebase — Authentication (Google), Cloud Functions callable (phiên, claim, sao lưu/đồng bộ ciphertext, Family), Firestore CHỈ do Functions ghi (rules deny-all, chỉ chứa metadata + ciphertext), Cloud Messaging (tín hiệu data-only). Không đọc/ghi Firestore trực tiếp từ app. (Mô tả cũ "Firestore là nguồn dữ liệu chính realtime" đã LỖI THỜI.)
 - **Biểu đồ:** `fl_chart`. **Định dạng tiền tệ:** `intl` (VNĐ). **Khoá sinh trắc học:** `local_auth`. **Xuất báo cáo:** `excel`/`csv` + `share_plus`.
 
 ## 3. Kiến trúc thư mục (Clean Architecture rút gọn)
@@ -93,7 +100,8 @@ Vài ý tưởng nên cân nhắc thêm vào lộ trình (không bắt buộc l�
 
 ## 11. Tài liệu liên quan
 
-- `spec.md` — đặc tả sản phẩm, mô hình dữ liệu, lộ trình theo phase (76 phase, Giai đoạn A-H), kế hoạch phát hành CH Play, tài chính domain logic (ngân sách, tỷ lệ tiết kiệm...). Đọc file đó trước khi bắt đầu bất kỳ phase nào.
+- `docs/current-project-state.md` — **trạng thái hiện hành + lộ trình P11–P18 (nguồn sự thật về "đang ở đâu")**.
+- `spec.md` — đặc tả sản phẩm gốc + domain tài chính (ngân sách, tỷ lệ tiết kiệm...). **Lộ trình 76 phase và giả định Firestore realtime bản rõ trong đó đã LỖI THỜI** — cập nhật ở P13; khi mâu thuẫn, `current-project-state.md` + `CLAUDE.md` + `financial-core-v2.md` thắng.
 - `docs/financial-core-v2.md` — **đọc trước khi viết bất kỳ dòng domain logic nào liên quan tới tiền.** Audit đầy đủ các lỗi tài chính đã sửa (trừ kép ở Quỹ, Transfer bị tính nhầm thành Chi...), model `Transaction` với `source`/`destination`, 15 invariant bắt buộc đúng, 20 test case (double-count + reversal ledger) phải pass trước khi merge bất kỳ PR nào đụng tới Financial Engine. Đây là **source of truth cao nhất cho business logic tài chính** — nếu `spec.md`/`CLAUDE.md`/`docs/design.html` có chỗ nào mâu thuẫn với file này, sửa lại theo file này.
 - `docs/design.html` — bản vẽ giao diện: sơ đồ use case, ERD, màn hình mô phỏng có tương tác. Đã đồng bộ theo model V2 ở `financial-core-v2.md` (đợt rà soát `docs/audit-pre-implementation.md`, 2026-09-16) — mọi màn hình thật khi code phải khớp luồng trong file này; nếu cần đổi khác đi, cập nhật lại `docs/design.html` trước rồi mới đổi code, để các tài liệu không lệch nhau.
 - `docs/audit-pre-implementation.md` — audit trước-khi-code: đối chiếu toàn bộ `spec.md`/`CLAUDE.md`/`financial-core-v2.md`/`design.html`/code hiện có, liệt kê mọi mâu thuẫn/BLOCKER đã tìm thấy và cách đã sửa. Tham khảo nếu cần hiểu tại sao 1 đoạn tài liệu được viết như hiện tại.
@@ -207,7 +215,7 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - **Truy cập:** ví Family chỉ mở với đúng Account đã gắn (A→X→A, B→Y→B giữ nguyên file/khoá). Thu hồi ⇒ `NOT_MEMBER` ⇒ registry `accessRevoked` ⇒ ẩn; KHÔNG xoá dữ liệu cục bộ; máy đã thu hồi mà offline vẫn giữ dữ liệu + BMK đã có (giới hạn trung thực; forward secrecy = thiết kế riêng, chưa làm).
 - **Giới hạn Family v1 đã chấp nhận (không giải bằng cách cho máy chủ đọc bản rõ):** lời mời gửi tay (chưa có email từ máy chủ); UI xem lại xung đột tối giản (chỉ số đếm, bản thua nằm trong `sync_conflicts`); máy đã thu hồi mà offline vẫn giữ dữ liệu + BMK đã có; chưa xoay BMK/forward secrecy sau thu hồi; 2 máy offline cùng chi có thể làm pool âm sau gộp (chỉ phát hiện + cảnh báo); máy chủ không cưỡng chế được ngữ nghĩa số dư vì payload là ciphertext. Mã 12 số chỉ là SAS cho người đối chiếu (12 chữ số thập phân ≈ 40 bit entropy, KHÔNG phải 48; từ dữ liệu công khai) — không phải khoá, không phải yếu tố cấp quyền duy nhất.
 - Màn Cài đặt hiện VAI TRÒ trong Ví gia đình (Chủ ví / Thành viên — `activeWalletFamilyRoleProvider`, chỉ hiển thị); Member không có thao tác đăng ký/huỷ đăng ký ví.
-- Không dùng Account thật của vợ tới khi chủ dự án duyệt.
+- Đã duyệt + đang chạy thật từ 2026-09-27 (pilot production, xem `docs/current-project-state.md`). Các ghi chú "chỉ DEV / PROD chưa …" ở mục 22–28 là lịch sử lúc viết; môi trường hiện hành theo mục 29.
 
 
 ## 29. MỘT dự án Firebase = PRODUCTION (quyết định chủ dự án 2026-09-27)
@@ -217,4 +225,11 @@ Mã hoá DB cục bộ: **ĐÃ LÀM (2026-09-26, SQLCipher 4.18 + khoá mỗi v�
 - **Đường chuyển khoá ký (quyết định chủ dự án):** KHÔNG xoay khoá ký APK. App PROD hiện tại ký bằng debug key của máy dev (SHA-256 `15a1da2f…0a5757`) ⇒ cập nhật tại chỗ bằng 1 bản PROD tạm từ source hiện tại ký CÙNG debug key → di trú + kiểm chứng → sao lưu mã hoá COMPLETE → người dùng giữ Recovery Key → CHỈ KHI ĐÓ gỡ app cũ → cài bản release-signed → khôi phục cùng Wallet từ cloud. Gỡ app PROD TRƯỚC khi sao lưu COMPLETE = mất vĩnh viễn ví thật (khoá DB nằm trong Keystore của bản cài đó).
 - **Diễn tập di trú** (`migration_rehearsal.dart`, bản chẩn đoán `--dart-define=DB_REHEARSAL=true`, chỉ debug): dừng TRƯỚC preflight/Auth/registry/AppDatabase; mở ví thật CHỈ ĐỌC → `sqlcipher_export` sang bản sao khoá tạm → di trú bằng `AppDatabase` thật → so walletId/số dòng+digest (chỉ thay đổi cộng thêm khai báo trong `rehearsalAllowedChanges`)/id-clientTxId/thành viên/số dư/integrity/FK → xoá bản sao; kiểm SHA-256 file thật không đổi. Phải gỡ trước Play như mọi công cụ debug (mục 19).
 - **Mã 12 số (SAS) ≈ 40 bit** (10^12), không phải 48.
-- Backlog (không chặn pilot): khi offline + outbox còn N, UI có thể đồng thời hiện "Đã đồng bộ" và "Chờ tải lên: N" — phải ưu tiên "Chờ tải lên"; App Check (Play Integrity) cho backend production.
+- **Đồng bộ Family trong thực tế:** chính = tín hiệu FCM; dự phòng (`FamilyForegroundSync`) = kéo khi mở/quay lại app + thử đăng ký tín hiệu lại, và CHỈ khi không có tín hiệu đẩy thì kéo ~30 giây/lần lúc app ở foreground (vào nền ⇒ 0 lời gọi). KHÔNG làm polling dày hơn, KHÔNG polling nền.
+- **Khoá ký release nằm NGOÀI git** (`key.properties` qua `HW_RELEASE_KEY_PROPERTIES` hoặc thư mục khoá của máy phát hành); thiếu ⇒ release không ký, không bao giờ lặng lẽ ký debug. Không commit `release.jks`/`key.properties`/mật khẩu/Recovery Key/khoá riêng/`env/*.json` thật.
+- Backlog pilot và giới hạn Family v1: xem `docs/current-project-state.md` §6–7 (không giải giới hạn bằng cách cho máy chủ đọc bản rõ).
+
+## 30. Mô hình sản phẩm + AN TOÀN DỮ LIỆU THẬT (khoá vĩnh viễn)
+- **Tầng sản phẩm:** FREE PERSONAL (cục bộ, 1 người, không cần Account; Thu/Chi, Quỹ, Tiết kiệm, danh mục/trạng thái/lịch sử) · PERSONAL CLOUD (+ sao lưu mã hoá, khôi phục, thiết bị tin cậy) · FAMILY (Wallet dùng chung mã hoá, Owner + Member, đồng bộ). Đơn giản mặc định, mạnh khi cần.
+- **Ví cá nhân (P14, bắt buộc trước CH Play):** ví mới = đúng 1 FinancialMember ("Tôi", đổi tên được), KHÔNG seed Vợ/Chồng; không có UI chuyển giữa thành viên (Quỹ: Nạp/Rút; Tiết kiệm: Bỏ vào/Rút — ngữ nghĩa Transfer nội bộ giữ trong Financial Core). Personal → Family = mời người vào CÙNG Wallet, CÙNG lịch sử; không tạo Wallet thay thế.
+- **Dữ liệu thật:** KHÔNG BAO GIỜ khôi phục về số giao dịch cũ, ghi đè bằng Excel cũ, reset DB thật, `pm clear`/gỡ app thật để thử, tạo xung đột cố ý trên dữ liệu thật, thu hồi thành viên thật để test, dùng dữ liệu thật trong DEV/emulator, chép dữ liệu cloud PROD vào fixture DEV, hay làm thay đổi phá huỷ khi chưa có chấp thuận tường minh. Số giao dịch thật chỉ là mốc, không phải giá trị cố định. Mọi test phá huỷ: CHỈ DEV / emulator / fixture.

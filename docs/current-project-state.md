@@ -1,116 +1,201 @@
-# Current Project State
+# Current Project State — Ví Nhà Mình / HomeWallet
 
-> Bộ nhớ dài hạn của repo cho các phiên Claude mới. Giữ NGẮN (≤ ~250 dòng), không phải nhật ký — lịch sử dùng `git log`.
-> Đọc kèm: `CLAUDE.md`, `docs/account-wallet-security-foundation.md` (kiến trúc Account/Wallet, §31 lộ trình), `docs/financial-core-v2.md` (nguồn sự thật tài chính).
+> Bộ nhớ dài hạn của repo. Phiên Claude/Codex MỚI đọc: (1) `CLAUDE.md`, (2) file này,
+> (3) chỉ tài liệu kiến trúc liên quan trực tiếp tới phase đang làm. Sau đó chỉ đọc code
+> liên quan. KHÔNG đọc lại hội thoại cũ, KHÔNG audit lại các phase đã PASS.
+> Giữ file này ngắn; lịch sử chi tiết = `git log` + tài liệu kiến trúc.
 
-## Product
-**Ví Nhà Mình** (tên quốc tế HomeWallet) — app Flutter/Android quản lý chi tiêu cá nhân/gia đình, **local-first** (SQLite/Drift). Auth tuỳ chọn (P5, chỉ danh tính); dữ liệu tài chính chưa lên cloud.
+**CURRENT PHASE:** P11 — Real Family Pilot Monitoring
+**CURRENT STATUS:** Pilot thật hai vợ chồng đang chạy trên production (từ 2026-09-27).
+**NEXT PHASE:** P12 — Pilot UX / Reliability Fixes
+**STOP CONDITION:** KHÔNG bắt đầu P12 cho tới khi đã thu thập quan sát pilot (báo cáo
+P11) hoặc chủ dự án yêu cầu tường minh.
 
-## Current Phase
-**P8.3–P8.5 LIVE DEV Pixel (2026-09-27): P8.3 PASS · P8.4 PASS · P8.5 PASS** (restore with Backup Password ×2 and with a regenerated Recovery Key; every table/column/row digest identical). Recovery Key regeneration (`rotateRecovery`, same BMK, old key dead) + active-Wallet MRU (restored Personal Wallet stays active across sign-out) done. DEV Functions deployed (26 callables incl. Family). Family app side NOT started. Details: `docs/p8-cloud-backup-architecture.md` §8f.
+---
 
-**P8.3–P8.5 — Personal encrypted backup, delta sync, restore — AUTOMATED PASS (fake backend + Firebase emulator + real SQLCipher host tests, 2026-09-27). LIVE DEV Pixel: PENDING (no UI yet; needs owner's Backup Password + Google re-auth).** Schema v11 (additive: `sync_state.backup_state`, `sync_conflicts`) — PROD NOT migrated. DEV Functions deployed (`enableBackup` + updated batch/changes; Family endpoints NOT deployed). Idle worker = 0 cloud calls. Restore = new final-named SQLCipher file + own key (no rename), activation after full verification. Account-switch gate (`WalletAccessGate`): Family/claimed Wallet hidden from other Accounts without deleting anything. Family backend (invite/accept/key-share storage/revoke) emulator PASS but client + key-wrap crypto NOT done. Details: CLAUDE.md §26–27, `docs/p8-cloud-backup-architecture.md` §8e. PROD untouched.
+## 1. Trạng thái sản phẩm (2026-09-27)
+- Hai vợ chồng dùng CHUNG 1 Wallet thật trên 2 điện thoại (Pixel 7a của chồng, Xiaomi
+  23090RA98G của vợ), đồng bộ mã hoá hai chiều tự động.
+- Lịch sử tài chính thật được giữ nguyên qua di trú production. Lúc bắt đầu pilot đã
+  xác minh **1.853** giao dịch — đây là MỐC, KHÔNG phải số cố định: người dùng liên tục
+  thêm giao dịch thật.
+- Real Wallet: `walletId = 3cbd8878-58c3-41f0-a009-8d5f3c92b373`.
+  - Owner Account = tài khoản của chồng → FinancialMember có sẵn `chong` ("Chồng").
+  - Member Account = tài khoản của vợ → FinancialMember có sẵn `vo` ("Vợ").
+  - Account ≠ FinancialMember; Owner/Member là QUYỀN, Chồng/Vợ là NGƯỜI.
+  - (Email chỉ ghi ở tài liệu vận hành nội bộ; KHÔNG hiển thị email không cần thiết trên UI.)
+    Owner: diennguyendhv@gmail.com · Member: kerenza1111@gmail.com.
+- Chưa phát hành CH Play. App thật = bản release-signed cài tay (sideload).
 
-**P8.2 — Explicit Personal Wallet Claim + trusted backend — PASS (code + emulator + DEV live Pixel, 2026-09-26)**. DEV: claim/idempotent replay/stale 403/sign-out offline/wrong account/abandon/App Lock đều PASS; revoked chỉ kiểm ở emulator. `claimWallet`/`getWalletClaim`/`abandonClaim` (1 Firestore transaction, P7.1 authorize, chỉ metadata sở hữu, whitelist trường), `putEncryptedBatch` từ chối ví đã claim. App: `WalletClaimService` (NONE→CLAIMING→ACTIVE, id lưu trước khi gọi mạng, retry cùng id, release khi máy chủ từ chối dứt khoát), `WalletClaimControls` ("Sao lưu ví này", "Bạn là ai?", xác nhận, step-up), registry đồng bộ TỪ DB lúc khởi động; ví Personal vẫn mở khi đăng xuất/offline. Chỉ DEV. PROD không claim/không đụng. Chi tiết CLAUDE.md §25, `docs/p8-cloud-backup-architecture.md` §8d.
+## 2. Kiến trúc cloud hiện hành
+- **MỘT dự án Firebase duy nhất: `vi-nha-minh-55c60` = PRODUCTION CLOUD.** Chứa: Auth thật,
+  Functions production (codebase `p7-session`, Node 22, `maxInstances 5`, không
+  minInstances), Firestore (chỉ Functions ghi; rules deny-all), bản sao lưu mã hoá của
+  Wallet thật, membership Family, dữ liệu đồng bộ mã hoá, FCM.
+- Khái niệm cũ "vi-nha-minh-55c60 = DEV" đã LỖI THỜI.
+- Backend `functions/env.js`: allowlist project → môi trường (`vi-nha-minh-55c60` → `prod`,
+  emulator `demo-homewallet-p7` → `dev`); project không liệt kê ⇒ mọi callable bị từ chối.
+- Mọi lời gọi mang `clientEnv`, máy chủ bắt buộc khớp (`CLIENT_ENVIRONMENT`) ⇒ bản DEV
+  (kể cả bản cũ đã cài) không thể ghi vào production.
+- App PROD `com.vinhamimh.vi_nha_minh` dùng dự án thật (`env/prod.json`, gitignored,
+  `CLOUD_ENABLED=true`; App Android đã đăng ký trong Firebase với SHA debug + release).
+- App DEV `com.vinhamimh.vi_nha_minh.dev`: CHỈ Firebase Emulator Suite
+  (`FIREBASE_EMULATOR_HOST` + project `demo-*`), fixture cục bộ, tài khoản test. Không có
+  override. KHÔNG tải fixture tài chính lên production.
+- Dữ liệu thử lịch sử trong dự án (ví `dc268fde…` claim khi còn là DEV, ví `fixture-…`,
+  3 lời mời thử, tài khoản test B/X, người dùng ẩn danh) bị ĐÓNG BĂNG
+  (`ENVIRONMENT_MISMATCH`, ẩn khỏi `listBackupWallets`), CHƯA xoá — xoá chỉ khi chủ dự án
+  duyệt từng mục (P13).
+- Local-first khoá cứng: UI chỉ đọc SQLite. Cloud = vận chuyển / sao lưu / đồng bộ Family.
 
-**P8.1 — Local Cloud-Sync Foundation (schema v10) — PASS (code + PROD, 2026-09-26)**: `cloud_binding` (NONE/CLAIMING/ACTIVE, DB là nguồn sự thật), `sync_outbox` (trigger SQLite, chỉ khi ACTIVE; chỉ danh tính/ý định, gộp, tombstone, ack theo seq), `sync_state` (cờ `withoutSyncCapture` trong 1 transaction), `wallet_settings` (quỹ chính chuyển từ prefs, prefs = dự phòng đọc + di trú 1 lần), `SeedProfile.none` (rỗng tuyệt đối, SQLCipher từ lúc tạo). Test phủ bảng bắt buộc. Không upload, không claim, BackupGate đóng. Chi tiết: CLAUDE.md §24, `docs/p8-cloud-backup-architecture.md` §8c.
-PROD (Pixel, `install -r`): trước v9 / sau v10; **1.849 → 1.849** giao dịch; 9/9 bảng cũ trùng số dòng + digest; walletId `3cbd8878…` không đổi; integrity ok, FK 0; SQLCipher 4.18 vẫn bật (bản kéo ra: sqlite3 thường "file is not a database"); `cloud_binding` 0, `sync_outbox` 0, `sync_state` 0, `sqlite_sequence` = (sync_outbox, 0) ⇒ chưa từng có dòng outbox; `wallet_settings` 1 dòng `primary_fund_id = an_uong` (đúng giá trị prefs); Home trước/sau/sau force-stop trùng từng pixel. Không upload. Sao lưu mã hoá trước di trú: `Documents/ViNhaMinh_backups/2026-09-26/p8_1_pre/` + trên máy `_p8_1_pre_backup/` (SHA-256 `ead04837…3dff`). Lưu ý công cụ: logcat cắt `[db-report]` ở ~1 KB khi có 14 bảng — đọc phần còn lại trên màn hình báo cáo.
+## 3. Phát hành & bảo mật
+- Bản thật ký bằng khoá RELEASE nằm NGOÀI git: `C:\Users\Admin\Documents\ViNhaMinh_keys\`
+  (`release.jks` + `key.properties`), SHA-256 `0b723838…d677`. Gradle đọc qua
+  `HW_RELEASE_KEY_PROPERTIES` hoặc đường dẫn mặc định; thiếu file ⇒ release không được ký
+  (không bao giờ lặng lẽ ký debug). Mất khoá ⇒ không cập nhật đè được app ⇒ chủ dự án phải
+  sao lưu thư mục này.
+- APK release hiện hành: `C:\Users\Admin\Documents\ViNhaMinh_release\ViNhaMinh-1.0.0-prod-release.apk`
+  (cập nhật tại chỗ bằng `adb install -r`, cùng khoá ⇒ giữ dữ liệu).
+- KHÔNG BAO GIỜ commit: `release.jks`, `key.properties`, mật khẩu, Recovery Key, khoá riêng,
+  `env/*.json` thật, DB/backup/Excel thật.
+- DB thật: SQLCipher 4.18, khoá DB bọc bằng Android Keystore, độc lập App Lock.
+- Cloud chỉ chứa ciphertext (`{v,id,rev,n,c,aad}`); máy chủ/admin không đọc được số tiền,
+  ghi chú, danh mục, quỹ, thành viên; máy chủ không có BMK bản rõ.
+- Sao lưu: Mật khẩu sao lưu + Recovery Key; tạo lại Recovery Key được.
+- Phiên: 1 Account = 1 installation tin cậy đang hoạt động; tiếp quản / khôi phục mất máy.
+- Family v1: 1 Owner + tối đa 1 Member.
+- Bản release KHÔNG có công cụ debug (báo cáo toàn vẹn `[db-report]` chỉ có ở bản debug).
 
-**SQLCipher Local DB Encryption — PASS** (2026-09-26): mọi file ví mã hoá bằng SQLCipher 4.18, khoá riêng mỗi ví bọc bằng Keystore; PROD di trú tại chỗ (1.849 → 1.849 giao dịch, 9/9 bảng trùng digest, walletId/v9/integrity/FK giữ nguyên), bản sao PROD kéo ra không đọc được. Mất khoá ⇒ màn khôi phục, không tạo khoá mới. Chi tiết `docs/sqlcipher-local-encryption.md`. Cổng dữ liệu thật lên cloud VẪN ĐÓNG (chưa có engine P8).
+## 4. Các mốc đã PASS (KHÔNG làm lại / thiết kế lại khi không có bằng chứng lỗi)
+- P1–P8.8: Financial Core cục bộ, repository, toàn vẹn, Vay, nền dữ liệu thật.
+- P2 Wallet + FinancialMember · P3 App Lock · P4 thành viên là dữ liệu · P5 môi trường build
+- P6 registry, 1 Wallet = 1 DB mã hoá · P6.1 hợp nhất hiển thị giao dịch
+- P7 phiên thiết bị tin cậy · P7.1 tiếp quản an toàn · P8 kiến trúc zero-knowledge
+- SQLCipher · P8.1 nền đồng bộ cục bộ · P8.2 claim Personal tường minh
+- P8.3 sao lưu mã hoá ban đầu LIVE · P8.4 đồng bộ delta LIVE · P8.5 khôi phục Mật khẩu +
+  Recovery Key LIVE
+- P10 Family LIVE: Personal→Family tại chỗ; mời; ánh xạ Account↔FinancialMember; chia sẻ
+  BMK zero-knowledge (SAS 12 số + Mã ví); chồng→vợ và vợ→chồng; tín hiệu FCM + dự phòng
+  foreground; giữ bản thua khi xung đột; xoá-vs-sửa không hồi sinh; Account sai ⇒ ẩn ví;
+  thu hồi Member; cùng Wallet sau khi đổi Account.
+- Pilot production (2026-09-27): onboarding PASS — di trú v10→v11 diễn tập + thật (digest
+  không đổi), claim + sao lưu COMPLETE, chuyển sang bản release (gỡ CHỈ sau khi sao lưu
+  xong), khôi phục, mời vợ, đồng bộ tự động được chủ dự án xác nhận.
+- Gate tự động gần nhất: **Flutter 1264 pass / 5 skip / 0 fail**, analyze 0 lỗi/0 cảnh
+  báo; **backend emulator 31/31**. Commit gần nhất liên quan: `43b48c8`.
 
-**P7.1 + P8 Security Foundation — PASS (DEV deploy + Pixel DEV, 2026-09-26)**. Mật khẩu sao lưu chuẩn hoá NFC (`kdf.norm`). Chưa live: B hoàn tất grant đã duyệt / dùng lại / hết hạn / sai installation và rate limit (chỉ emulator). P7.1: Auth một mình không thay thiết bị active (TAKEOVER_REQUIRED), chuyển máy cần A chấp thuận, mất máy cần credential suy ra từ Mật khẩu sao lưu/Recovery Key (epoch+1, máy cũ DEVICE_REVOKED). P8 crypto: BMK/DEK/IDK, Argon2id + Recovery Key, envelope chung không lộ loại thực thể, backend chỉ nhận ciphertext, chỉ fixture DEV (cổng SQLCipher). Chi tiết: `docs/p7-exclusive-session.md` (P7.1), `docs/p8-cloud-backup-architecture.md`. Full backup/restore engine, claim, đồng bộ: CHƯA.
+## 5. Hành vi đồng bộ trong pilot
+- Chính: tín hiệu đẩy FCM data-only `{t:'head'}` tới máy thành viên kia sau mỗi batch.
+- Dự phòng (`FamilyForegroundSync`): mở/quay lại app ⇒ kéo 1 lần + thử đăng ký tín hiệu
+  lại; máy KHÔNG có tín hiệu đẩy ⇒ kéo ~30 giây/lần CHỈ khi app ở foreground; vào nền ⇒
+  dừng (0 lời gọi).
+- Lý do: máy Xiaomi của vợ từng trả `SERVICE_NOT_AVAILABLE` khi lấy token FCM; máy Owner
+  chưa đăng ký tín hiệu vì ví thành Family khi app đang chạy.
+- KHÔNG làm polling dày hơn; KHÔNG polling nền. Theo dõi pin + chi phí Firebase. Mục tiêu
+  tương lai: giảm phụ thuộc vào polling dự phòng.
 
-**P7 — Exclusive Account Session Foundation — PASS** (2026-09-26). Callable DEV `vi-nha-minh-55c60` (Node 22) đã triển khai; Pixel: kích hoạt tường minh, Keystore giữ qua force-stop, thiết bị cũ bị SERVER từ chối (403), đăng xuất cũ không tắt được phiên mới, kích hoạt lại thay thế, đăng xuất xoá credential. Rules deny-all. Không dữ liệu tài chính trên cloud; Wallet không claim. PROD chỉ đọc: v8, integrity ok, FK 0, 1.849 giao dịch. Chi tiết: `docs/p7-exclusive-session.md`. **P8 chưa bắt đầu.**
+## 6. Giới hạn Family v1 đã chấp nhận
+1. Lời mời gửi tay (chưa có email từ máy chủ).
+2. UI xem lại xung đột tối giản (chỉ số đếm; bản thua nằm trong `sync_conflicts`).
+3. Máy bị thu hồi mà offline vẫn giữ dữ liệu đã tải + BMK đã có.
+4. Chưa xoay BMK sau khi thu hồi Member.
+5. Hai máy offline cùng chi có thể làm tổng số dư âm sau khi hội tụ (chỉ phát hiện + cảnh báo).
+6. Máy chủ không cưỡng chế được ngữ nghĩa số dư (payload là ciphertext).
+7. Chưa bật App Check / Play Integrity.
+8. Dự phòng foreground có thể kiểm tra ~30 giây/lần khi không có tín hiệu đẩy.
+KHÔNG "giải" các giới hạn này bằng cách cho máy chủ đọc bản rõ tài chính.
 
-## Last Completed Phase
-P7 (phiên độc quyền, PASS). P6/P6.1 (cách ly Wallet, PASS). P5 (Auth & môi trường, PASS). Trước đó P4 (enum `FamilyMember` bị xoá; thành viên = dữ liệu). Trước đó P3 (App Lock + tắt Auto Backup), P2 Local Wallet Identity — PASS (`22560a1`, `7dc8e9d`).
+## 7. Backlog pilot (không chặn; thuộc P12)
+1. Sau khi tham gia Family phải mở lại app mới thấy dữ liệu.
+2. Lỗi kích hoạt thiết bị quá chung chung ("Chưa thực hiện được") — nên nói "Hãy kích hoạt
+   thiết bị trước".
+3. Luồng mời nhiều bước/ô nhập dễ nhầm (Owner nhập nhầm mã 12 số vào ô "Mã mời").
+4. Offline + outbox còn N có thể hiện cùng lúc "Đã đồng bộ" và "Chờ tải lên: N".
+5. Chưa có màn xem chi tiết bản thua khi xung đột.
+6. Cảnh báo thiếu font Manrope (đã rơi về font hệ thống).
 
-## Current Schema
-**v11** on DEV/tests (v10→v11 additive: `sync_state.backup_state`, `sync_conflicts`); PROD still **v10**. Previously **v10** (v9→v10 cộng thêm, nguyên tử, P8.1): `cloud_binding`, `sync_outbox`, `sync_state`, `wallet_settings` + trigger `sync_capture_*`. v9: `actor_member_id`. v8: `wallet_meta` + `financial_member_rows`.
+## 8. Lộ trình từ mốc này (đánh số dùng từ nay)
+**P11 — Real Family Pilot Monitoring — HIỆN TẠI.** ~1–2 tuần dùng thật, quan sát thay vì
+thêm tính năng. Theo dõi: độ trễ chồng→vợ / vợ→chồng, outbox kẹt, giao dịch thiếu/trùng,
+số xung đột, offline→online, sức khoẻ sao lưu, crash, phiên/Auth, pin Xiaomi, chi phí
+Functions/Firestore, hành vi dự phòng 30 giây. Nghi ngờ ⇒ so sánh hai máy. Chỉ sửa NGAY khi:
+mất dữ liệu tài chính, sai số dư, thiếu/trùng giao dịch, đồng bộ kẹt, sao lưu hỏng, lỗi
+truy cập Family, lỗi bảo mật, crash chặn dùng hằng ngày. Còn lại ⇒ ghi cho P12.
+Kết thúc P11 = báo cáo: A số ngày dùng · B số giao dịch thật tạo · C sự cố đồng bộ · D sự
+cố sao lưu · E xung đột · F crash · G pin · H thay đổi chi phí Firebase · I phàn nàn UX của
+chồng · J của vợ · K blocker · L danh sách sửa P12 chính xác. DỪNG sau báo cáo; KHÔNG tự
+bắt đầu P12.
 
-## Auth & Environments (P5)
-- 3 môi trường qua Android flavor + `AppEnvironment.current` (nguồn duy nhất, từ `appFlavor`): dev=`com.vinhamimh.vi_nha_minh.dev`, pilot=`...pilot`, prod=`com.vinhamimh.vi_nha_minh` (không đổi). Mỗi môi trường 1 dự án Firebase riêng; cấu hình client công khai qua `--dart-define-from-file=env/<env>.json` (mẫu `env/*.example.json`; file thật gitignored; `FirebaseEnvConfig.isUsableFor(env)` từ chối cấu hình khác môi trường/giá trị mẫu). Không có google-services.json/service account trong repo.
-- `AuthRepository` (domain, độc lập nhà cung cấp) → `FirebaseAuthRepository` (Firebase Auth + `google_sign_in` 7.x) / `UnavailableAuthRepository` khi chưa cấu hình. `bootstrapAuth()` không bao giờ ném; app local khởi động không phụ thuộc mạng. `AccountIdentity` chỉ uid/email/tên/ảnh/provider — KHÔNG walletId/memberId/vai trò.
-- UI: thẻ Tài khoản đầu Cài đặt (`AccountSettingsCard`), đăng nhập TUỲ CHỌN, không claim/upload. Đăng xuất chỉ xoá phiên; Wallet cục bộ + App Lock giữ nguyên.
-- **Mạng:** P5 Auth; P7 thêm callable session DEV (UUID/credential phiên, không tài chính). Không import Firestore/Storage ở đâu trong `lib/` (test tĩnh). Financial data vẫn 100% local. `CloudSession` tách biệt App Lock/Wallet, secret lưu qua Keystore; chi tiết `docs/p7-exclusive-session.md`.
+**P12 — Pilot UX / Reliability Fixes — ĐÃ LÊN KẾ HOẠCH.** Mở ví Family ngay sau khi tham
+gia; thông báo kích hoạt thiết bị rõ ràng; gọn luồng Mời → Chấp nhận → So mã → Chia sẻ
+khoá → Mở ví; trạng thái đồng bộ đúng khi offline/outbox; màn xem xung đột; dọn font; lỗi
+tìm thấy ở P11. Không thiết kế lại Financial Core nếu không có lỗi đúng/sai thật. Test
+có mục tiêu khi làm; 1 lần full suite khi ổn định.
 
-## Local Wallet Architecture (P6)
-- 1 Wallet = 1 file SQLite. Ví cục bộ hiện tại = `vi_nha_minh.sqlite` (không di chuyển), `wallet_meta` singleton, `walletId` mờ ổn định.
-- **Registry toàn app** `wallet_registry.json` (thư mục tài liệu, ghi nguyên tử; `WalletRegistry`, `data/local/wallet_registry.dart`): chỉ metadata (`walletId`, `kind`, `dbFileName` thuần, `createdAt`, `boundAccountId?`). `main` gọi `bootstrapWalletRegistry()` (không bao giờ ném) đăng ký ví cục bộ TẠI CHỖ, idempotent; registry hỏng ⇒ rỗng và tự đăng ký lại đúng walletId. Xoá registry không xoá ví.
-- **Phạm vi phiên** `WalletAccessScope` (local | account(uid)) từ `accountProvider` (chỉ uid). `WalletRegistryEntry.canOpen`: ví LOCAL chưa claim mở được ở mọi phạm vi; ví gắn Account mở bởi đúng Account đó, và (P8.2) ví Personal còn mở được ở phạm vi local (đã đăng xuất) — Account khác thì không. `resolveActive` ưu tiên ví gắn Account, rồi ví cục bộ. Đăng nhập KHÔNG gắn/claim/đổi kind; `boundAccountId` chỉ được gán bằng `reconcileRegistryFromDb` phản chiếu `cloud_binding` ACTIVE (P8.2).
-- `appDatabaseProvider` watch `activeWalletProvider`: đổi ví/Account ⇒ DB cũ đóng, mọi repository/stream dựng lại. `selectedWalletIdProvider`, `currentTabProvider`, `syncModeProvider`, `primaryFundIdProvider` gắn `walletSessionKeyProvider` nên reset khi đổi ví/đăng xuất. Đăng xuất chỉ xoá phiên; file ví, App Lock, prefs thiết bị giữ nguyên.
-- Primary fund = WALLET data trong `wallet_settings` (v10); khoá prefs cũ (`primary_fund_id` / `primary_fund_id.<walletId>`) chỉ còn đọc dự phòng + di trú 1 lần. Explorer sort/App Lock = DEVICE, không đổi.
+**P13 — Technical Cleanup + Documentation — ĐÃ LÊN KẾ HOẠCH.** Gỡ/cô lập công cụ debug
+khỏi source production; dọn dữ liệu cloud thử CHỈ khi được duyệt (không xoá tự động);
+cập nhật `CLAUDE.md`, file này, `spec.md` (giả định Firestore realtime bản rõ đã lỗi thời),
+`docs/design.html`, `AGENTS.md`; tài liệu hoá kiến trúc thật (SQLCipher cục bộ + đồng bộ
+delta mã hoá + cloud zero-knowledge + phân quyền Account Family); cải thiện quy trình DEV
+emulator (màn đăng nhập tài khoản test).
 
-## Financial Members
-Runtime = bảng `financial_member_rows` qua `MemberRepository` (`watchMembers/getMembers/getMemberById/createMember`), UI qua `memberDirectoryProvider` (`MemberDirectory`: nhãn, mặc định = đầu theo `displayOrder`, `otherThan`). Enum `FamilyMember` và `WalletMemberResolver` đã XOÁ; domain dùng `String memberId`.
-Wallet di sản hiện tại: `memberId = vo`/`chong` (giữ nguyên, đã nằm trong `*_ref_id`). DB MỚI (`SeedProfile.fresh`): 2 thành viên ID mờ (`OpaqueId`), nhãn Vợ/Chồng; `createMember` cũng ID mờ. Không suy nhãn từ `memberId`. Nợ tạm: thành viên mặc định = người đầu theo `displayOrder`; `'vo'/'chong'` còn ở seed di sản + importer debug (đã tự khoá vì đòi schema v7). Chi tiết: `docs/p4-financial-member-audit.md`.
+**P14 — Personal Free / Single-User Wallet — BẮT BUỘC TRƯỚC CH PLAY.** Người dùng mới cài
+app có ví CÁ NHÂN cục bộ, không cần đăng nhập: đúng 1 FinancialMember nhãn mặc định "Tôi"
+(đổi tên được), KHÔNG seed "Vợ"+"Chồng" (hiện `app_database.dart` seed 2 thành viên cho mọi
+ví mới — phải đổi cho ví mới, ví thật giữ nguyên). UI chính: Thu, Chi; không có thao tác
+"Chuyển" giữa thành viên; giữ Quỹ (Nạp tiền/Rút tiền), Tiết kiệm (Bỏ vào tiết kiệm/Rút tiết
+kiệm), Danh mục, Trạng thái, Tổng hợp; ngữ nghĩa Transfer nội bộ giữ trong Financial Core.
+Nâng cấp: "Mời người vào ví" ⇒ cần đăng nhập/cloud ⇒ mời thành viên thứ 2 ⇒ CÙNG Wallet,
+CÙNG lịch sử ⇒ thành Family; không tạo Wallet thay thế. Phải chứng minh: ví mới = 1 thành
+viên; không seed Vợ/Chồng; không có UI chuyển giữa thành viên; Quỹ + Tiết kiệm chạy; dùng
+cục bộ không cần Account; Personal→Family giữ walletId/lịch sử; Wallet Family thật không bị
+chạm.
 
-## Live Data Rule
-Chủ dự án đang nhập DỮ LIỆU THẬT trên Pixel. Mốc kiểm chứng gần nhất: 1.808 giao dịch — **chỉ là mốc tham chiếu, KHÔNG phải số bắt buộc**.
-Mỗi phase di trú/bảo mật: **đọc DB Pixel THỰC TẾ trước**, sao lưu + kiểm chứng, so sánh trước/sau field-by-field. Không bao giờ khôi phục về số dòng cũ chỉ vì mốc 1.808.
+**P15 — Budgets + Reminders.** Ngân sách tháng theo danh mục; cảnh báo theo tốc độ tiêu;
+nhắc giao dịch nằm lâu ở trạng thái đầu; cảnh báo ít, hữu ích. Chỉ sau khi P14 ổn định.
 
-## Reference Checkpoint (live data may have advanced)
-Mốc gần nhất đã xác minh (2026-09-21), chỉ để đối chiếu:
-- 1.808 giao dịch; master data: 17 danh mục, 11 trạng thái, 1.569 giao dịch `status_id` NULL.
-- Tổng tài sản 80.538.000; doanh thu 301.954.000; chi phí KD 24.790.000; chi tiêu 220.599.000.
-- SQLite integrity ok, FK rỗng.
-(Không chép ghi chú giao dịch riêng tư vào file này.)
+**P16 — Reporting / Export.** Xu hướng tỷ lệ tiết kiệm 6–12 tháng; xu hướng chi tiêu dài
+hạn; mục tiêu Quỹ + thời gian dự kiến; xuất CSV/Excel. Giữ local-first/quyền riêng tư.
 
-## Locked Architecture Decisions
-- Wallet là container tài chính; Personal Free KHÔNG cần Account (local).
-- 1 Wallet = 1 SQLite (đích); kiến trúc cho phép nhiều Wallet, UI v1 một ví hoạt động.
-- Family: đúng 1 Owner + tối đa 1 Member; cả hai thấy toàn bộ Wallet.
-- FinancialMember ổn định; email là danh tính mời/đăng nhập, KHÔNG là danh tính tài chính; Owner/Member là quyền, Vợ/Chồng là người.
-- Đổi tài khoản gắn với Member không đổi memberId/lịch sử. Chỉ Owner quản trị membership. Không chuyển Owner ở v1.
-- 1 Account = 1 thiết bị hoạt động. Google Auth trước; lớp Auth độc lập nhà cung cấp; lời mời do backend tạo/gửi.
-- Nội dung tài chính sao lưu mã hoá phía client (zero-knowledge, 2026-09-26); metadata Auth/phiên/ví không E2EE. Mã hoá DB cục bộ BẮT BUỘC trước cloud pilot/Play (SQLCipher hoặc tương đương, khoá DB độc lập với PIN).
-- Quỹ chính (primary fund) là WALLET DATA (tạm còn SharedPreferences); sắp xếp/lọc Explorer là DEVICE-ONLY.
-- Cloud sau này xoá bằng tombstone; xoá cục bộ hiện tại giữ nguyên ngữ nghĩa (xoá thật) cho tới phase đồng bộ.
-- App Lock / sinh trắc là DEVICE security, không phải Account Auth, không đồng bộ.
+**P17 — Play Store Readiness.** Gỡ công cụ debug; App Check / Play Integrity; biện pháp
+chặn chi phí Firebase; chính sách quyền riêng tư; Data Safety; audit log + quyền; Play App
+Signing (tiếp nối khoá release hiện có); AAB; Play internal testing; onboarding; Personal
+Free đã xong; hành vi nâng cấp Family/paywall rõ ràng. Tên: "Ví Nhà Mình" (vi) /
+"HomeWallet" (quốc tế). Không phát hành trước khi pilot + Personal Free ổn định.
 
-## Financial Core Invariants (tóm tắt; đầy đủ ở financial-core-v2.md)
-- Income / External Expense / Transfer là 3 tổng tách biệt; Transfer không vào Thu/Chi.
-- Mọi giao dịch đi qua 1 `applyEffect`; Category chỉ là nhãn báo cáo, dòng tiền nằm trên Transaction (source/destination).
-- Mọi pool (khả dụng, quỹ, tiết kiệm) không bao giờ âm; kiểm tra ở tầng ghi. Status không bao giờ đổi số dư.
-- Xoá giao dịch = xoá thật cả họ; chặn khi làm pool âm/dính Vay-Hoàn tiền. Sửa số tiền/người = thay dòng.
-- Category/Status/Quỹ/Loại tiết kiệm do gia đình tạo; hạng mục không hardcode theo id.
+**P18 — Premium / Expansion — TƯƠNG LAI.** Personal Cloud, Family subscription, bộ danh mục
+mẫu, vai trò/nhãn tự do, Family > 2 người, xoay khoá sau thu hồi / forward secrecy, xử lý
+xung đột phong phú hơn. Giá đang cân nhắc: Free = ví cá nhân cục bộ; Personal Cloud
+19.000đ/tháng · 149.000đ/năm; Family 39.000đ/tháng · 299.000đ/năm. KHÔNG làm billing chỉ vì
+có trong lộ trình.
 
-## Current Security State
-- **App Lock thật (P3):** PIN 6 số; verifier = HMAC-SHA256(khoá Android Keystore không xuất được, PBKDF2(pin, salt ngẫu nhiên, 210k vòng)) trong `AppLockBridge.kt`, lưu ở SharedPreferences native `app_lock_secure` (không phải SQLite/prefs Flutter). API 24–25 chỉ dùng PBKDF2WithHmacSHA1 làm KDF dự phòng, vẫn HMAC Keystore.
-- Chặn dò PIN từ lần sai thứ 5 (30s→30p), lưu bền. Quên PIN = xác minh khóa màn hình hệ thống rồi đặt PIN mới; không cửa hậu, không xoá dữ liệu.
-- Sinh trắc tuỳ chọn (chỉ mở khoá phiên). Trạng thái mở khoá chỉ trong RAM; khởi động lạnh/nền ≥30s ⇒ khoá; `LockGate` không dựng nội dung tài chính khi khoá; `FLAG_SECURE` khi rời foreground.
-- **Android Auto Backup TẮT:** `allowBackup=false` + `backup_rules.xml` + `data_extraction_rules.xml` (loại trừ mọi domain, cloud & device-transfer).
-- **SQLCipher: ĐÃ BẬT (2026-09-26)** — khoá mỗi ví trong Keystore, độc lập App Lock; App Lock không phải lớp mã hoá.
+## 9. Mô hình sản phẩm (khoá)
+- **FREE PERSONAL:** cục bộ, 1 người, không cần Account; Thu/Chi, Quỹ, Tiết kiệm, danh mục/
+  trạng thái/lịch sử; không bắt buộc cloud.
+- **PERSONAL CLOUD:** như Free + sao lưu mã hoá, khôi phục, thiết bị tin cậy/cloud.
+- **FAMILY:** Wallet dùng chung mã hoá, Owner + Member, đồng bộ hai máy, phân quyền Family.
+- Nguyên tắc: đơn giản mặc định, mạnh khi cần.
 
-## Release Gates
-- Gỡ/vô hiệu hoá cứng debug real-data importer trước Play (CLAUDE.md §19).
-- Không commit DB thật/Excel/backup; không đóng gói vào APK/AAB.
-- Android Auto Backup phải tắt (allowBackup=false + rules) — P3.
-- ~~Mã hoá DB cục bộ~~ ✅ (SQLCipher). Gỡ thêm công cụ debug DB benchmark/báo cáo toàn vẹn trước Play.
-- Kiểm thử Auth + Firestore Rules (emulator) trước Family pilot.
+## 10. An toàn dữ liệu thật — QUY TẮC VĨNH VIỄN
+Wallet thật đang được dùng hằng ngày. KHÔNG BAO GIỜ:
+- khôi phục về số giao dịch cũ; ghi đè bằng Excel cũ; reset DB thật để test;
+- `pm clear` / gỡ app thật để thử nghiệm;
+- tạo xung đột cố ý trên dữ liệu thật; thu hồi vợ chỉ để test;
+- dùng dữ liệu thật trong DEV/emulator; chép dữ liệu cloud PROD vào fixture DEV;
+- thay đổi phá huỷ bất kỳ khi chưa có chấp thuận tường minh.
+Mọi test phá huỷ: CHỈ DEV / emulator / fixture.
 
-## Testing (gate mới nhất — P6.1 đang nghiệm thu)
-P6.1: Summary chỉ có Ngày/Tháng/Năm, không còn All time; Transaction/Summary dùng chung `TransactionRow`; trường số tiền Add/Edit dùng state cục bộ để gõ không ghi DB. `Số liệu` dùng `computeFinancialSummary` cho số dư/tổng tài sản. `flutter test --concurrency=1` pass; `flutter analyze` có 15 info deprecated có sẵn, 0 error. PROD updated in place bằng APK ký tương thích (không uninstall/clear). Pixel: Summary mới đúng, có `Số liệu`, dòng giao dịch mới, nhập tiền + preview/bàn phím hệ thống hoạt động và form đóng không lưu. PROD trước/sau: SHA-256 `803de56…420771eb6`, integrity ok, FK rỗng, 1.822 giao dịch, schema v9, walletId `3cbd8878…` không đổi. Backup: `Documents/ViNhaMinh_backups/2026-09-22/p6_1_pre`.
-P6.1 mở rộng (2026-09-26): mọi giao dịch (kể cả Chi từ Quỹ, Chuyển, Tiết kiệm) hiện trong Tổng hợp, chỉ Thu/Chi được cộng; mọi nơi mở cùng chi tiết/sửa/xóa theo `Transaction.id`; repository chặn đổi nhóm chính (`MainGroupChangeException`). Chưa commit. PROD chỉ đọc: 1.849 giao dịch, schema v8, integrity ok.
-
-P6: `flutter test --concurrency=1` 1022 pass, 3 skip; analyze 15 info có sẵn, 0 lỗi; không đổi schema (v8). Test: `test/wallet/*`. Pixel prod: DB sha256 trước/sau giống hệt (1.809 giao dịch, walletId `3cbd8878…`); registry tạo đúng 1 dòng local. DEV: phiên Auth giữ, registry không đổi khi đăng nhập/đăng xuất, sandbox tách biệt. Lưu ý: flavor prod chưa có `env/prod.json` ⇒ Auth prod "chưa cấu hình", nên đăng nhập chỉ thử trên DEV. Backup: `ViNhaMinh_backups/2026-09-21/p6_pre|p6_post`.
-Widget-local state (bộ lọc trong màn hình) chưa reset khi đổi ví — chưa có UI đổi ví ở v1.
-P5 (tham chiếu):
-P5: `flutter test --concurrency=1` 1005 pass, 3 skip; `flutter analyze` 15 info có sẵn, 0 lỗi; không đổi schema. Test P5: `test/auth/*`.
-P4 (tham chiếu): 977 pass. Test P4: `test/domain/financial_member_as_data_test.dart` (ID mờ + nhãn "Vợ", repo, directory), thêm ca P4 ở home/add/summary widget test; fixture `test/support/legacy_members.dart`.
-Pixel: DB trước/sau P4 giống byte-for-byte (1.809 giao dịch); walletId + `financial_member_rows` không đổi; integrity ok.
-Gate: `flutter test --concurrency=1` một lần cuối phase; analyze cuối phase; Golden chỉ khi UI ảnh hưởng.
-
-## Known Backlog
-- Giới hạn P3: phần Kotlin (Keystore/PBKDF2/chặn tạm) chỉ kiểm chứng trên thiết bị, không unit test được.
-- P7 giới hạn (giữ trung thực): token Firebase của thiết bị cũ không bị thu hồi; secret là bearer, không phải attestation; đăng xuất offline có thể để bản ghi server active tới khi bị thay; App Check chưa là quyền phiên; P8+ ghi tài chính phải kiểm tra phiên trong CÙNG transaction.
-- Claim + Personal Pro sao lưu/khôi phục (P8); đồng bộ (P9); Family (P10); SQLCipher trước P8.
-- Backlog UI/i18n không chặn (chuỗi hardcode tiếng Việt, `Formatters.amount` VNĐ cứng).
-- Backlog: rà soát clientTxId/tombstone/idempotency trước đồng bộ.
-
-## Next Planned Phases (docs/account-wallet-security-foundation.md §31)
-P3 ✅ → P4 Thành viên là dữ liệu → P5 Nền Auth & môi trường → P6 Cách ly Account/Wallet → P7 Phiên thiết bị độc quyền → P8 Claim + Pro sao lưu/khôi phục → P9 Đồng bộ Personal → P10 Membership Family.
-Mỗi phase kết thúc: test → nghiệm thu Pixel → sao lưu → DỪNG chờ duyệt.
-
-
-Schema v9 (2026-09-26): `actorMemberId` cho Chi từ Quỹ; sửa đầu nguồn/đích Chuyển theo `transferKind`; sửa giữ nguyên `Transaction.id`. Xem docs/phase-p6-1.md.
+## 11. Vận hành (công thức đã kiểm chứng)
+- adb: `C:\Users\Admin\AppData\Local\Android\Sdk\platform-tools` (không nằm trong PATH);
+  Git Bash cần `MSYS_NO_PATHCONV=1` cho đường dẫn `/sdcard`. Pixel = wireless debug
+  (`adb-3A131JEHN01127-…`), máy vợ = USB (`MNCUZDGUROZTNFTS`). Không chạm màn hình máy
+  người dùng khi họ đang dùng; chỉ đọc (uiautomator dump / logcat) trừ khi được nhờ.
+- Firebase CLI: `functions/node_modules/.bin/firebase` (`--project vi-nha-minh-55c60`);
+  deploy `--only functions:p7-session,firestore:rules`.
+- Backend test: `firebase emulators:exec --only auth,firestore,functions --project
+  demo-homewallet-p7 "cd functions && npm test"` — cần Java (JBR của Android Studio) trong PATH.
+- Build: `flutter build apk --release --flavor prod --dart-define-from-file=env/prod.json`
+  (Flutter ở `C:\tools\flutter`).
+- Kiểm tra cloud: Firebase Console / Logs Explorer qua trình duyệt (không trích xuất token
+  từ máy host). Log request cho thấy từng callable + mã HTTP.
+- Diễn tập di trú DB: bản debug `--dart-define=DB_REHEARSAL=true` (xem `CLAUDE.md` §29).
