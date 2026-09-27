@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:cryptography/dart.dart';
 import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
@@ -20,8 +22,9 @@ Future<Map<String, ({int plain, int encrypted})>> runDebugDbBenchmark({
   int rounds = 5,
 }) async {
   final root = await getTemporaryDirectory();
-  final dir = Directory('${root.path}/db_bench_${DateTime.now().microsecondsSinceEpoch}')
-    ..createSync();
+  final dir = Directory(
+    '${root.path}/db_bench_${DateTime.now().microsecondsSinceEpoch}',
+  )..createSync();
   try {
     final plainFile = File('${dir.path}/plain.sqlite');
     await _fixture(plainFile, transactions);
@@ -63,23 +66,35 @@ Future<Map<String, ({int plain, int encrypted})>> runDebugDbBenchmark({
       );
       result['month page query (100 rows, date desc)'] = await median(() async {
         await (db.select(db.transactionRows)
-              ..where((t) => t.transactionDate.isBiggerOrEqualValue(DateTime(2026, 9)))
+              ..where(
+                (t) =>
+                    t.transactionDate.isBiggerOrEqualValue(DateTime(2026, 9)),
+              )
               ..orderBy([(t) => OrderingTerm.desc(t.transactionDate)])
               ..limit(100))
             .get();
       });
       var n = 0;
-      result['add+edit+delete (1 tx each, own transaction)'] = await median(() async {
-        final id = 'bench-${n++}';
-        final category = (await db.select(db.categoryRows).get()).first.id;
-        await db.transaction(() => db.into(db.transactionRows).insert(_row(id, category, 1)));
-        await db.transaction(() => (db.update(db.transactionRows)
-              ..where((t) => t.id.equals(id)))
-            .write(const TransactionRowsCompanion(amountMinor: Value(4242))));
-        await db.transaction(() => (db.delete(db.transactionRows)
-              ..where((t) => t.id.equals(id)))
-            .go());
-      });
+      result['add+edit+delete (1 tx each, own transaction)'] = await median(
+        () async {
+          final id = 'bench-${n++}';
+          final category = (await db.select(db.categoryRows).get()).first.id;
+          await db.transaction(
+            () => db.into(db.transactionRows).insert(_row(id, category, 1)),
+          );
+          await db.transaction(
+            () => (db.update(db.transactionRows)..where((t) => t.id.equals(id)))
+                .write(
+                  const TransactionRowsCompanion(amountMinor: Value(4242)),
+                ),
+          );
+          await db.transaction(
+            () => (db.delete(
+              db.transactionRows,
+            )..where((t) => t.id.equals(id))).go(),
+          );
+        },
+      );
       await db.close();
       return result;
     }
@@ -87,7 +102,8 @@ Future<Map<String, ({int plain, int encrypted})>> runDebugDbBenchmark({
     final plain = await measure(plainFile, null);
     final encrypted = await measure(encFile, key);
     return {
-      for (final k in plain.keys) k: (plain: plain[k]!, encrypted: encrypted[k]!),
+      for (final k in plain.keys)
+        k: (plain: plain[k]!, encrypted: encrypted[k]!),
     };
   } finally {
     dir.deleteSync(recursive: true);
@@ -112,7 +128,10 @@ TransactionRowsCompanion _row(String id, String categoryId, int i) {
 }
 
 Future<void> _fixture(File file, int transactions) async {
-  final db = AppDatabase.forTesting(NativeDatabase(file), seed: SeedProfile.demo);
+  final db = AppDatabase.forTesting(
+    NativeDatabase(file),
+    seed: SeedProfile.demo,
+  );
   final category = (await db.select(db.categoryRows).get()).first.id;
   await db.batch((b) {
     for (var i = 0; i < transactions; i++) {
@@ -163,8 +182,83 @@ Future<Map<String, Object?>> debugWalletIntegrityReport(
       'state': state.name,
       'cipher': '${db.select('PRAGMA cipher_version').first.values.first}',
       ...captureSnapshot(db).summary(),
+      ..._transactionBreakdown(db),
     };
   } finally {
     db.close();
   }
+}
+
+/// Debug-only chẩn đoán: digest theo CỘT và theo DÒNG của `transaction_rows` (kiểu
+/// lưu + giá trị qua `typeof`/`quote`) + id/clientTxId + id thành viên. Chỉ id mờ và
+/// băm — không số tiền/ghi chú/nhãn.
+Map<String, Object?> _transactionBreakdown(Database db) {
+  String h(String v) => const DartSha256()
+      .hashSync(utf8.encode(v))
+      .bytes
+      .take(6)
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
+  final physical = [
+    for (final r in db.select('PRAGMA table_info(transaction_rows)'))
+      r['name'] as String,
+  ];
+  // Theo TÊN cột (không phụ thuộc thứ tự vật lý: ví migrate có cột ALTER ADD ở cuối,
+  // ví tạo mới theo thứ tự khai báo).
+  final cols = [...physical]..sort();
+  final sel = cols
+      .map((c) => "typeof($c) || ':' || quote($c) AS $c")
+      .join(', ');
+  final rows = db.select('SELECT $sel FROM transaction_rows ORDER BY id');
+  return {
+    // Digest cùng thuật toán `captureSnapshot` nhưng với `actor_member_id` (v9, ALTER
+    // ADD COLUMN) ở CUỐI — thứ tự vật lý của ví tạo trước v9.
+    'txDigestV9AppendOrder': _orderedDigest(db, [
+      ...physical.where((c) => c != 'actor_member_id'),
+      'actor_member_id',
+    ]),
+    'txColumns': {
+      for (final c in cols) c: h(rows.map((r) => r[c] as String).join('')),
+    },
+    'txRows': {
+      for (final r in rows)
+        '${r['id']}': h(cols.map((c) => r[c] as String).join('')),
+    },
+    'txClientIds': {
+      for (final r in db.select(
+        'SELECT id, client_tx_id FROM transaction_rows ORDER BY id',
+      ))
+        '${r['id']}': r['client_tx_id'],
+    },
+    'memberIds': [
+      for (final r in db.select(
+        'SELECT member_id FROM financial_member_rows ORDER BY member_id',
+      ))
+        r['member_id'],
+    ],
+  };
+}
+
+String _orderedDigest(Database db, List<String> cols) {
+  String cell(Object? v) => switch (v) {
+    null => 'N',
+    int() => 'I$v',
+    double() => 'R$v',
+    String() => 'T${v.length}:$v',
+    List<int>() =>
+      'B${v.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}',
+    _ => 'U$v',
+  };
+  final order = [for (var i = 1; i <= cols.length; i++) '$i'].join(', ');
+  final buf = StringBuffer();
+  for (final row in db.select(
+    'SELECT ${cols.join(', ')} FROM transaction_rows ORDER BY $order',
+  )) {
+    buf.write('${row.values.map(cell).join('')}');
+  }
+  return const DartSha256()
+      .hashSync(utf8.encode(buf.toString()))
+      .bytes
+      .map((b) => b.toRadixString(16).padLeft(2, '0'))
+      .join();
 }

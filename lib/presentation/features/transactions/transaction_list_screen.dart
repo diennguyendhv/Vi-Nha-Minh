@@ -52,7 +52,14 @@ class _TransactionListScreenState extends ConsumerState<TransactionListScreen> {
                   t.transactionDate.month == _month.month,
             )
             .toList()
-          ..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
+          // Khoá phụ cố định (giờ tạo, id): thứ tự không phụ thuộc thứ tự chèn
+          // SQLite — ví khôi phục chèn theo thứ tự khác nhưng phải hiện y hệt.
+          ..sort((a, b) {
+            final byDate = b.transactionDate.compareTo(a.transactionDate);
+            if (byDate != 0) return byDate;
+            final byCreated = b.createdAt.compareTo(a.createdAt);
+            return byCreated != 0 ? byCreated : a.id.compareTo(b.id);
+          });
 
     final grouped = <DateTime, List<Transaction>>{};
     for (final t in inMonth) {

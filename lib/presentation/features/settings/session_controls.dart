@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../data/backup/backup_service.dart';
@@ -209,7 +210,13 @@ class _SessionControlsState extends State<SessionControls> {
       );
     } on SessionFailure {
       rethrow;
-    } on Object {
+    } on Object catch (e) {
+      // Debug-only: loại lỗi + id ví rút gọn; không bí mật/khoá.
+      if (kDebugMode) {
+        debugPrint(
+          '[recover] failed wallet=${walletId.substring(0, 8)} ${e.runtimeType}',
+        );
+      }
       if (mounted) setState(() => _status = 'recoverFailed');
       return;
     }

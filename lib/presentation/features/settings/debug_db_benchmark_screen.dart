@@ -51,7 +51,7 @@ class _DebugDbBenchmarkScreenState extends State<DebugDbBenchmarkScreen> {
       // Debug-only; counts/digests/ids, never row contents or keys.
       if (kDebugMode) debugPrint('[db-report] ${jsonEncode(r)}');
     } on Object catch (e) {
-      _out = 'Lỗi: ${e.runtimeType}';
+      _out = 'Lỗi: $e';
     }
     if (mounted) setState(() => _busy = false);
   }
