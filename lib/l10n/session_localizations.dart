@@ -506,7 +506,7 @@ abstract class SessionLocalizations {
   /// No description provided for @claimActive.
   ///
   /// In en, this message translates to:
-  /// **'Wallet registered to this account (you are {member}). No financial data has been uploaded yet.'**
+  /// **'Wallet registered to this account (you are {member}). Encrypted backup is managed below.'**
   String claimActive(String member);
 
   /// No description provided for @claimOtherAccount.

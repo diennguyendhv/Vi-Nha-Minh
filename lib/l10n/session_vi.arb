@@ -67,7 +67,7 @@
   "claimConfirm": "Đăng ký ví",
   "claimPending": "Đang hoàn tất đăng ký ví với máy chủ. Dữ liệu trên máy không thay đổi.",
   "claimRetry": "Thử lại",
-  "claimActive": "Ví đã đăng ký với tài khoản này (bạn là {member}). Chưa có dữ liệu tài chính nào được tải lên.",
+  "claimActive": "Ví đã đăng ký với tài khoản này (bạn là {member}). Sao lưu mã hoá được quản lý ở mục bên dưới.",
   "claimOtherAccount": "Ví này đã đăng ký với một tài khoản khác. Tài khoản đang đăng nhập không có quyền cloud với ví; ví trên máy vẫn dùng bình thường.",
   "claimCheck": "Kiểm tra với máy chủ",
   "claimServerOk": "Máy chủ xác nhận: tài khoản này là Chủ sở hữu ví.",

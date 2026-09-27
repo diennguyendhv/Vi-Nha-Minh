@@ -244,7 +244,7 @@ class SessionLocalizationsVi extends SessionLocalizations {
 
   @override
   String claimActive(String member) {
-    return 'Ví đã đăng ký với tài khoản này (bạn là $member). Chưa có dữ liệu tài chính nào được tải lên.';
+    return 'Ví đã đăng ký với tài khoản này (bạn là $member). Sao lưu mã hoá được quản lý ở mục bên dưới.';
   }
 
   @override

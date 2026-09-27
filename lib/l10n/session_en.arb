@@ -88,7 +88,7 @@
   "claimConfirm": "Register Wallet",
   "claimPending": "Finishing Wallet registration with the server. Data on this device is unchanged.",
   "claimRetry": "Retry",
-  "claimActive": "Wallet registered to this account (you are {member}). No financial data has been uploaded yet.",
+  "claimActive": "Wallet registered to this account (you are {member}). Encrypted backup is managed below.",
   "claimOtherAccount": "This Wallet is registered to a different account. The signed-in account has no cloud access to it; the Wallet on this device keeps working.",
   "claimCheck": "Check with server",
   "claimServerOk": "Server confirms: this account is the Wallet Owner.",

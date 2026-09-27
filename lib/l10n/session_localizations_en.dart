@@ -244,7 +244,7 @@ class SessionLocalizationsEn extends SessionLocalizations {
 
   @override
   String claimActive(String member) {
-    return 'Wallet registered to this account (you are $member). No financial data has been uploaded yet.';
+    return 'Wallet registered to this account (you are $member). Encrypted backup is managed below.';
   }
 
   @override

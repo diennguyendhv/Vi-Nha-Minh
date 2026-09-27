@@ -116,7 +116,7 @@ class AccountSettingsCard extends ConsumerWidget {
           const SizedBox(height: 12),
           if (account != null)
             const Text(
-              'Đăng nhập chỉ xác nhận danh tính và không tự gắn ví nào. Dữ liệu tài chính vẫn chỉ nằm trên máy này; chưa được sao lưu hay đồng bộ.',
+              'Đăng nhập chỉ xác nhận danh tính và không tự gắn ví nào hay tự tải dữ liệu lên. Sao lưu chỉ bật khi bạn chọn tường minh.',
               key: Key('account_local_note'),
               style: TextStyle(
                 fontSize: 12,

@@ -344,6 +344,41 @@ Schema **v11** (additive): `sync_state.backup_state` (NULL/SEEDING/COMPLETE),
   dropped/added objects only at a checkpoint. Pull applies other-writer rows without
   re-running pool non-negativity for merged pending local rows (restore does check).
 
+## 8f. P8.3–P8.5 LIVE DEV acceptance (Pixel 7a, 2026-09-27)
+DEV fixture Wallet `dc268fde…` only (`com.vinhamimh.vi_nha_minh.dev`); PROD untouched, not migrated, not uploaded.
+- **Deploy:** 26 callables + deny-all Rules to `vi-nha-minh-55c60` after emulator 23/23.
+- **P8.3:** explicit enable (Backup Password, Recovery Key shown once with mandatory confirm) →
+  3 calls (keyring, enableBackup, 1 batch) → COMPLETE, outbox 0, headRev 1, 19 entities, 1 batch.
+  Firestore (Console, read-only): wallet doc = ownership metadata only; entities = `{v,id,rev,n,c,aad}`
+  + `serverRev` (server enforces exact keys, `functions/index.js` `validEnvelope`); keyring = wrapped
+  slots + KDF params + proof hashes only. BMK survived force-stop (next push succeeded).
+- **P8.4:** create / edit / delete = 1 call + 1 batch each (count 2 = entity + manifest); delete =
+  tombstone inside ciphertext (entity rev 4). Offline (app-only network off): outbox 1 kept across
+  force-stop, retries with backoff never reached the server, upload resumed on reconnect. Idle 3 min +
+  background/resume + cold start = 0 calls; Cloud Run request log 09:55–10:09 = exactly 4
+  `putEncryptedBatch` (create, edit, delete, offline resume).
+- **P8.5:** `pm clear` DEV → sign-in → TAKEOVER_REQUIRED → lost-device recovery (password) → restore
+  into `wallet_<uuid>.sqlite` (first 16 bytes random = SQLCipher from page 1, own DB key), registry
+  bound to the Account, same walletId, 5 tx / 10 categories / 2 members / 1 fund / 1 savings type,
+  balances equal, integrity ok, FK 0, force-stop/reopen OK. Done twice (2nd after a deliberate wrong
+  password: `BackupKeyException` locally, no `recoverSession`, no file/key/registry change).
+  Restore #1 `transaction_rows` digest differed ONLY because the source DB (created at v8) had v9
+  `actor_member_id` appended by `ALTER TABLE ADD COLUMN` while a restored DB uses declared order;
+  recomputed in the source order the digest is identical (`f5526257…`). Restore #2 vs #1: every table,
+  per-column and per-row digest identical. Test `test/sync/restore_row_fidelity_test.dart` pins per-cell
+  (typeof + quote) fidelity through real SQLCipher.
+- **Session:** sign-out keeps the file + BMK; signed in without P7.1 activation ⇒ Sync now blocked with
+  0 network calls; after activation Sync now = 1 call.
+- **Fixed during acceptance:** Transactions tab tie-break (createdAt, id) — restored Wallets insert in
+  cloud order; stale "nothing uploaded" copy.
+- **Not done live:** Recovery Key restore (key not kept by the owner; covered by automated tests).
+- **Open F1:** after a restore on a fresh install, sign-out opens the empty install-time local Wallet
+  (resolveActive prefers unclaimed local); restored Wallet is intact but unreachable without a switcher.
+- **Tooling note:** `a7955ab` also carries `dart format` churn in 16 presentation files — verified
+  format-only (formatting the parent reproduces them exactly); left as is.
+- Failed-restore DB-key cleanup: accepted technical debt (orphan random alias, never reused, opens
+  nothing); ordinary code still cannot delete Wallet DB keys.
+
 ## 9. Remaining before full P8
 ~~SQLCipher phase~~ ✅ → ~~local outbox/binding (P8.1)~~ ✅ → ~~Wallet claim flow
 (P8.2)~~ ✅ → P8.3 encrypted initial backup: baseline enqueue + per-entity rev tracking → incremental upload of
