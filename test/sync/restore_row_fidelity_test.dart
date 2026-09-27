@@ -88,6 +88,7 @@ void main() {
     await restored.close();
     await a.db.close();
     expect(result.walletId, walletId);
+    expect(registry.recentlyActive, [walletId], reason: 'khôi phục = kích hoạt ví');
     expect(got.keys.toSet(), source.keys.toSet());
     for (final id in source.keys) {
       for (final col in source[id]!.keys) {

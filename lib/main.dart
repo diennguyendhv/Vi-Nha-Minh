@@ -11,6 +11,7 @@ import 'presentation/providers/session_provider.dart';
 import 'l10n/session_localizations.dart';
 import 'data/local/db_encryption/db_preflight.dart';
 import 'data/local/wallet_registry_bootstrap.dart';
+import 'domain/entities/wallet_access_scope.dart';
 import 'data/repositories/local_wallet_settings_repository.dart';
 import 'data/security/method_channel_app_lock_platform.dart';
 import 'presentation/features/security/db_recovery_screen.dart';
@@ -65,6 +66,22 @@ Future<void> main() async {
   // Registry Wallet: đăng ký ví cục bộ hiện tại TẠI CHỖ (không di chuyển file, không
   // gắn Account). Không bao giờ ném.
   final walletRegistry = await bootstrapWalletRegistry();
+
+  // Ví đang hoạt động không phải ví di sản (vd ví đã khôi phục): thiếu file/khoá ⇒ màn
+  // cần khôi phục, không tạo ví rỗng mới, không lặng lẽ chuyển sang ví bootstrap.
+  final uid = authRepository.currentAccount()?.uid;
+  final active = walletRegistry.resolveActive(
+    uid == null
+        ? const WalletAccessScope.local()
+        : WalletAccessScope.account(uid),
+  );
+  if (active != null) {
+    final walletRecovery = await preflightRegisteredWallet(active.dbFileName);
+    if (walletRecovery != null) {
+      runApp(DbRecoveryRequiredApp(reason: walletRecovery.reason));
+      return;
+    }
+  }
 
   runApp(
     ProviderScope(

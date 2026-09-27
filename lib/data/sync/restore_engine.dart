@@ -26,7 +26,8 @@ class RestoreException implements Exception {
   final String reason;
   final String? stage;
   @override
-  String toString() => 'RestoreException($reason${stage == null ? '' : ' @ $stage'})';
+  String toString() =>
+      'RestoreException($reason${stage == null ? '' : ' @ $stage'})';
 }
 
 class RestoreResult {
@@ -82,7 +83,8 @@ class RestoreEngine {
     this.failAt,
   }) : _send = transport,
        env = env ?? AppEnvironment.current,
-       _newFileName = newFileName ?? (() => 'wallet_${OpaqueId.generate()}.sqlite');
+       _newFileName =
+           newFileName ?? (() => 'wallet_${OpaqueId.generate()}.sqlite');
 
   final CloudSession session;
   final SessionTransport _send;
@@ -100,7 +102,10 @@ class RestoreEngine {
     if (failAt?.call(stage) ?? false) throw RestoreException('injected', stage);
   }
 
-  Future<Map<String, dynamic>> _call(String op, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> _call(
+    String op,
+    Map<String, dynamic> data,
+  ) async {
     calls++;
     try {
       return await _send(op, data);
@@ -135,7 +140,8 @@ class RestoreEngine {
     String? recoveryKey,
     bool allowStaleCheckpoint = false,
   }) async {
-    if (env != AppEnvironment.dev) throw const RestoreException('blocked-environment');
+    if (env != AppEnvironment.dev)
+      throw const RestoreException('blocked-environment');
     if ((password == null) == (recoveryKey == null)) {
       throw ArgumentError('exactly one secret');
     }
@@ -167,8 +173,16 @@ class RestoreEngine {
     final Uint8List bmk;
     try {
       bmk = password != null
-          ? (await BackupService.unwrapPassword(keyring, walletId, password)).bmk
-          : (await BackupService.unwrapRecovery(keyring, walletId, recoveryKey!)).bmk;
+          ? (await BackupService.unwrapPassword(
+              keyring,
+              walletId,
+              password,
+            )).bmk
+          : (await BackupService.unwrapRecovery(
+              keyring,
+              walletId,
+              recoveryKey!,
+            )).bmk;
     } on Object {
       throw const RestoreException('wrong-secret');
     }
@@ -193,7 +207,8 @@ class RestoreEngine {
     final manifestEntity = got.entities
         .where((e) => e.kind == CloudSyncEngine.manifestKind)
         .firstOrNull;
-    if (manifestEntity == null) throw const RestoreException('manifest-missing');
+    if (manifestEntity == null)
+      throw const RestoreException('manifest-missing');
     final manifest = manifestEntity.body;
     if (manifest['walletId'] != walletId) {
       throw const RestoreException('manifest-mismatch');
@@ -224,7 +239,8 @@ class RestoreEngine {
           'VALUES (1, ?, ?, ?)',
           [
             walletId,
-            (claim.kind == 'family' ? WalletKind.family : WalletKind.personal).name,
+            (claim.kind == 'family' ? WalletKind.family : WalletKind.personal)
+                .name,
             manifest['walletCreatedAt'] ?? 0,
           ],
         );
@@ -239,35 +255,46 @@ class RestoreEngine {
             );
           }
         }
-        if ((await d.customSelect('PRAGMA foreign_key_check').get()).isNotEmpty) {
+        if ((await d.customSelect('PRAGMA foreign_key_check').get())
+            .isNotEmpty) {
           throw const RestoreException('foreign-key', 'apply');
         }
         // Binding ACTIVE ghi SAU dữ liệu ⇒ trigger chưa từng sinh outbox.
-        await d.into(d.cloudBinding).insert(
-          CloudBindingCompanion.insert(
-            walletId: walletId,
-            accountId: uid,
-            selfMemberId: claim.selfMemberId!,
-            environment: env.name,
-            state: 'ACTIVE',
-            claimRequestId: const Value(null),
-            cryptoVersion: const Value(1),
-            keyringRev: Value(keyring['rev'] as int?),
-            updatedAt: DateTime.now(),
-          ),
-        );
-        await d.into(d.syncState).insert(
-          SyncStateCompanion.insert(
-            serverHeadRev: Value(got.throughRev),
-            lastPullAt: Value(DateTime.now()),
-            backupState: const Value('COMPLETE'),
-          ),
-        );
+        await d
+            .into(d.cloudBinding)
+            .insert(
+              CloudBindingCompanion.insert(
+                walletId: walletId,
+                accountId: uid,
+                selfMemberId: claim.selfMemberId!,
+                environment: env.name,
+                state: 'ACTIVE',
+                claimRequestId: const Value(null),
+                cryptoVersion: const Value(1),
+                keyringRev: Value(keyring['rev'] as int?),
+                updatedAt: DateTime.now(),
+              ),
+            );
+        await d
+            .into(d.syncState)
+            .insert(
+              SyncStateCompanion.insert(
+                serverHeadRev: Value(got.throughRev),
+                lastPullAt: Value(DateTime.now()),
+                backupState: const Value('COMPLETE'),
+              ),
+            );
       });
 
       // 4. Kiểm chứng TRỌN VẸN trước khi kích hoạt.
       _stage('verify');
-      final counts = await _verify(d, live, manifest, manifestEntity.rev, got.throughRev);
+      final counts = await _verify(
+        d,
+        live,
+        manifest,
+        manifestEntity.rev,
+        got.throughRev,
+      );
       if (!counts.checkpoint && !allowStaleCheckpoint) {
         throw const RestoreException('manifest-mismatch', 'stale-checkpoint');
       }
@@ -281,11 +308,17 @@ class RestoreEngine {
       await registry.register(
         WalletRegistryEntry(
           walletId: walletId,
-          kind: claim.kind == 'family' ? WalletKind.family : WalletKind.personal,
+          kind: claim.kind == 'family'
+              ? WalletKind.family
+              : WalletKind.personal,
           dbFileName: fileName,
           createdAt: DateTime.now(),
           boundAccountId: uid,
         ),
+        // Điểm commit: đăng ký + KÍCH HOẠT trong cùng 1 lần ghi registry — ví khôi
+        // phục là ví đang hoạt động của máy (đăng xuất không đổi; ví bootstrap chỉ là
+        // dự phòng).
+        activate: true,
       );
       await storage.clearMarker(fileName);
       return RestoreResult(
@@ -325,14 +358,19 @@ class RestoreEngine {
     for (final e in live) {
       final back = await EntityCodec.read(d, e.kind, e.localId);
       if (back == null ||
-          EntityCodec.canonicalJson(back['c']) != EntityCodec.canonicalJson(e.body['c'])) {
+          EntityCodec.canonicalJson(back['c']) !=
+              EntityCodec.canonicalJson(e.body['c'])) {
         throw const RestoreException('content-mismatch', 'verify');
       }
     }
     final counts = <String, int>{
-      for (final MapEntry(key: table, value: spec) in syncCapturedTables.entries)
-        spec.kind: (await d.customSelect('SELECT COUNT(*) AS n FROM $table').getSingle())
-            .read<int>('n'),
+      for (final MapEntry(key: table, value: spec)
+          in syncCapturedTables.entries)
+        spec.kind:
+            (await d
+                    .customSelect('SELECT COUNT(*) AS n FROM $table')
+                    .getSingle())
+                .read<int>('n'),
     };
     // Manifest ghi cùng batch cuối rút cạn outbox. Chỉ so chặt khi nó thuộc ĐÚNG head
     // (không có batch nào sau nó); nếu không ⇒ báo checkpoint cũ, không đoán.
