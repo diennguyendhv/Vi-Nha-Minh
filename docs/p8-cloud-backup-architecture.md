@@ -292,7 +292,9 @@ Schema **v11** (additive): `sync_state.backup_state` (NULL/SEEDING/COMPLETE),
   own older echo ⇒ keep local; other writer ⇒ local copy saved verbatim in
   `sync_conflicts`, server version wins (no silent overwrite).
 - **Worker (`SyncWorker`):** start/resume + Drift table updates → debounce →
-  `syncNow` (pull, push, HEAD_MOVED ⇒ pull+retry). Network errors ⇒ exponential
+  `syncNow` (push; pull ONLY on `requestPull()` or HEAD_MOVED ⇒ pull+retry).
+  Empty outbox + no pull signal ⇒ **zero network calls** (fixed 2026-09-27:
+  the first version pulled on every run, i.e. 1 read per app open). Network errors ⇒ exponential
   backoff (≤15 min); signed out / other Account / stale or revoked device / no BMK
   ⇒ stop quietly, outbox kept. No polling while idle; its own pull writes do not
   retrigger it. Not yet wired to app lifecycle/UI (DEV UI = backlog).
@@ -317,6 +319,26 @@ Schema **v11** (additive): `sync_state.backup_state` (NULL/SEEDING/COMPLETE),
   envelopes in 1 call, delta 1 call, idle sync 1 read call, Firestore admin dump has
   no amount/note/label/local id/kind/password/Recovery Key, lost-device recovery →
   restore == source, old device DEVICE_REVOKED + BMK wiped).
+- **Restore file/key handling (answers the SQLCipher rename question):** there is
+  no `.restoring` DATABASE and no rename. The target is created directly under its
+  final random name, so its Keystore-wrapped DEK-DB (AAD bound to that file name)
+  never needs re-binding; `.restoring` is only an empty marker file. The DB is
+  SQLCipher from its first page (`probeDbFile` = encrypted), its key is independent
+  of the current Wallet's key, and it is bound to walletId on its first normal open.
+  Failed restores delete the file + sidecars + marker; the orphan DB-key entry is
+  kept on purpose (the bridge has no key-deletion API — a guarded invariant); a
+  random name is never reused so it can open nothing.
+- **Cost (emulator E2E fixture, fresh Wallet + 1 fixture tx):** initial backup 16
+  entity envelopes + manifest in 1 `putEncryptedBatch` call, ~5.3 KB ciphertext
+  stored; one edit = 1 call, 2 envelopes (entity + manifest); idle = 0 calls;
+  restore = 8 calls (claim status, keyring, recovery session, 1 page). Firestore per
+  batch of N envelopes ≈ reads: session + wallet + membership + keyring + receipt +
+  N entities; writes: wallet + N entities + receipt. Nothing pathological.
+- **Added gates (2026-09-27):** real-SQLCipher restore suite (failure at each stage ⇒
+  current Wallet bytes + key untouched, no `wallet_*` left; wrong password ⇒ no file,
+  no key; Recovery Key ⇒ independent key, integrity ok); server receiving a new batch
+  mid-download ⇒ consistent restore at the new head; balances recomputed equal;
+  emulator log + Firestore scan: 0 hits of any fixture plaintext/password/Recovery Key.
 - **Honest limits:** server can replay an OLDER envelope of an entity (authentic,
   older rev) — per-entity rollback detection is backlog; the manifest detects
   dropped/added objects only at a checkpoint. Pull applies other-writer rows without

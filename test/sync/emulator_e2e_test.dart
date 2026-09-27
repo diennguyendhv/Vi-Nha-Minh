@@ -159,6 +159,12 @@ void main() {
     await expectLater(engine.push(), throwsA(isA<SessionFailure>()));
     expect(await a.keys.load(account.uid), isNull);
 
+    final cBytes = RegExp(r'"c":\s*\{\s*"stringValue":\s*"([^"]+)"')
+        .allMatches(dump)
+        .fold<int>(0, (n, m) => n + m.group(1)!.length * 3 ~/ 4);
+    final entityDocs = RegExp('/entities/').allMatches(dump).length;
+    // ignore: avoid_print
+    print('[e2e] firestore entityDocs~$entityDocs ciphertextBytes=$cBytes');
     // ignore: avoid_print
     print('[e2e] initialBackup envelopes=${initial.envelopes} batches=${initial.batches} '
         'calls=$initialCalls | delta calls=1 envelopes=${delta.envelopes} | idle calls=0 | '
