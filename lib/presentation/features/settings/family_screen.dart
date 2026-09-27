@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/sync/remote_signal.dart';
 import '../../../data/cloud/family_service.dart';
 import '../../../data/local/sync/cloud_binding_store.dart';
 import '../../../domain/auth/cloud_session.dart';
@@ -78,9 +79,10 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final entry = ref.read(walletRegistryProvider).byWalletId(meta.walletId);
     String? label;
     if (binding != null) {
-      final m = await (db.select(
-        db.financialMemberRows,
-      )..where((m) => m.memberId.equals(binding.selfMemberId))).getSingleOrNull();
+      final m =
+          await (db.select(db.financialMemberRows)
+                ..where((m) => m.memberId.equals(binding.selfMemberId)))
+              .getSingleOrNull();
       label = m?.label;
     }
     return _LocalWallet(
@@ -150,7 +152,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
 
   // ---------------------------------------------------------------- Owner
   Future<void> _promote(FamilyService s) async {
-    if (!await _confirm(_t.familyPromote, _t.familyPromoteBody, _t.familyPromote)) {
+    if (!await _confirm(
+      _t.familyPromote,
+      _t.familyPromoteBody,
+      _t.familyPromote,
+    )) {
       return;
     }
     if (!await widget.stepUp()) return;
@@ -165,10 +171,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
     final local = _local!;
     final choices = await s.inviteChoices(local.selfMemberId!);
     if (!mounted) return;
-    final picked = await showDialog<({FamilyMemberChoice member, String email})>(
-      context: context,
-      builder: (_) => _InviteDialog(choices: choices, text: _t),
-    );
+    final picked =
+        await showDialog<({FamilyMemberChoice member, String email})>(
+          context: context,
+          builder: (_) => _InviteDialog(choices: choices, text: _t),
+        );
     if (picked == null || !mounted) return;
     if (!await _confirm(
       _t.familyInviteConfirmTitle,
@@ -193,7 +200,11 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
   }
 
   Future<void> _revoke(FamilyService s, FamilyAccountView m) async {
-    if (!await _confirm(_t.familyRevoke, _t.familyRevokeBody, _t.familyRevoke)) {
+    if (!await _confirm(
+      _t.familyRevoke,
+      _t.familyRevokeBody,
+      _t.familyRevoke,
+    )) {
       return;
     }
     if (!await widget.stepUp()) return;
@@ -224,6 +235,9 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
         return;
       }
       final r = await s.join();
+      // Tham gia (lại): token FCM cũ đã bị máy chủ xoá khi thu hồi ⇒ đăng ký lại.
+      final uid = s.session.accountId();
+      if (uid != null) await RemoteSignalRegistrar.forget(uid, r.walletId);
       ref.read(selectedWalletIdProvider.notifier).state = r.walletId;
       _bumpRegistry();
       _message = _t.familyJoined;
@@ -334,10 +348,7 @@ class _FamilyScreenState extends ConsumerState<FamilyScreen> {
           ),
         ],
       ],
-      TextButton(
-        onPressed: _busy ? null : _load,
-        child: Text(t.familyRefresh),
-      ),
+      TextButton(onPressed: _busy ? null : _load, child: Text(t.familyRefresh)),
     ];
   }
 

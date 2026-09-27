@@ -514,6 +514,24 @@ FinancialMember: an invite binds an Account to an EXISTING `memberId` the Owner 
     commitment. *Hardening note (non-blocking):* a 48-bit SAS means an ACTIVE malicious server would
     need ~2^48 key-generation attempts inside the invite window to forge a matching code; acceptable for
     v1, a longer code or commit-then-reveal is future hardening.
+  - *LIVE same-entity conflict (Pixel A Owner + AVD B Member, B re-invited after the earlier revoke,
+    same fingerprint `2301 7547 8546`, same Mã ví):* both at server head 9; B app-only offline
+    (`set-package-networking-enabled false`). A edited TA 123.000 → 150.000 (rev 10) and deleted TB
+    (rev 11). B offline edited TA → 200.000 and TB → 50.000 from rev 9 (outbox 2). B reconnected +
+    "Đồng bộ ngay": ONE network call, outbox 0, head 11, "Xung đột cần xem lại: 2". On-device integrity
+    reports (now also listing `syncConflicts`): B keeps `{transaction TA, serverOp upsert, serverRev 10,
+    localAmount 200000}` and `{transaction TB, serverOp delete, serverRev 11, localAmount 50000}`; A has
+    0. Both devices: same walletId, schema 11, integrity ok, FK 0, identical `txRows`/`txColumns`/
+    `txClientIds`/`txDigestV9AppendOrder` (6 tx) — TA same `Transaction.id` + clientTxId at 150.000, TB
+    absent (not resurrected), balances Vợ 699.223 / Chồng 150.000 on both. Idle 60 s: 0 sync runs.
+    Cleanup through normal deletes on A (TA + one 1.000 đ signal probe) ⇒ 5 tx, identical on both; only
+    device-local tables differ (`cloud_binding`, `sync_state`, `sqlite_sequence`, `sync_conflicts`).
+  - *Bug found live + fixed — Member lost FCM signal after revoke → re-invite:* revocation clears the
+    server FCM token, but the device kept its "already registered (installation|token)" marker, so the
+    rejoined Member never re-registered and only synced on manual "Đồng bộ ngay". Now the marker is
+    forgotten on NOT_MEMBER and after a successful join (`RemoteSignalRegistrar.forget`); the next Wallet
+    open registers exactly once. Regression test in `remote_signal_test`; live: B re-registered, then
+    A's create + delete each reached B automatically (1 call each).
 - **Known Family v1 limitations (accepted, non-blocking; NOT to be "solved" with server plaintext):**
   1. Invitation delivery is manual (Owner copies the one-time code); no server email yet.
   2. Conflict review UI is minimal (count "Xung đột cần xem lại: N"); the losing value is kept in

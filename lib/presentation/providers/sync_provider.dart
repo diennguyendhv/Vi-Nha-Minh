@@ -37,6 +37,8 @@ final cloudSyncEngineProvider = Provider<CloudSyncEngine?>((ref) {
     onMembershipLost: (walletId) async {
       if (registry.byWalletId(walletId)?.kind != WalletKind.family) return;
       await registry.setFamilyFlags(walletId, accessRevoked: true);
+      final uid = session.accountId();
+      if (uid != null) await RemoteSignalRegistrar.forget(uid, walletId);
       ref.read(walletRegistryRevisionProvider.notifier).state++;
     },
   );

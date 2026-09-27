@@ -83,6 +83,18 @@ class RemoteSignalRegistrar {
 
   static String _key(String uid, String walletId) => 'hw_signal_$uid:$walletId';
 
+  /// Máy chủ đã xoá token của membership cũ (thu hồi) ⇒ quên dấu "đã đăng ký" của
+  /// (Account, ví) này để lần mở ví sau (tham gia lại) đăng ký token đúng 1 lần. Nếu
+  /// không, dấu cũ khớp token ⇒ không bao giờ đăng ký lại ⇒ Member mất tín hiệu.
+  static Future<void> forget(
+    String uid,
+    String walletId, {
+    Future<SharedPreferences> Function()? prefs,
+  }) async {
+    final store = await (prefs ?? SharedPreferences.getInstance)();
+    await store.remove(_key(uid, walletId));
+  }
+
   Future<bool> ensureRegistered(String walletId, String token) async {
     final uid = session.accountId();
     if (uid == null) return false;

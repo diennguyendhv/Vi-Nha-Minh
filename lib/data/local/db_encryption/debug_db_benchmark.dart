@@ -183,6 +183,7 @@ Future<Map<String, Object?>> debugWalletIntegrityReport(
       'cipher': '${db.select('PRAGMA cipher_version').first.values.first}',
       ...captureSnapshot(db).summary(),
       ..._transactionBreakdown(db),
+      ..._conflictBreakdown(db),
     };
   } finally {
     db.close();
@@ -235,6 +236,36 @@ Map<String, Object?> _transactionBreakdown(Database db) {
         'SELECT member_id FROM financial_member_rows ORDER BY member_id',
       ))
         r['member_id'],
+    ],
+  };
+}
+
+/// Debug-only (P10 kiểm chứng xung đột): mỗi dòng `sync_conflicts` với id thực thể,
+/// thao tác máy chủ đã thắng + revision, và SỐ TIỀN của bản cục bộ bị thay thế (để
+/// chứng minh bản thua không bị bỏ im lặng). Chỉ chạy tay trên bản debug DEV.
+Map<String, Object?> _conflictBreakdown(Database db) {
+  final has = db.select(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sync_conflicts'",
+  );
+  if (has.isEmpty) return const {};
+  return {
+    'syncConflicts': [
+      for (final r in db.select(
+        'SELECT entity_kind, entity_id, local_body, server_op, server_rev, '
+        'resolved FROM sync_conflicts ORDER BY id',
+      ))
+        {
+          'kind': r['entity_kind'],
+          'id': r['entity_id'],
+          'serverOp': r['server_op'],
+          'serverRev': r['server_rev'],
+          'resolved': r['resolved'],
+          'localAmount': switch (r['local_body']) {
+            final String body =>
+              ((jsonDecode(body) as Map)['c'] as Map?)?['amount_minor'],
+            _ => null,
+          },
+        },
     ],
   };
 }
