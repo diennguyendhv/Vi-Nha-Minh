@@ -26,7 +26,8 @@ final categoriesStreamProvider = StreamProvider<List<Category>>((ref) {
 /// dùng stream riêng — nên cập nhật ngay khi vừa xóa giao dịch/ngừng danh mục.
 /// Xóa thật vẫn được kiểm tra lại trong DB.
 final deletableCategoryIdsProvider = Provider<Set<String>>((ref) {
-  final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
+  final categories =
+      ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
   final transactions =
       ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
   return computeDeletableCategoryIds(categories, transactions);

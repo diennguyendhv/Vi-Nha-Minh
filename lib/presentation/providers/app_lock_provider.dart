@@ -72,7 +72,8 @@ final appLockPlatformProvider = Provider<AppLockPlatform>(
   (ref) => throw UnimplementedError('appLockPlatformProvider chưa được cấp'),
 );
 final deviceAuthenticatorProvider = Provider<DeviceAuthenticator>(
-  (ref) => throw UnimplementedError('deviceAuthenticatorProvider chưa được cấp'),
+  (ref) =>
+      throw UnimplementedError('deviceAuthenticatorProvider chưa được cấp'),
 );
 
 /// Trạng thái lúc khởi động lạnh (đọc từ native trước `runApp`, để không có khung hình
@@ -94,8 +95,7 @@ class AppLockController extends StateNotifier<AppLockState> {
     required AppLockPlatform platform,
     required DeviceAuthenticator authenticator,
     required AppLockState initial,
-  }) :
-       // ignore: prefer_initializing_formals, tham số tên công khai + trường riêng tư
+  }) : // ignore: prefer_initializing_formals, tham số tên công khai + trường riêng tư
        _platform = platform,
        _auth = authenticator,
        super(initial) {
@@ -214,7 +214,9 @@ class AppLockController extends StateNotifier<AppLockState> {
       return BiometricOutcome.success;
     }
     if (!await _auth.canUseBiometric()) return BiometricOutcome.unavailable;
-    final o = await _auth.authenticateBiometric('Bật mở khóa bằng sinh trắc học');
+    final o = await _auth.authenticateBiometric(
+      'Bật mở khóa bằng sinh trắc học',
+    );
     if (o == BiometricOutcome.success) {
       await _platform.setBiometricEnabled(true);
       state = state.copyWith(biometricEnabled: true);
@@ -237,7 +239,9 @@ class AppLockController extends StateNotifier<AppLockState> {
   Future<BiometricOutcome> verifyDeviceOwnerForRecovery() async {
     BiometricOutcome o;
     try {
-      o = await _auth.authenticateDeviceOwner('Xác minh chủ máy để đặt lại mã PIN');
+      o = await _auth.authenticateDeviceOwner(
+        'Xác minh chủ máy để đặt lại mã PIN',
+      );
     } catch (_) {
       o = BiometricOutcome.failedOrCancelled;
     }

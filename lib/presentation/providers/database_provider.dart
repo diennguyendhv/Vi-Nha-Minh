@@ -38,7 +38,10 @@ final activeWalletProvider = Provider<WalletDescriptor>((ref) {
   final scope = ref.watch(walletAccessScopeProvider);
   final entry = ref
       .watch(walletRegistryProvider)
-      .resolveActive(scope, preferredWalletId: ref.watch(selectedWalletIdProvider));
+      .resolveActive(
+        scope,
+        preferredWalletId: ref.watch(selectedWalletIdProvider),
+      );
   return entry?.toDescriptor() ?? WalletDescriptor.legacyLocal;
 });
 

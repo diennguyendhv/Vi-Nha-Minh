@@ -110,6 +110,7 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
         if (kind != PoolKind.memberSavingsAsset || refId == null) return false;
         return parseSavingsAssetRefId(refId)?.memberId == memberId;
       }
+
       return belongsToMember(t.sourceKind, t.sourceRefId) ||
           belongsToMember(t.destinationKind, t.destinationRefId);
     }).toList()..sort((a, b) => b.transactionDate.compareTo(a.transactionDate));
@@ -135,7 +136,9 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
           SegmentedButton<String>(
             key: const Key('savings_member'),
             segments: directory.members
-                .map((m) => ButtonSegment(value: m.memberId, label: Text(m.label)))
+                .map(
+                  (m) => ButtonSegment(value: m.memberId, label: Text(m.label)),
+                )
                 .toList(),
             selected: {memberId},
             onSelectionChanged: (s) =>
@@ -227,9 +230,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
           if (stopped.isNotEmpty) ...[
             const SizedBox(height: 20),
             Theme(
-              data: Theme.of(
-                context,
-              ).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 key: const Key('savings_stopped_section'),
                 tilePadding: EdgeInsets.zero,
@@ -288,9 +290,8 @@ class _SavingsScreenState extends ConsumerState<SavingsScreen> {
                 showDate: true,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => TransactionDetailScreen(
-                      transactionId: transaction.id,
-                    ),
+                    builder: (_) =>
+                        TransactionDetailScreen(transactionId: transaction.id),
                   ),
                 ),
               ),
@@ -559,10 +560,7 @@ class _AllocationTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  name,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
+                Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
                 if (row.isInactive)
                   const Text(
                     'Ngừng sử dụng',

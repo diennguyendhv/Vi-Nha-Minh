@@ -9,6 +9,7 @@ import '../security/security_settings_section.dart';
 import '../fund/fund_list_screen.dart';
 import '../savings/savings_screen.dart';
 import 'account_settings_card.dart';
+import '../../providers/database_provider.dart';
 import 'debug_import_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -113,7 +114,9 @@ class SettingsScreen extends ConsumerWidget {
                     label: 'Đo hiệu năng DB (debug)',
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => const DebugDbBenchmarkScreen(),
+                        builder: (_) => DebugDbBenchmarkScreen(
+                          dbFileName: ref.read(activeWalletProvider).dbFileName,
+                        ),
                       ),
                     ),
                   ),

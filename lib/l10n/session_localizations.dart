@@ -580,6 +580,78 @@ abstract class SessionLocalizations {
   /// In en, this message translates to:
   /// **'Registration did not complete. Data on this device is unchanged; please try again later.'**
   String get claimFailed;
+
+  /// No description provided for @walletBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted backup of this Wallet (DEV)'**
+  String get walletBackupTitle;
+
+  /// No description provided for @walletBackupOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Not enabled. This Wallet is only on this device.'**
+  String get walletBackupOff;
+
+  /// No description provided for @walletBackupSeeding.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading the first encrypted backup…'**
+  String get walletBackupSeeding;
+
+  /// No description provided for @walletBackupComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed up. New changes are uploaded automatically, encrypted on this device.'**
+  String get walletBackupComplete;
+
+  /// No description provided for @walletBackupPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to upload: {count}'**
+  String walletBackupPending(int count);
+
+  /// No description provided for @walletBackupDiag.
+  ///
+  /// In en, this message translates to:
+  /// **'Network calls this session: {calls} · server revision: {headRev}'**
+  String walletBackupDiag(int calls, String headRev);
+
+  /// No description provided for @walletBackupEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable encrypted backup'**
+  String get walletBackupEnable;
+
+  /// No description provided for @walletBackupSyncNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get walletBackupSyncNow;
+
+  /// No description provided for @restoreAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore a Wallet from backup'**
+  String get restoreAction;
+
+  /// No description provided for @restorePick.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a backup'**
+  String get restorePick;
+
+  /// No description provided for @restoreDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallet restored and verified.'**
+  String get restoreDone;
+
+  /// No description provided for @restoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore failed. The current Wallet was not changed.'**
+  String get restoreFailed;
 }
 
 class _SessionLocalizationsDelegate

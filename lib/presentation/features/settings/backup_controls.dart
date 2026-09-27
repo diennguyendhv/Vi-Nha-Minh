@@ -71,7 +71,7 @@ class _BackupControlsState extends State<BackupControls> {
     ];
     final values = await showDialog<List<String>>(
       context: context,
-      builder: (_) => _PasswordDialog(
+      builder: (_) => BackupPasswordDialog(
         title: change ? _text.backupChangePassword : _text.backupEnable,
         hint: _text.backupPasswordHint,
         labels: labels,
@@ -87,45 +87,8 @@ class _BackupControlsState extends State<BackupControls> {
     return values;
   }
 
-  Future<void> _showRecoveryKey(String key) async {
-    var saved = false;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => PopScope(
-          canPop: saved,
-          child: AlertDialog(
-            title: Text(_text.recoveryKeyTitle),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_text.recoveryKeyBody),
-                const SizedBox(height: 12),
-                SelectableText(
-                  key,
-                  key: const Key('recovery_key_text'),
-                  style: const TextStyle(fontFamily: 'monospace'),
-                ),
-                CheckboxListTile(
-                  key: const Key('recovery_key_saved'),
-                  value: saved,
-                  onChanged: (v) => setLocal(() => saved = v ?? false),
-                  title: Text(_text.recoveryKeySaved),
-                ),
-              ],
-            ),
-            actions: [
-              FilledButton(
-                onPressed: saved ? () => Navigator.pop(ctx) : null,
-                child: Text(_text.done),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Future<void> _showRecoveryKey(String key) =>
+      showRecoveryKeyOnce(context, _text, key);
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +97,10 @@ class _BackupControlsState extends State<BackupControls> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(text.backupTitle, style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(
+          text.backupTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         Text(enabled ? text.backupOn : text.backupOff),
         if (_result != null) Text(_result!, key: const Key('backup_result')),
         Wrap(
@@ -147,7 +113,9 @@ class _BackupControlsState extends State<BackupControls> {
                     : () => _run(() async {
                         final values = await _askPasswords(change: false);
                         if (values == null) return null;
-                        final setup = await widget.backup.enableFixture(values.first);
+                        final setup = await widget.backup.enableFixture(
+                          values.first,
+                        );
                         if (mounted) await _showRecoveryKey(setup.recoveryKey);
                         return null;
                       }),
@@ -157,14 +125,19 @@ class _BackupControlsState extends State<BackupControls> {
               TextButton(
                 onPressed: _busy
                     ? null
-                    : () => _run(() async => 'headRev ${await widget.backup.uploadFixture()}'),
+                    : () => _run(
+                        () async =>
+                            'headRev ${await widget.backup.uploadFixture()}',
+                      ),
                 child: Text(text.backupUpload),
               ),
               TextButton(
                 onPressed: _busy
                     ? null
-                    : () => _run(() async =>
-                          '${await widget.backup.verifyFixture()}/${devBackupFixture.length} OK'),
+                    : () => _run(
+                        () async =>
+                            '${await widget.backup.verifyFixture()}/${devBackupFixture.length} OK',
+                      ),
                 child: Text(text.backupVerify),
               ),
               TextButton(
@@ -173,11 +146,14 @@ class _BackupControlsState extends State<BackupControls> {
                     : () => _run(() async {
                         final values = await _askPasswords(change: true);
                         if (values == null) return null;
-                        if (!await (widget.stepUp?.call() ?? Future.value(true))) {
+                        if (!await (widget.stepUp?.call() ??
+                            Future.value(true))) {
                           return _text.stepUpFailed;
                         }
                         await widget.backup.changePassword(
-                          oldPassword: values.first.isEmpty ? null : values.first,
+                          oldPassword: values.first.isEmpty
+                              ? null
+                              : values.first,
                           newPassword: values[1],
                         );
                         return 'OK';
@@ -192,10 +168,56 @@ class _BackupControlsState extends State<BackupControls> {
   }
 }
 
+/// Recovery Key hiện ĐÚNG 1 lần; không đóng được trước khi xác nhận đã lưu.
+Future<void> showRecoveryKeyOnce(
+  BuildContext context,
+  SessionLocalizations text,
+  String key,
+) async {
+  var saved = false;
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setLocal) => PopScope(
+        canPop: saved,
+        child: AlertDialog(
+          title: Text(text.recoveryKeyTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(text.recoveryKeyBody),
+              const SizedBox(height: 12),
+              SelectableText(
+                key,
+                key: const Key('recovery_key_text'),
+                style: const TextStyle(fontFamily: 'monospace'),
+              ),
+              CheckboxListTile(
+                key: const Key('recovery_key_saved'),
+                value: saved,
+                onChanged: (v) => setLocal(() => saved = v ?? false),
+                title: Text(text.recoveryKeySaved),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: saved ? () => Navigator.pop(ctx) : null,
+              child: Text(text.done),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Owns its controllers: disposed only when the route is gone, never while a
 /// TextField can still rebuild during the exit animation (keyboard closing).
-class _PasswordDialog extends StatefulWidget {
-  const _PasswordDialog({
+class BackupPasswordDialog extends StatefulWidget {
+  const BackupPasswordDialog({
+    super.key,
     required this.title,
     required this.hint,
     required this.labels,
@@ -208,13 +230,11 @@ class _PasswordDialog extends StatefulWidget {
   final String cancel;
   final String done;
   @override
-  State<_PasswordDialog> createState() => _PasswordDialogState();
+  State<BackupPasswordDialog> createState() => BackupPasswordDialogState();
 }
 
-class _PasswordDialogState extends State<_PasswordDialog> {
-  late final _fields = [
-    for (final _ in widget.labels) TextEditingController(),
-  ];
+class BackupPasswordDialogState extends State<BackupPasswordDialog> {
+  late final _fields = [for (final _ in widget.labels) TextEditingController()];
 
   @override
   void dispose() {

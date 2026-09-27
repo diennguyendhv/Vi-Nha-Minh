@@ -10,7 +10,10 @@ import '../../../data/local/db_encryption/debug_db_benchmark.dart';
 /// Debug-only (never in release): plaintext vs SQLCipher timings on synthetic
 /// temp data. Never touches the real Wallet or the Keystore.
 class DebugDbBenchmarkScreen extends StatefulWidget {
-  const DebugDbBenchmarkScreen({super.key});
+  const DebugDbBenchmarkScreen({super.key, this.dbFileName});
+
+  /// File của ví ĐANG MỞ (vd ví vừa khôi phục); mặc định ví cục bộ di sản.
+  final String? dbFileName;
   @override
   State<DebugDbBenchmarkScreen> createState() => _DebugDbBenchmarkScreenState();
 }
@@ -28,7 +31,8 @@ class _DebugDbBenchmarkScreenState extends State<DebugDbBenchmarkScreen> {
       final r = await runDebugDbBenchmark();
       _out = [
         'median ms (plain → SQLCipher), 2000 tx, 5 rounds',
-        for (final e in r.entries) '${e.key}: ${e.value.plain} → ${e.value.encrypted}',
+        for (final e in r.entries)
+          '${e.key}: ${e.value.plain} → ${e.value.encrypted}',
       ].join('\n');
       if (kDebugMode) debugPrint('[db-bench] ${_out.replaceAll('\n', ' | ')}');
     } on Object catch (e) {
@@ -41,7 +45,7 @@ class _DebugDbBenchmarkScreenState extends State<DebugDbBenchmarkScreen> {
     setState(() => _busy = true);
     try {
       final r = await debugWalletIntegrityReport(
-        WalletDescriptor.legacyLocal.dbFileName,
+        widget.dbFileName ?? WalletDescriptor.legacyLocal.dbFileName,
       );
       _out = const JsonEncoder.withIndent(' ').convert(r);
       // Debug-only; counts/digests/ids, never row contents or keys.

@@ -25,7 +25,9 @@ final fundsStreamProvider = StreamProvider<List<Fund>>((ref) {
 /// tiếp từ dữ liệu đang xem nên tự cập nhật ngay khi sửa/xóa giao dịch giữ quỹ.
 final deletableFundIdsProvider = Provider<Set<String>>((ref) {
   final funds = ref.watch(fundsStreamProvider).valueOrNull ?? const [];
-  final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
-  final transactions = ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
+  final categories =
+      ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
+  final transactions =
+      ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
   return computeDeletableFundIds(funds, categories, transactions);
 });

@@ -71,7 +71,8 @@ class FundListScreen extends ConsumerWidget {
           if (stopped.isNotEmpty) ...[
             const SizedBox(height: 20),
             Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              data: Theme.of(context)
+                  .copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
                 key: const Key('fund_stopped_section'),
                 tilePadding: EdgeInsets.zero,
@@ -98,7 +99,8 @@ class FundListScreen extends ConsumerWidget {
                       ),
                       onReuse: () =>
                           ref.read(fundRepositoryProvider).reactivateFund(f.id),
-                      onDelete: () => _confirmDelete(context, ref, f, deletable),
+                      onDelete: () =>
+                          _confirmDelete(context, ref, f, deletable),
                     ),
                 ],
               ),

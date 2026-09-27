@@ -291,4 +291,46 @@ class SessionLocalizationsVi extends SessionLocalizations {
   @override
   String get claimFailed =>
       'Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau.';
+
+  @override
+  String get walletBackupTitle => 'Sao lưu mã hoá ví này (DEV)';
+
+  @override
+  String get walletBackupOff => 'Chưa bật. Ví này chỉ nằm trên máy này.';
+
+  @override
+  String get walletBackupSeeding => 'Đang tải bản sao lưu mã hoá đầu tiên…';
+
+  @override
+  String get walletBackupComplete =>
+      'Đã sao lưu. Thay đổi mới được tự tải lên, mã hoá ngay trên máy.';
+
+  @override
+  String walletBackupPending(int count) {
+    return 'Chờ tải lên: $count';
+  }
+
+  @override
+  String walletBackupDiag(int calls, String headRev) {
+    return 'Lượt gọi mạng phiên này: $calls · phiên bản máy chủ: $headRev';
+  }
+
+  @override
+  String get walletBackupEnable => 'Bật sao lưu mã hoá';
+
+  @override
+  String get walletBackupSyncNow => 'Đồng bộ ngay';
+
+  @override
+  String get restoreAction => 'Khôi phục ví từ bản sao lưu';
+
+  @override
+  String get restorePick => 'Chọn bản sao lưu';
+
+  @override
+  String get restoreDone => 'Đã khôi phục và kiểm chứng ví.';
+
+  @override
+  String get restoreFailed =>
+      'Không khôi phục được. Ví hiện tại không bị thay đổi.';
 }

@@ -91,7 +91,8 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
         );
       }
     } on Object {
-      if (mounted && !silentFailure) setState(() => _message = _text.claimFailed);
+      if (mounted && !silentFailure)
+        setState(() => _message = _text.claimFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
       try {
@@ -258,7 +259,10 @@ class _WalletClaimControlsState extends State<WalletClaimControls> {
       key: const Key('wallet_claim_controls'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(text.claimTitle, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          text.claimTitle,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 4),
         Text(status, key: const Key('claim_status')),
         if (_message != null) ...[

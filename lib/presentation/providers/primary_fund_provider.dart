@@ -36,7 +36,9 @@ class PrimaryFundStorage {
 
   /// Giá trị thô (`null` = chưa từng lưu).
   static String? readRaw(SharedPreferences prefs, {String storageKey = key}) =>
-      prefs.containsKey(storageKey) ? (prefs.getString(storageKey) ?? '') : null;
+      prefs.containsKey(storageKey)
+      ? (prefs.getString(storageKey) ?? '')
+      : null;
 
   /// Thô → id quỹ theo quy ước ở trên.
   static String? decode(String? raw) {
@@ -91,12 +93,12 @@ class PrimaryFundController extends StateNotifier<String?> {
 /// Mặc định (test / chưa nạp prefs): in-memory, khởi tạo = quỹ ăn. `main()` ghi đè
 /// bằng bản đọc/ghi `shared_preferences` thật.
 final primaryFundIdProvider =
-    StateNotifierProvider<PrimaryFundController, String?>(
-      (ref) {
-        ref.watch(walletSessionKeyProvider); // đổi ví ⇒ không giữ quỹ của ví trước
-        return PrimaryFundController();
-      },
-    );
+    StateNotifierProvider<PrimaryFundController, String?>((ref) {
+      ref.watch(
+        walletSessionKeyProvider,
+      ); // đổi ví ⇒ không giữ quỹ của ví trước
+      return PrimaryFundController();
+    });
 
 /// Dựng controller của [wallet] cho `main()`: đọc/ghi `wallet_settings` trong DB ví.
 /// Lần đầu (DB chưa có giá trị) chép giá trị hiệu lực từ khoá prefs cũ sang DB; prefs

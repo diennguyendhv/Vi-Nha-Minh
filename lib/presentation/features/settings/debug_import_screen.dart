@@ -97,10 +97,11 @@ class _DebugImportScreenState extends ConsumerState<DebugImportScreen> {
             'Đã tạo ${r.transactionsCreated} ≠ ${manifest.finalTransactions} giao dịch',
           if (r.transactionsExisting != 0) 'Có giao dịch đã tồn tại',
         ];
-        final n = (await db
-                .customSelect('SELECT COUNT(*) c FROM transaction_rows')
-                .getSingle())
-            .read<int>('c');
+        final n =
+            (await db
+                    .customSelect('SELECT COUNT(*) c FROM transaction_rows')
+                    .getSingle())
+                .read<int>('c');
         if (n != manifest.finalTransactions) {
           problems.add('Đếm DB $n ≠ ${manifest.finalTransactions}');
         }
@@ -137,7 +138,10 @@ class _DebugImportScreenState extends ConsumerState<DebugImportScreen> {
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Flexible(child: Text(k)), Text(v)],
+      children: [
+        Flexible(child: Text(k)),
+        Text(v),
+      ],
     ),
   );
 

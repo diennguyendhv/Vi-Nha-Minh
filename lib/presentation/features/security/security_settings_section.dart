@@ -191,7 +191,10 @@ class _ActionRow extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             const Icon(
               Icons.chevron_right_rounded,

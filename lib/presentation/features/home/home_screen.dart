@@ -160,7 +160,8 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
             onSavings: () => _once(
               () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => SavingsScreen(initialMemberId: m.member.memberId),
+                  builder: (_) =>
+                      SavingsScreen(initialMemberId: m.member.memberId),
                 ),
               ),
             ),
@@ -211,9 +212,9 @@ class _HomeContentState extends ConsumerState<_HomeContent> {
           const SizedBox(height: 14),
           _LoansShortcutCard(
             onTap: () => _once(
-              () => Navigator.of(
-                context,
-              ).push(MaterialPageRoute<void>(builder: (_) => const LoansScreen())),
+              () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const LoansScreen()),
+              ),
             ),
           ),
         ],
@@ -460,7 +461,10 @@ class _StatRow extends StatelessWidget {
       key: rowKey,
       borderRadius: BorderRadius.circular(8),
       onTap: onTap,
-      child: Padding(padding: const EdgeInsets.symmetric(vertical: 2), child: row),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: row,
+      ),
     );
   }
 }

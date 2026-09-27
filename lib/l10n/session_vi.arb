@@ -79,5 +79,17 @@
   "claimAccountHasWallet": "Tài khoản này đã sở hữu một ví khác.",
   "claimSelfMismatch": "Máy chủ đã ghi bạn là thành viên khác trong ví này. Hãy chọn lại.",
   "claimBackupStarted": "Đã bắt đầu sao lưu nên không huỷ đăng ký được.",
-  "claimFailed": "Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau."
+  "claimFailed": "Chưa đăng ký được. Dữ liệu trên máy không thay đổi; hãy thử lại sau.",
+  "walletBackupTitle": "Sao lưu mã hoá ví này (DEV)",
+  "walletBackupOff": "Chưa bật. Ví này chỉ nằm trên máy này.",
+  "walletBackupSeeding": "Đang tải bản sao lưu mã hoá đầu tiên…",
+  "walletBackupComplete": "Đã sao lưu. Thay đổi mới được tự tải lên, mã hoá ngay trên máy.",
+  "walletBackupPending": "Chờ tải lên: {count}",
+  "walletBackupDiag": "Lượt gọi mạng phiên này: {calls} · phiên bản máy chủ: {headRev}",
+  "walletBackupEnable": "Bật sao lưu mã hoá",
+  "walletBackupSyncNow": "Đồng bộ ngay",
+  "restoreAction": "Khôi phục ví từ bản sao lưu",
+  "restorePick": "Chọn bản sao lưu",
+  "restoreDone": "Đã khôi phục và kiểm chứng ví.",
+  "restoreFailed": "Không khôi phục được. Ví hiện tại không bị thay đổi."
 }

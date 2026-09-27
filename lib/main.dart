@@ -6,6 +6,7 @@ import 'data/backup/backup_key_store.dart';
 import 'data/backup/backup_service.dart';
 import 'data/auth/firebase_bootstrap.dart';
 import 'data/auth/firebase_auth_repository.dart';
+import 'presentation/features/settings/sync_lifecycle_host.dart';
 import 'presentation/providers/session_provider.dart';
 import 'l10n/session_localizations.dart';
 import 'data/local/db_encryption/db_preflight.dart';
@@ -120,7 +121,9 @@ class ViNhaMinhApp extends StatelessWidget {
       routerConfig: appRouter,
       builder: (context, child) => LockGate(
         child: WalletAccessGate(
-          child: TapGuardScope(child: child ?? const SizedBox.shrink()),
+          child: SyncLifecycleHost(
+            child: TapGuardScope(child: child ?? const SizedBox.shrink()),
+          ),
         ),
       ),
     );

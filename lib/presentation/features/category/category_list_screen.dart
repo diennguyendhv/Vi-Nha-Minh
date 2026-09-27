@@ -117,13 +117,12 @@ class _StoppedSection extends ConsumerWidget {
         ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
     // Vì sao chưa xóa hẳn được — suy ra từ dữ liệu ĐANG XEM nên tự cập nhật ngay
     // khi người dùng sửa/xóa giao dịch đang giữ danh mục.
-    DeletionCheckResult checkOf(Category c) =>
-        checkCategoryDeletion(
-          c,
-          allCategories,
-          transactions,
-          members: ref.watch(memberDirectoryProvider).members,
-        );
+    DeletionCheckResult checkOf(Category c) => checkCategoryDeletion(
+      c,
+      allCategories,
+      transactions,
+      members: ref.watch(memberDirectoryProvider).members,
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Theme(
@@ -178,7 +177,8 @@ class _StoppedSection extends ConsumerWidget {
                         ),
                         child: const Text('Xem giao dịch'),
                       ),
-                    if (!deletable.contains(c.id) && checkOf(c).hasHiddenHistory)
+                    if (!deletable.contains(c.id) &&
+                        checkOf(c).hasHiddenHistory)
                       TextButton(
                         key: Key('purge_history_${c.id}'),
                         onPressed: () => _confirmPurge(context, ref, c),
@@ -241,17 +241,27 @@ class _StoppedSection extends ConsumerWidget {
     );
     if (ok != true) return;
     try {
-      await ref.read(transactionRepositoryProvider).purgeDeletedHistory(category.id);
+      await ref
+          .read(transactionRepositoryProvider)
+          .purgeDeletedHistory(category.id);
     } on DeleteWouldOverdrawException {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chưa thể dọn vì số liệu đang phụ thuộc vào các giao dịch này.')),
+          const SnackBar(
+            content: Text(
+              'Chưa thể dọn vì số liệu đang phụ thuộc vào các giao dịch này.',
+            ),
+          ),
         );
       }
     } on TransactionDeleteBlockedException {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chưa thể dọn vì có giao dịch liên quan khoản vay / hoàn tiền.')),
+          const SnackBar(
+            content: Text(
+              'Chưa thể dọn vì có giao dịch liên quan khoản vay / hoàn tiền.',
+            ),
+          ),
         );
       }
     }

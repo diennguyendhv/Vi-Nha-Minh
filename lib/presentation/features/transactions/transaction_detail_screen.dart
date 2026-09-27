@@ -166,10 +166,7 @@ class _TransactionDetailScreenState
       t.obligationId == null;
 
   String? _savingsMember(Transaction t) {
-    for (final e in [
-      (t.sourceKind, _srcRef),
-      (t.destinationKind, _dstRef),
-    ]) {
+    for (final e in [(t.sourceKind, _srcRef), (t.destinationKind, _dstRef)]) {
       if (e.$1 == PoolKind.memberSavingsAsset && e.$2 != null) {
         return parseSavingsAssetRefId(e.$2!)?.memberId;
       }
@@ -246,7 +243,8 @@ class _TransactionDetailScreenState
         categoryId: _categoryId,
         note: _noteController.text.trim(),
         memberRefId: _member,
-        sourceRefId: _canEditEndpoints(current) && _srcRef != current.sourceRefId
+        sourceRefId:
+            _canEditEndpoints(current) && _srcRef != current.sourceRefId
             ? _srcRef
             : null,
         destinationRefId:

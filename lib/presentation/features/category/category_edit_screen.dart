@@ -56,6 +56,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   final _newStatusController = TextEditingController();
   TransactionType _type = TransactionType.expense;
   Color _color = _swatches.first;
+
   /// Cờ cũ "hiện ở Tổng hợp": không còn UI/ngữ nghĩa (Tổng hợp lọc theo Trạng
   /// thái), chỉ giữ nguyên giá trị khi lưu để không cần migration.
   bool _statsEnabled = false;
@@ -117,8 +118,7 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
 
   /// Danh mục đã có thiết lập nâng cao nào không (không tính màu — màu luôn
   /// có giá trị). Dùng để tự mở "Tuỳ chọn nâng cao" khi Sửa.
-  static bool _hasAdvancedConfig(Category c) =>
-      c.statuses.isNotEmpty;
+  static bool _hasAdvancedConfig(Category c) => c.statuses.isNotEmpty;
 
   void _initFrom(Category category) {
     _nameController.text = category.name;
@@ -554,7 +554,6 @@ class _CategoryEditScreenState extends ConsumerState<CategoryEditScreen> {
   }
 
   List<Widget> _advancedSection() {
-
     return [
       const Text(
         'Màu',

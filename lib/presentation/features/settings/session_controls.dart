@@ -14,9 +14,23 @@ class SessionControls extends StatefulWidget {
     required this.session,
     this.backup,
     this.stepUp,
+    this.onRecovered,
+    this.pickWallet,
   });
   final CloudSession session;
   final BackupService? backup;
+
+  /// P8.5: sau khôi phục khi mất máy (BMK đã về máy này) ⇒ khôi phục ví đó, dùng
+  /// lại CHÍNH bí mật vừa nhập (không hỏi lại, không lưu).
+  final Future<void> Function(
+    String walletId, {
+    String? password,
+    String? recoveryKey,
+  })?
+  onRecovered;
+
+  /// Nhiều bản sao lưu ⇒ người dùng chọn (không đoán `first`).
+  final Future<String?> Function(List<String> walletIds)? pickWallet;
 
   /// Required before approving a takeover and before lost-device recovery.
   final StepUp? stepUp;
@@ -72,7 +86,12 @@ class _SessionControlsState extends State<SessionControls> {
     }
   }
 
-  Future<bool> _confirm(String title, String body, String ok, {String? cancel}) async =>
+  Future<bool> _confirm(
+    String title,
+    String body,
+    String ok, {
+    String? cancel,
+  }) async =>
       await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -171,16 +190,20 @@ class _SessionControlsState extends State<SessionControls> {
     }
     final input = await showDialog<({bool recoveryKey, String value})>(
       context: context,
-      builder: (_) => _LostDeviceDialog(text: _text),
+      builder: (_) => BackupSecretDialog(text: _text),
     );
     // Password is used exactly as typed (only NFC later; never trimmed).
     if (input == null || input.value.isEmpty || !mounted) return;
     final useRecoveryKey = input.recoveryKey;
     final value = input.value;
+    final walletId = wallets.length == 1 || widget.pickWallet == null
+        ? wallets.first
+        : await widget.pickWallet!(wallets);
+    if (walletId == null || !mounted) return;
     if (!await _stepUp()) return;
     try {
       await backup.recoverOnThisDevice(
-        walletId: wallets.first,
+        walletId: walletId,
         password: useRecoveryKey ? null : value,
         recoveryKey: useRecoveryKey ? value : null,
       );
@@ -191,6 +214,11 @@ class _SessionControlsState extends State<SessionControls> {
       return;
     }
     if (mounted) await _check();
+    await widget.onRecovered?.call(
+      walletId,
+      password: useRecoveryKey ? null : value,
+      recoveryKey: useRecoveryKey ? value : null,
+    );
   }
 
   @override
@@ -215,7 +243,10 @@ class _SessionControlsState extends State<SessionControls> {
         }),
         if (ticket != null) ...[
           const SizedBox(height: 6),
-          Text(text.takeoverWaiting(ticket.code), key: const Key('takeover_code')),
+          Text(
+            text.takeoverWaiting(ticket.code),
+            key: const Key('takeover_code'),
+          ),
         ],
         Wrap(
           spacing: 8,
@@ -253,14 +284,14 @@ class _SessionControlsState extends State<SessionControls> {
 
 /// Owns its controller: disposed only when the route is gone, never while the
 /// TextField can still rebuild during the exit animation.
-class _LostDeviceDialog extends StatefulWidget {
-  const _LostDeviceDialog({required this.text});
+class BackupSecretDialog extends StatefulWidget {
+  const BackupSecretDialog({super.key, required this.text});
   final SessionLocalizations text;
   @override
-  State<_LostDeviceDialog> createState() => _LostDeviceDialogState();
+  State<BackupSecretDialog> createState() => BackupSecretDialogState();
 }
 
-class _LostDeviceDialogState extends State<_LostDeviceDialog> {
+class BackupSecretDialogState extends State<BackupSecretDialog> {
   final _secret = TextEditingController();
   var _useRecoveryKey = false;
 

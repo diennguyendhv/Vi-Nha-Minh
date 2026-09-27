@@ -25,7 +25,8 @@ final statusesStreamProvider = StreamProvider.family<List<Status>, String>((
 /// "Xóa hẳn". Suy ra trực tiếp từ danh mục + sổ giao dịch đang xem (luôn khớp
 /// màn hình); xóa thật vẫn được kiểm tra lại trong DB.
 final deletableStatusIdsProvider = Provider<Set<String>>((ref) {
-  final categories = ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
+  final categories =
+      ref.watch(categoriesStreamProvider).valueOrNull ?? const [];
   final transactions =
       ref.watch(transactionsStreamProvider).valueOrNull ?? const [];
   return computeDeletableStatusIds(categories, transactions);

@@ -15,7 +15,8 @@ final backupServiceProvider = Provider<BackupService?>((ref) => null);
 /// của ví đang hoạt động — không giữ tham chiếu tới ví trước.
 final walletClaimServiceProvider = Provider<WalletClaimService?>((ref) {
   final session = ref.watch(cloudSessionProvider);
-  if (session == null || !WalletClaimService.allowedIn(AppEnvironment.current)) {
+  if (session == null ||
+      !WalletClaimService.allowedIn(AppEnvironment.current)) {
     return null;
   }
   return WalletClaimService(

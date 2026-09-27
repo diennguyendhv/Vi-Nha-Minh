@@ -127,5 +127,34 @@
         "type": "String"
       }
     }
+  },
+  "walletBackupTitle": "Encrypted backup of this Wallet (DEV)",
+  "walletBackupOff": "Not enabled. This Wallet is only on this device.",
+  "walletBackupSeeding": "Uploading the first encrypted backup…",
+  "walletBackupComplete": "Backed up. New changes are uploaded automatically, encrypted on this device.",
+  "walletBackupPending": "Waiting to upload: {count}",
+  "walletBackupDiag": "Network calls this session: {calls} · server revision: {headRev}",
+  "walletBackupEnable": "Enable encrypted backup",
+  "walletBackupSyncNow": "Sync now",
+  "restoreAction": "Restore a Wallet from backup",
+  "restorePick": "Choose a backup",
+  "restoreDone": "Wallet restored and verified.",
+  "restoreFailed": "Restore failed. The current Wallet was not changed.",
+  "@walletBackupPending": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@walletBackupDiag": {
+    "placeholders": {
+      "calls": {
+        "type": "int"
+      },
+      "headRev": {
+        "type": "String"
+      }
+    }
   }
 }

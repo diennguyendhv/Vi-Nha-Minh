@@ -292,4 +292,47 @@ class SessionLocalizationsEn extends SessionLocalizations {
   @override
   String get claimFailed =>
       'Registration did not complete. Data on this device is unchanged; please try again later.';
+
+  @override
+  String get walletBackupTitle => 'Encrypted backup of this Wallet (DEV)';
+
+  @override
+  String get walletBackupOff =>
+      'Not enabled. This Wallet is only on this device.';
+
+  @override
+  String get walletBackupSeeding => 'Uploading the first encrypted backup…';
+
+  @override
+  String get walletBackupComplete =>
+      'Backed up. New changes are uploaded automatically, encrypted on this device.';
+
+  @override
+  String walletBackupPending(int count) {
+    return 'Waiting to upload: $count';
+  }
+
+  @override
+  String walletBackupDiag(int calls, String headRev) {
+    return 'Network calls this session: $calls · server revision: $headRev';
+  }
+
+  @override
+  String get walletBackupEnable => 'Enable encrypted backup';
+
+  @override
+  String get walletBackupSyncNow => 'Sync now';
+
+  @override
+  String get restoreAction => 'Restore a Wallet from backup';
+
+  @override
+  String get restorePick => 'Choose a backup';
+
+  @override
+  String get restoreDone => 'Wallet restored and verified.';
+
+  @override
+  String get restoreFailed =>
+      'Restore failed. The current Wallet was not changed.';
 }

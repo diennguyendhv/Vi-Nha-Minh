@@ -11,6 +11,10 @@ import '../../providers/app_lock_provider.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/session_provider.dart';
 import 'backup_controls.dart';
+import 'restore_flow.dart';
+import 'wallet_backup_controls.dart';
+import '../../providers/database_provider.dart';
+import '../../providers/sync_provider.dart';
 import 'session_controls.dart';
 import 'wallet_claim_controls.dart';
 
@@ -135,8 +139,18 @@ class AccountSettingsCard extends ConsumerWidget {
               session: ref.watch(cloudSessionProvider)!,
               backup: ref.watch(backupServiceProvider),
               stepUp: () => _stepUp(context, ref),
+              onRecovered: (walletId, {password, recoveryKey}) =>
+                  restoreWalletAndOpen(
+                    context,
+                    ref,
+                    walletId,
+                    password: password,
+                    recoveryKey: recoveryKey,
+                  ),
+              pickWallet: (ids) => pickBackupWallet(context, ids),
             ),
-          if (account != null && ref.watch(walletClaimServiceProvider) != null) ...[
+          if (account != null &&
+              ref.watch(walletClaimServiceProvider) != null) ...[
             const SizedBox(height: 10),
             WalletClaimControls(
               key: ValueKey('claim-${account.uid}'),
@@ -146,14 +160,29 @@ class AccountSettingsCard extends ConsumerWidget {
             ),
           ],
           if (account != null &&
-              ref.watch(backupServiceProvider) != null &&
+              ref.watch(syncWorkerProvider) != null &&
               AppEnvironment.current == AppEnvironment.dev) ...[
             const SizedBox(height: 10),
-            BackupControls(
-              key: ValueKey('backup-${account.uid}'),
-              backup: ref.watch(backupServiceProvider)!,
+            // Ví đang mở đã claim ⇒ sao lưu THẬT của ví này; chưa claim ⇒ công cụ
+            // fixture DEV cũ (P8).
+            WalletBackupControls(
+              key: ValueKey(
+                'wallet-backup-${account.uid}-${ref.watch(activeWalletProvider).dbFileName}',
+              ),
+              engine: ref.watch(cloudSyncEngineProvider)!,
+              worker: ref.watch(syncWorkerProvider)!,
+              backup: ref.watch(backupServiceProvider),
               stepUp: () => _stepUp(context, ref),
+              fallback: ref.watch(backupServiceProvider) == null
+                  ? null
+                  : BackupControls(
+                      key: ValueKey('backup-${account.uid}'),
+                      backup: ref.watch(backupServiceProvider)!,
+                      stepUp: () => _stepUp(context, ref),
+                    ),
             ),
+            if (ref.watch(restoreEngineProvider) != null)
+              RestoreWalletButton(stepUp: () => _stepUp(context, ref)),
           ],
           if (account == null)
             SizedBox(
